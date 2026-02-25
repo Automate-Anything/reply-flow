@@ -47,7 +47,7 @@ router.post('/create-channel', async (req, res, next) => {
 });
 
 // Get QR code for the user's channel
-router.get('/create-qr', async (req, res, next) => {
+router.get('/create-qr', async (req, res) => {
   try {
     const userId = req.userId!;
 
@@ -63,9 +63,15 @@ router.get('/create-qr', async (req, res, next) => {
     }
 
     const qr = await whapi.getQR(channel.channel_token);
+    if (!qr) {
+      res.status(502).json({ error: 'QR code not available from WhatsApp provider' });
+      return;
+    }
     res.json({ qr });
   } catch (err) {
-    next(err);
+    console.error('QR fetch failed:', err instanceof Error ? err.message : err);
+    const message = err instanceof Error ? err.message : 'Failed to fetch QR code';
+    res.status(502).json({ error: message });
   }
 });
 

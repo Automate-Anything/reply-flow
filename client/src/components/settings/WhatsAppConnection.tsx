@@ -63,8 +63,11 @@ export default function WhatsAppConnection() {
       const { data } = await api.get('/whatsapp/create-qr');
       setQrData(data.qr);
       startHealthPolling();
-    } catch (err) {
-      setError('Failed to load QR code. Please try again.');
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'Failed to load QR code. Please try again.';
+      setError(message);
       setState('error');
     }
   };

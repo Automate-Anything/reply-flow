@@ -48,8 +48,17 @@ export async function deleteChannel(channelId: string): Promise<void> {
 
 export async function getQR(channelToken: string): Promise<string> {
   const gate = gateApi(channelToken);
-  const { data } = await gate.get('/users/login');
-  return data.qr ?? data.image;
+  try {
+    const { data } = await gate.get('/users/login');
+    return data.qr ?? data.image;
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err) && err.response) {
+      const status = err.response.status;
+      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
+      throw new Error(`WhAPI QR error (${status}): ${detail}`);
+    }
+    throw err;
+  }
 }
 
 export async function checkHealth(
