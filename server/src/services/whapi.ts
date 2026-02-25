@@ -46,19 +46,30 @@ export async function deleteChannel(channelId: string): Promise<void> {
   await managerApi.delete(`/channels/${channelId}`);
 }
 
-export async function getQR(channelToken: string): Promise<string> {
+export async function getQR(channelToken: string, retries = 3): Promise<string> {
   const gate = gateApi(channelToken);
-  try {
-    const { data } = await gate.get('/users/login');
-    return data.qr ?? data.image;
-  } catch (err: unknown) {
-    if (axios.isAxiosError(err) && err.response) {
-      const status = err.response.status;
-      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
-      throw new Error(`WhAPI QR error (${status}): ${detail}`);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const { data } = await gate.get('/users/login');
+      return data.qr ?? data.image;
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response) {
+        const status = err.response.status;
+        // Retry on 404 — channel may still be provisioning
+        if (status === 404 && attempt < retries) {
+          console.log(`WhAPI QR attempt ${attempt}/${retries} got 404, retrying in ${attempt * 2}s...`);
+          await new Promise((r) => setTimeout(r, attempt * 2000));
+          continue;
+        }
+        const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
+        const error = new Error(`WhAPI QR error (${status}): ${detail}`);
+        (error as Error & { statusCode: number }).statusCode = status;
+        throw error;
+      }
+      throw err;
     }
-    throw err;
   }
+  throw new Error('Failed to get QR code after retries');
 }
 
 export async function checkHealth(

@@ -64,9 +64,16 @@ export default function WhatsAppConnection() {
       setQrData(data.qr);
       startHealthPolling();
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Failed to load QR code. Please try again.';
+      const resp = (err as { response?: { data?: { error?: string; stale?: boolean } } })?.response?.data;
+      if (resp?.stale) {
+        // Channel was cleaned up server-side, go back to no_channel
+        setChannel(null);
+        setQrData(null);
+        setState('no_channel');
+        toast.error('Channel expired. Please reconnect.');
+        return;
+      }
+      const message = resp?.error || 'Failed to load QR code. Please try again.';
       setError(message);
       setState('error');
     }

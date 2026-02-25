@@ -70,6 +70,18 @@ router.get('/create-qr', async (req, res) => {
     res.json({ qr });
   } catch (err) {
     console.error('QR fetch failed:', err instanceof Error ? err.message : err);
+
+    // If WhAPI says the channel doesn't exist, clean up the stale DB record
+    const statusCode = (err as Error & { statusCode?: number }).statusCode;
+    if (statusCode === 404) {
+      await supabaseAdmin
+        .from('whatsapp_channels')
+        .delete()
+        .eq('user_id', req.userId!);
+      res.status(404).json({ error: 'Channel expired. Please create a new connection.', stale: true });
+      return;
+    }
+
     const message = err instanceof Error ? err.message : 'Failed to fetch QR code';
     res.status(502).json({ error: message });
   }
