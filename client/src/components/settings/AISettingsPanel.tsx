@@ -59,7 +59,7 @@ export default function AISettingsPanel() {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-3">
-          <Bot className="h-5 w-5 text-muted-foreground" />
+          <Bot className="h-5 w-5 text-primary" />
           <div className="flex-1">
             <CardTitle>AI Agent</CardTitle>
             <CardDescription>

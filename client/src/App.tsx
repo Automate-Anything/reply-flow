@@ -7,6 +7,7 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthPage from '@/pages/AuthPage';
 import AuthCallback from '@/pages/AuthCallback';
+import DashboardPage from '@/pages/DashboardPage';
 import InboxPage from '@/pages/InboxPage';
 import ContactsPage from '@/pages/ContactsPage';
 import SettingsPage from '@/pages/SettingsPage';
@@ -22,7 +23,8 @@ function App() {
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<AppLayout />}>
-                  <Route index element={<InboxPage />} />
+                  <Route index element={<DashboardPage />} />
+                  <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />
                   <Route path="settings" element={<SettingsPage />} />
                 </Route>

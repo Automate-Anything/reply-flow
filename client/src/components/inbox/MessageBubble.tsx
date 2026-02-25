@@ -30,7 +30,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           isOutbound
             ? isAI
               ? 'bg-purple-100 text-purple-900 dark:bg-purple-950 dark:text-purple-100'
-              : 'bg-primary text-primary-foreground'
+              : 'bg-primary/90 text-primary-foreground'
             : 'bg-muted text-foreground'
         )}
       >

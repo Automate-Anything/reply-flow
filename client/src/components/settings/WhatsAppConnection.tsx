@@ -151,7 +151,7 @@ export default function WhatsAppConnection() {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-3">
-          <Smartphone className="h-5 w-5 text-muted-foreground" />
+          <Smartphone className="h-5 w-5 text-primary" />
           <div>
             <CardTitle>WhatsApp Connection</CardTitle>
             <CardDescription>

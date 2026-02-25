@@ -107,8 +107,13 @@ export default function InboxPage() {
         </div>
       ) : (
         <div className="hidden flex-1 flex-col items-center justify-center gap-3 text-muted-foreground md:flex">
-          <MessageSquare className="h-12 w-12 opacity-20" />
-          <p className="text-sm">Select a conversation to start messaging</p>
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+            <MessageSquare className="h-7 w-7 opacity-40" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-medium">Select a conversation</p>
+            <p className="mt-0.5 text-xs">Choose from the list to start messaging</p>
+          </div>
         </div>
       )}
     </div>

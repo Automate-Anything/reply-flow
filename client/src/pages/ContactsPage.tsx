@@ -99,8 +99,13 @@ export default function ContactsPage() {
         />
       ) : (
         <div className="hidden flex-1 flex-col items-center justify-center gap-3 text-muted-foreground md:flex">
-          <Users className="h-12 w-12 opacity-20" />
-          <p className="text-sm">Select a contact to view details</p>
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+            <Users className="h-7 w-7 opacity-40" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-medium">Select a contact</p>
+            <p className="mt-0.5 text-xs">Choose from the list to view details</p>
+          </div>
         </div>
       )}
     </div>

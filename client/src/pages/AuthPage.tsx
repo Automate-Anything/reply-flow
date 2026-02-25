@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, MessageSquareText } from 'lucide-react';
 
 type AuthTab = 'signin' | 'signup' | 'forgot';
 
@@ -159,9 +159,12 @@ export default function AuthPage() {
   );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4">
+      <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+            <MessageSquareText className="h-6 w-6 text-primary-foreground" />
+          </div>
           <CardTitle className="text-2xl font-semibold">Reply Flow</CardTitle>
           <p className="text-sm text-muted-foreground">
             WhatsApp business inbox powered by AI

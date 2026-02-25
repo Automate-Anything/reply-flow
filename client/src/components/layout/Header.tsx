@@ -1,6 +1,6 @@
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/lib/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Moon, Sun, LogOut, User } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,22 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const { fullName } = useSession();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const pageTitle = (() => {
+    switch (location.pathname) {
+      case '/':
+        return 'Dashboard';
+      case '/inbox':
+        return 'Inbox';
+      case '/contacts':
+        return 'Contacts';
+      case '/settings':
+        return 'Settings';
+      default:
+        return '';
+    }
+  })();
 
   const initials = fullName
     .split(' ')
@@ -36,16 +52,18 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-background px-4 md:px-6">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-9 w-9 md:hidden"
-        onClick={onMenuClick}
-      >
-        <Menu className="h-5 w-5" />
-        <span className="sr-only">Toggle menu</span>
-      </Button>
-      <div className="hidden md:block" />
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 md:hidden"
+          onClick={onMenuClick}
+        >
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Toggle menu</span>
+        </Button>
+        <h1 className="hidden text-lg font-semibold md:block">{pageTitle}</h1>
+      </div>
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"
@@ -61,8 +79,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
-              <Avatar className="h-7 w-7">
-                <AvatarFallback className="text-xs">{initials || <User size={14} />}</AvatarFallback>
+              <Avatar className="h-7 w-7 ring-2 ring-primary/20">
+                <AvatarFallback className="text-xs">
+                  {initials || <User size={14} />}
+                </AvatarFallback>
               </Avatar>
               <span className="hidden text-sm font-medium sm:inline-block">
                 {fullName}
