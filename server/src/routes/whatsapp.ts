@@ -28,6 +28,9 @@ router.post('/create-channel', async (req, res) => {
 
     const channel = await whapi.createChannel(`reply-flow-${userId.slice(0, 8)}`);
 
+    // Fund the channel with 1 day so it becomes active
+    await whapi.extendChannel(channel.id, 1);
+
     const { error: dbError } = await supabaseAdmin
       .from('whatsapp_channels')
       .insert({

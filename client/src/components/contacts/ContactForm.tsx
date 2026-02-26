@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import PhoneInput from '@/components/ui/phone-input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -23,6 +25,7 @@ export default function ContactForm({ contact, onSave, onCancel }: ContactFormPr
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
 
   useEffect(() => {
     if (contact) {

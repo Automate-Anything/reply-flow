@@ -40,6 +40,22 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
   }
 }
 
+export async function extendChannel(channelId: string, days: number): Promise<void> {
+  try {
+    await managerApi.post(`/channels/${channelId}/extend`, {
+      days,
+      comment: `Reply Flow auto-provision (${days}d)`,
+    });
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err) && err.response) {
+      const status = err.response.status;
+      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
+      throw new Error(`WhAPI extend channel error (${status}): ${detail}`);
+    }
+    throw err;
+  }
+}
+
 export async function deleteChannel(channelId: string): Promise<void> {
   try {
     await managerApi.delete(`/channels/${channelId}`);
