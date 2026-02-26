@@ -24,7 +24,7 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
       name,
       projectId,
     });
-    console.log('WhAPI channel created:', { id: data.id, name: data.name, status: data.status });
+    console.log('WhAPI channel created:', JSON.stringify(data, null, 2));
     return {
       id: data.id,
       token: data.token,
@@ -39,6 +39,11 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
     }
     throw err;
   }
+}
+
+export async function listChannels(): Promise<unknown> {
+  const { data } = await managerApi.get('/channels');
+  return data;
 }
 
 export async function deleteChannel(channelId: string): Promise<void> {

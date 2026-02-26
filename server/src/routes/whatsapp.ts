@@ -9,6 +9,16 @@ const router = Router();
 // All routes require auth
 router.use(requireAuth);
 
+// DEBUG: List all channels on WhAPI (remove after debugging)
+router.get('/debug-channels', async (_req, res) => {
+  try {
+    const channels = await whapi.listChannels();
+    res.json({ channels });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
 // Create a WhatsApp channel for the user
 router.post('/create-channel', async (req, res) => {
   try {
