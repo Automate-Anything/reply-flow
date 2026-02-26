@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Trash2, Plus } from 'lucide-react';
+import { Loader2, Trash2, Plus } from 'lucide-react';
 import type { ContactNote } from '@/hooks/useContacts';
 
 interface ContactNotesProps {
@@ -24,6 +24,7 @@ function formatDate(dateStr: string): string {
 export default function ContactNotes({ notes, loading, onAdd, onDelete }: ContactNotesProps) {
   const [newNote, setNewNote] = useState('');
   const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleAdd = async () => {
     const trimmed = newNote.trim();
@@ -81,10 +82,22 @@ export default function ContactNotes({ notes, loading, onAdd, onDelete }: Contac
               <Button
                 variant="ghost"
                 size="icon"
-                className="ml-2 h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => onDelete(note.id)}
+                className={`ml-2 h-7 w-7 shrink-0 transition-opacity ${deletingId === note.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                disabled={deletingId === note.id}
+                onClick={async () => {
+                  setDeletingId(note.id);
+                  try {
+                    await onDelete(note.id);
+                  } finally {
+                    setDeletingId(null);
+                  }
+                }}
               >
-                <Trash2 className="h-3 w-3" />
+                {deletingId === note.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
               </Button>
             </div>
           ))}

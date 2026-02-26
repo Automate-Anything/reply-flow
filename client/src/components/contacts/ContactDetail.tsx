@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Pencil, Trash2, Phone, Mail, Building2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useContactNotes } from '@/hooks/useContacts';
 import type { Message } from '@/hooks/useMessages';
@@ -14,10 +14,11 @@ interface ContactDetailProps {
   contact: Contact;
   onEdit: () => void;
   onDelete: () => void;
+  deleting?: boolean;
   onBack?: () => void;
 }
 
-export default function ContactDetail({ contact, onEdit, onDelete, onBack }: ContactDetailProps) {
+export default function ContactDetail({ contact, onEdit, onDelete, deleting, onBack }: ContactDetailProps) {
   const { notes, loading: notesLoading, addNote, deleteNote } = useContactNotes(contact.id);
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgsLoading, setMsgsLoading] = useState(false);
@@ -78,8 +79,12 @@ export default function ContactDetail({ contact, onEdit, onDelete, onBack }: Con
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}>
-            <Trash2 className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete} disabled={deleting}>
+            {deleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>

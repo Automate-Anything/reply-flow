@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Bot, Check } from 'lucide-react';
+import { Bot, Check, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAISettings } from '@/hooks/useAISettings';
 
@@ -14,6 +14,7 @@ export default function AISettingsPanel() {
   const [maxTokens, setMaxTokens] = useState('500');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     setPrompt(settings.system_prompt);
@@ -21,8 +22,13 @@ export default function AISettingsPanel() {
   }, [settings]);
 
   const handleToggle = async () => {
-    await updateSettings({ is_enabled: !settings.is_enabled });
-    toast.success(settings.is_enabled ? 'AI agent disabled' : 'AI agent enabled');
+    setToggling(true);
+    try {
+      await updateSettings({ is_enabled: !settings.is_enabled });
+      toast.success(settings.is_enabled ? 'AI agent disabled' : 'AI agent enabled');
+    } finally {
+      setToggling(false);
+    }
   };
 
   const handleSave = async () => {
@@ -68,15 +74,18 @@ export default function AISettingsPanel() {
           </div>
           <button
             onClick={handleToggle}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              settings.is_enabled ? 'bg-primary' : 'bg-muted'
-            }`}
+            disabled={toggling}
+            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+              toggling ? 'cursor-wait opacity-60' : 'cursor-pointer'
+            } ${settings.is_enabled ? 'bg-primary' : 'bg-muted'}`}
           >
             <span
-              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+              className={`pointer-events-none inline-flex h-5 w-5 items-center justify-center rounded-full bg-background shadow-lg ring-0 transition-transform ${
                 settings.is_enabled ? 'translate-x-5' : 'translate-x-0'
               }`}
-            />
+            >
+              {toggling && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            </span>
           </button>
         </div>
       </CardHeader>

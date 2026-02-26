@@ -13,6 +13,7 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('');
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
   const [view, setView] = useState<View>('detail');
+  const [deleting, setDeleting] = useState(false);
   const { contacts, loading, refetch } = useContacts(search);
 
   const handleSelect = (contact: Contact) => {
@@ -31,6 +32,7 @@ export default function ContactsPage() {
 
   const handleDelete = async () => {
     if (!activeContact) return;
+    setDeleting(true);
     try {
       await api.delete(`/contacts/${activeContact.id}`);
       setActiveContact(null);
@@ -39,6 +41,8 @@ export default function ContactsPage() {
       toast.success('Contact deleted');
     } catch {
       toast.error('Failed to delete contact');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -95,6 +99,7 @@ export default function ContactsPage() {
           contact={activeContact}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          deleting={deleting}
           onBack={handleBack}
         />
       ) : (

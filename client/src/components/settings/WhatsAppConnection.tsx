@@ -23,6 +23,9 @@ export default function WhatsAppConnection() {
   const [channel, setChannel] = useState<ChannelInfo | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshingQR, setRefreshingQR] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const createAbortRef = useRef<AbortController | null>(null);
@@ -150,6 +153,7 @@ export default function WhatsAppConnection() {
   };
 
   const handleLogout = async () => {
+    setDisconnecting(true);
     try {
       await api.post('/whatsapp/logout');
       clearTimers();
@@ -162,10 +166,13 @@ export default function WhatsAppConnection() {
     } catch {
       setError('Failed to disconnect.');
       toast.error('Failed to disconnect WhatsApp');
+    } finally {
+      setDisconnecting(false);
     }
   };
 
   const handleDelete = async () => {
+    setDeleting(true);
     try {
       await api.delete('/whatsapp/delete-channel');
       clearTimers();
@@ -176,6 +183,17 @@ export default function WhatsAppConnection() {
     } catch {
       setError('Failed to delete channel.');
       toast.error('Failed to delete channel');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleRefreshQR = async () => {
+    setRefreshingQR(true);
+    try {
+      await fetchQR();
+    } finally {
+      setRefreshingQR(false);
     }
   };
 
@@ -252,13 +270,13 @@ export default function WhatsAppConnection() {
               QR code refreshes automatically. Checking connection every 5 seconds...
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={fetchQR}>
-                <RefreshCw className="mr-2 h-3 w-3" />
-                Refresh QR
+              <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
+                <RefreshCw className={`mr-2 h-3 w-3 ${refreshingQR ? 'animate-spin' : ''}`} />
+                {refreshingQR ? 'Refreshing...' : 'Refresh QR'}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDelete}>
-                <Trash2 className="mr-2 h-3 w-3" />
-                Delete Channel
+              <Button variant="outline" size="sm" onClick={handleDelete} disabled={deleting}>
+                {deleting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Trash2 className="mr-2 h-3 w-3" />}
+                {deleting ? 'Deleting...' : 'Delete Channel'}
               </Button>
             </div>
           </div>
@@ -281,13 +299,13 @@ export default function WhatsAppConnection() {
               </Badge>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                <LogOut className="mr-2 h-3 w-3" />
-                Disconnect
+              <Button variant="outline" size="sm" onClick={handleLogout} disabled={disconnecting || deleting}>
+                {disconnecting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <LogOut className="mr-2 h-3 w-3" />}
+                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleDelete}>
-                <Trash2 className="mr-2 h-3 w-3" />
-                Delete Channel
+              <Button variant="outline" size="sm" onClick={handleDelete} disabled={deleting || disconnecting}>
+                {deleting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Trash2 className="mr-2 h-3 w-3" />}
+                {deleting ? 'Deleting...' : 'Delete Channel'}
               </Button>
             </div>
           </div>

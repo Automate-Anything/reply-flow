@@ -15,7 +15,7 @@ import AIToggle from '@/components/ai/AIToggle';
 
 interface ConversationHeaderProps {
   conversation: Conversation;
-  onArchive: () => void;
+  onArchive: () => void | Promise<void>;
   onLabelsChange: () => void;
   onBack?: () => void;
 }
@@ -33,6 +33,8 @@ export default function ConversationHeader({
   onBack,
 }: ConversationHeaderProps) {
   const [allLabels, setAllLabels] = useState<LabelOption[]>([]);
+  const [labelLoading, setLabelLoading] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     api.get('/labels').then(({ data }) => setAllLabels(data.labels || []));
@@ -41,15 +43,31 @@ export default function ConversationHeader({
   const assignedIds = new Set(conversation.labels.map((l) => l.id));
 
   const handleToggleLabel = async (label: LabelOption) => {
-    if (assignedIds.has(label.id)) {
-      await api.delete(`/labels/assign/${conversation.id}/${label.id}`);
-    } else {
-      await api.post('/labels/assign', {
-        sessionId: conversation.id,
-        labelId: label.id,
-      });
+    setLabelLoading(label.id);
+    try {
+      if (assignedIds.has(label.id)) {
+        await api.delete(`/labels/assign/${conversation.id}/${label.id}`);
+      } else {
+        await api.post('/labels/assign', {
+          sessionId: conversation.id,
+          labelId: label.id,
+        });
+      }
+      onLabelsChange();
+    } catch {
+      toast.error('Failed to update label');
+    } finally {
+      setLabelLoading(null);
     }
-    onLabelsChange();
+  };
+
+  const handleArchive = async () => {
+    setArchiving(true);
+    try {
+      await onArchive();
+    } finally {
+      setArchiving(false);
+    }
   };
 
   return (
@@ -100,11 +118,16 @@ export default function ConversationHeader({
                 <DropdownMenuItem
                   key={label.id}
                   onClick={() => handleToggleLabel(label)}
+                  disabled={labelLoading === label.id}
                 >
-                  <span
-                    className="mr-2 h-2 w-2 rounded-full"
-                    style={{ backgroundColor: label.color }}
-                  />
+                  {labelLoading === label.id ? (
+                    <Loader2 className="mr-2 h-2 w-2 animate-spin" />
+                  ) : (
+                    <span
+                      className="mr-2 h-2 w-2 rounded-full"
+                      style={{ backgroundColor: label.color }}
+                    />
+                  )}
                   {label.name}
                   {assignedIds.has(label.id) && (
                     <X className="ml-auto h-3 w-3 text-muted-foreground" />
@@ -115,8 +138,12 @@ export default function ConversationHeader({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onArchive}>
-          <Archive className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleArchive} disabled={archiving}>
+          {archiving ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Archive className="h-4 w-4" />
+          )}
         </Button>
       </div>
     </div>
