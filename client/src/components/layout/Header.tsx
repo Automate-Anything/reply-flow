@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/lib/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Moon, Sun, LogOut, User } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, Loader2, User } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,7 +46,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
     .toUpperCase()
     .slice(0, 2);
 
+  const [signingOut, setSigningOut] = useState(false);
+
   const handleSignOut = async () => {
+    setSigningOut(true);
     await supabase.auth.signOut();
     navigate('/auth');
   };
@@ -95,9 +99,13 @@ export default function Header({ onMenuClick }: HeaderProps) {
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
+            <DropdownMenuItem onClick={handleSignOut} disabled={signingOut}>
+              {signingOut ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="mr-2 h-4 w-4" />
+              )}
+              {signingOut ? 'Signing out...' : 'Sign out'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

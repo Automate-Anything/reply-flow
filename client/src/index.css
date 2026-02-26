@@ -121,4 +121,10 @@
   body {
     @apply bg-background text-foreground;
     }
+  a, button {
+    cursor: pointer;
+    &:active {
+      opacity: 0.7;
+      }
+    }
 }

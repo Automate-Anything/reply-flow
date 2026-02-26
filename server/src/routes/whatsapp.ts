@@ -9,12 +9,17 @@ const router = Router();
 // All routes require auth
 router.use(requireAuth);
 
+// In-memory map of userId → AbortController for in-flight provisioning requests
+const provisioningControllers = new Map<string, AbortController>();
+
 // Create a WhatsApp channel, fund it, wait for provisioning, return QR.
 // This is a long-running request (up to ~2 min) — the client should use a long timeout.
 router.post('/create-channel', async (req, res) => {
-  try {
-    const userId = req.userId!;
+  const userId = req.userId!;
+  const controller = new AbortController();
+  provisioningControllers.set(userId, controller);
 
+  try {
     // Check if user already has a channel
     const { data: existing } = await supabaseAdmin
       .from('whatsapp_channels')
@@ -31,7 +36,13 @@ router.post('/create-channel', async (req, res) => {
     const channel = await whapi.createChannel(`reply-flow-${userId.slice(0, 8)}`);
 
     // 2. Fund the channel with 1 day so it becomes active
-    await whapi.extendChannel(channel.id, 1);
+    try {
+      await whapi.extendChannel(channel.id, 1);
+    } catch (err) {
+      // Clean up the orphaned channel on WhAPI if funding fails
+      await whapi.deleteChannel(channel.id).catch(() => {});
+      throw err;
+    }
 
     // 3. Save to DB immediately (so user can delete if they cancel)
     const { error: dbError } = await supabaseAdmin
@@ -47,7 +58,7 @@ router.post('/create-channel', async (req, res) => {
     if (dbError) throw dbError;
 
     // 4. Wait for channel to finish provisioning on WhAPI Gate API (up to 2 min)
-    await whapi.waitForReady(channel.token);
+    await whapi.waitForReady(channel.token, 120_000, controller.signal);
 
     // 5. Mark channel as ready for QR scanning
     await supabaseAdmin
@@ -64,9 +75,47 @@ router.post('/create-channel', async (req, res) => {
       expire: qrData.expire,
     });
   } catch (err) {
+    // If cancelled, the cancel endpoint already handled cleanup — just return quietly
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      if (!res.headersSent) res.status(499).json({ error: 'Provisioning cancelled' });
+      return;
+    }
     console.error('Create channel failed:', err instanceof Error ? err.message : err);
     const message = err instanceof Error ? err.message : 'Failed to create channel';
-    res.status(500).json({ error: message });
+    if (!res.headersSent) res.status(500).json({ error: message });
+  } finally {
+    provisioningControllers.delete(userId);
+  }
+});
+
+// Cancel an in-flight channel provisioning
+router.post('/cancel-provisioning', async (req, res, next) => {
+  try {
+    const userId = req.userId!;
+
+    // Abort the in-flight provisioning request
+    const controller = provisioningControllers.get(userId);
+    if (controller) controller.abort();
+
+    // Clean up: delete channel from Whapi and DB if it was already created
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('channel_id, channel_token')
+      .eq('user_id', userId)
+      .single();
+
+    if (channel) {
+      try { await whapi.logoutChannel(channel.channel_token); } catch { /* ignore */ }
+      await whapi.deleteChannel(channel.channel_id);
+      await supabaseAdmin
+        .from('whatsapp_channels')
+        .delete()
+        .eq('user_id', userId);
+    }
+
+    res.json({ status: 'cancelled' });
+  } catch (err) {
+    next(err);
   }
 });
 

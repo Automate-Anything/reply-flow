@@ -7,7 +7,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Archive, ArrowLeft, Tag, X } from 'lucide-react';
+import { Archive, ArrowLeft, Loader2, Tag, X } from 'lucide-react';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { Conversation } from '@/hooks/useConversations';
 import AIToggle from '@/components/ai/AIToggle';

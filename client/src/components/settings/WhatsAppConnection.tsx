@@ -25,6 +25,7 @@ export default function WhatsAppConnection() {
   const [error, setError] = useState<string | null>(null);
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const createAbortRef = useRef<AbortController | null>(null);
 
   const clearTimers = useCallback(() => {
     if (healthPollRef.current) {
@@ -44,10 +45,12 @@ export default function WhatsAppConnection() {
         setChannel(data.channel);
         if (data.channel.channel_status === 'connected') {
           setState('connected');
-        } else {
-          // Channel exists but not connected — try to show QR
+        } else if (data.channel.channel_status === 'awaiting_scan' || data.channel.channel_status === 'disconnected') {
           setState('qr_display');
           fetchQR();
+        } else {
+          // Status is 'pending' — channel still provisioning, treat as no channel
+          setState('no_channel');
         }
       } else {
         setState('no_channel');
@@ -108,19 +111,42 @@ export default function WhatsAppConnection() {
   const handleCreateChannel = async () => {
     setState('creating');
     setError(null);
+    const controller = new AbortController();
+    createAbortRef.current = controller;
     try {
       // Server creates channel, waits for provisioning, and returns QR (up to ~2 min)
       const { data } = await api.post('/whatsapp/create-channel', null, {
         timeout: 150_000,
+        signal: controller.signal,
       });
       setQrData(data.qr);
       setState('qr_display');
       startHealthPolling();
-    } catch {
+    } catch (err) {
+      // If cancelled by user, don't show error — handleCancel already reset state
+      if (controller.signal.aborted) return;
       setError('Failed to create channel. Please try again.');
       setState('error');
       toast.error('Failed to create WhatsApp channel');
+    } finally {
+      createAbortRef.current = null;
     }
+  };
+
+  const handleCancelProvisioning = async () => {
+    // Abort the client-side request immediately
+    createAbortRef.current?.abort();
+    createAbortRef.current = null;
+    try {
+      await api.post('/whatsapp/cancel-provisioning');
+    } catch {
+      // Best-effort — server cleanup may fail if channel wasn't created yet
+    }
+    clearTimers();
+    setChannel(null);
+    setQrData(null);
+    setState('no_channel');
+    toast.success('Channel creation cancelled');
   };
 
   const handleLogout = async () => {
@@ -203,9 +229,9 @@ export default function WhatsAppConnection() {
             <p className="text-sm text-muted-foreground">
               Creating and provisioning your channel. This can take up to 90 seconds...
             </p>
-            <Button variant="outline" size="sm" onClick={handleDelete}>
-              <Trash2 className="mr-2 h-3 w-3" />
-              Cancel & Delete Channel
+            <Button variant="outline" size="sm" onClick={handleCancelProvisioning}>
+              <XCircle className="mr-2 h-3 w-3" />
+              Cancel
             </Button>
           </div>
         )}

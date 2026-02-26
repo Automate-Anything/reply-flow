@@ -17,6 +17,16 @@ function gateApi(channelToken: string) {
   });
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractErrorDetail(data: unknown): string {
+  if (!data || typeof data !== 'object') return String(data);
+  const obj = data as Record<string, unknown>;
+  if (typeof obj.message === 'string') return obj.message;
+  if (typeof obj.error === 'string') return obj.error;
+  return JSON.stringify(data);
+}
+
 // ── Manager API (Partner Token) ──────────────────────────────────────────────
 
 export async function createChannel(name: string): Promise<WhapiChannel> {
@@ -35,8 +45,7 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
   } catch (err: unknown) {
     if (axios.isAxiosError(err) && err.response) {
       const status = err.response.status;
-      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
-      throw new Error(`WhAPI create channel error (${status}): ${detail}`);
+      throw new Error(`WhAPI create channel error (${status}): ${extractErrorDetail(err.response.data)}`);
     }
     throw err;
   }
@@ -51,8 +60,7 @@ export async function extendChannel(channelId: string, days: number): Promise<vo
   } catch (err: unknown) {
     if (axios.isAxiosError(err) && err.response) {
       const status = err.response.status;
-      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
-      throw new Error(`WhAPI extend channel error (${status}): ${detail}`);
+      throw new Error(`WhAPI extend channel error (${status}): ${extractErrorDetail(err.response.data)}`);
     }
     throw err;
   }
@@ -74,17 +82,24 @@ export async function deleteChannel(channelId: string): Promise<void> {
  * WhAPI docs say initialization can take up to 90 seconds.
  * Polls /health?wakeup=true every 5s for up to timeoutMs.
  */
-export async function waitForReady(channelToken: string, timeoutMs = 120_000): Promise<void> {
+export async function waitForReady(channelToken: string, timeoutMs = 120_000, signal?: AbortSignal): Promise<void> {
   const gate = gateApi(channelToken);
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
+    if (signal?.aborted) throw new DOMException('Provisioning cancelled', 'AbortError');
     try {
       await gate.get('/health', { params: { wakeup: true } });
       return; // 200 = channel is ready
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.status === 404) {
         // Not provisioned yet — wait and retry
-        await new Promise((r) => setTimeout(r, 5000));
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, 5000);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new DOMException('Provisioning cancelled', 'AbortError'));
+          }, { once: true });
+        });
         continue;
       }
       throw err; // Unexpected error
@@ -109,8 +124,7 @@ export async function getQR(channelToken: string): Promise<{ qr: string; expire:
   } catch (err: unknown) {
     if (axios.isAxiosError(err) && err.response) {
       const status = err.response.status;
-      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
-      throw new Error(`WhAPI QR error (${status}): ${detail}`);
+      throw new Error(`WhAPI QR error (${status}): ${extractErrorDetail(err.response.data)}`);
     }
     throw err;
   }
