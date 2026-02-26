@@ -59,18 +59,27 @@ export default function WhatsAppConnection() {
   }, []);
 
   const fetchQR = async () => {
+    await fetchQRWithRetry(0);
+  };
+
+  const fetchQRWithRetry = async (retryCount: number) => {
     try {
       const { data } = await api.get('/whatsapp/create-qr');
       setQrData(data.qr);
       startHealthPolling();
     } catch (err: unknown) {
-      const resp = (err as { response?: { data?: { error?: string; stale?: boolean } } })?.response?.data;
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string; stale?: boolean } } };
+      const resp = axiosErr?.response?.data;
       if (resp?.stale) {
-        // Channel was cleaned up server-side, go back to no_channel
         setChannel(null);
         setQrData(null);
         setState('no_channel');
         toast.error('Channel expired. Please reconnect.');
+        return;
+      }
+      // 503 = still provisioning, auto-retry up to 3 times
+      if (axiosErr?.response?.status === 503 && retryCount < 3) {
+        setTimeout(() => fetchQRWithRetry(retryCount + 1), 5000);
         return;
       }
       const message = resp?.error || 'Failed to load QR code. Please try again.';

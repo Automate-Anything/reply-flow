@@ -56,8 +56,8 @@ export async function getQR(channelToken: string, retries = 3): Promise<string> 
         const status = err.response.status;
         // Retry on 404 — channel may still be provisioning
         if (status === 404 && attempt < retries) {
-          console.log(`WhAPI QR attempt ${attempt}/${retries} got 404, retrying in ${attempt * 2}s...`);
-          await new Promise((r) => setTimeout(r, attempt * 2000));
+          console.log(`WhAPI QR attempt ${attempt}/${retries} got 404, retrying in 3s...`);
+          await new Promise((r) => setTimeout(r, 3000));
           continue;
         }
         const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);

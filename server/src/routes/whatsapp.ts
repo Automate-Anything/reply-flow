@@ -55,7 +55,7 @@ router.get('/create-qr', async (req, res) => {
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_token')
+      .select('channel_token, created_at')
       .eq('user_id', userId)
       .single();
 
@@ -64,7 +64,11 @@ router.get('/create-qr', async (req, res) => {
       return;
     }
 
-    const qr = await whapi.getQR(channel.channel_token);
+    // Give more retries to freshly created channels (< 2 min old)
+    const ageMs = Date.now() - new Date(channel.created_at).getTime();
+    const isNew = ageMs < 120_000;
+    const qr = await whapi.getQR(channel.channel_token, isNew ? 6 : 3);
+
     if (!qr) {
       res.status(502).json({ error: 'QR code not available from WhatsApp provider' });
       return;
@@ -72,15 +76,29 @@ router.get('/create-qr', async (req, res) => {
     res.json({ qr });
   } catch (err) {
     console.error('QR fetch failed:', err instanceof Error ? err.message : err);
-
-    // If WhAPI says the channel doesn't exist, clean up the stale DB record
+    const userId = req.userId!;
     const statusCode = (err as Error & { statusCode?: number }).statusCode;
+
     if (statusCode === 404) {
-      await supabaseAdmin
+      // Check channel age — only auto-delete if it's old (truly stale)
+      const { data: ch } = await supabaseAdmin
         .from('whatsapp_channels')
-        .delete()
-        .eq('user_id', req.userId!);
-      res.status(404).json({ error: 'Channel expired. Please create a new connection.', stale: true });
+        .select('created_at')
+        .eq('user_id', userId)
+        .single();
+
+      const ageMs = ch ? Date.now() - new Date(ch.created_at).getTime() : Infinity;
+      if (ageMs > 120_000) {
+        await supabaseAdmin
+          .from('whatsapp_channels')
+          .delete()
+          .eq('user_id', userId);
+        res.status(404).json({ error: 'Channel expired. Please create a new connection.', stale: true });
+        return;
+      }
+
+      // Channel is new but not ready yet — tell user to wait
+      res.status(503).json({ error: 'Channel is still being provisioned. Please wait a moment and try again.' });
       return;
     }
 
