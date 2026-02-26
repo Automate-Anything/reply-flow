@@ -18,17 +18,27 @@ function gateApi(channelToken: string) {
 }
 
 export async function createChannel(name: string): Promise<WhapiChannel> {
-  const projectId = env.WHAPI_PROJECT_ID;
-  const { data } = await managerApi.put('/channels', {
-    name,
-    projectId,
-  });
-  return {
-    id: data.id,
-    token: data.token,
-    name: data.name,
-    status: data.status,
-  };
+  try {
+    const projectId = env.WHAPI_PROJECT_ID;
+    const { data } = await managerApi.put('/channels', {
+      name,
+      projectId,
+    });
+    console.log('WhAPI channel created:', { id: data.id, name: data.name, status: data.status });
+    return {
+      id: data.id,
+      token: data.token,
+      name: data.name,
+      status: data.status,
+    };
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err) && err.response) {
+      const status = err.response.status;
+      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
+      throw new Error(`WhAPI create channel error (${status}): ${detail}`);
+    }
+    throw err;
+  }
 }
 
 export async function deleteChannel(channelId: string): Promise<void> {

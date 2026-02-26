@@ -10,7 +10,7 @@ const router = Router();
 router.use(requireAuth);
 
 // Create a WhatsApp channel for the user
-router.post('/create-channel', async (req, res, next) => {
+router.post('/create-channel', async (req, res) => {
   try {
     const userId = req.userId!;
 
@@ -42,7 +42,9 @@ router.post('/create-channel', async (req, res, next) => {
 
     res.json({ channelId: channel.id, status: 'pending' });
   } catch (err) {
-    next(err);
+    console.error('Create channel failed:', err instanceof Error ? err.message : err);
+    const message = err instanceof Error ? err.message : 'Failed to create channel';
+    res.status(500).json({ error: message });
   }
 });
 
