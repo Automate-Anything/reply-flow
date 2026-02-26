@@ -29,8 +29,6 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
   // Elapsed timer for provisioning stepper
   useEffect(() => {
     if (state !== 'provisioning') {
@@ -124,52 +122,15 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const handleCreateChannel = async () => {
     setState('provisioning');
     setError(null);
-    const controller = new AbortController();
-    abortRef.current = controller;
     try {
-      const { data } = await api.post('/whatsapp/create-channel', null, {
-        signal: controller.signal,
-      });
-      // If cancelled while POST was in-flight, don't process the response
-      if (controller.signal.aborted) return;
+      const { data } = await api.post('/whatsapp/create-channel');
       setDbChannelId(data.dbChannelId);
       startHealthPolling(data.dbChannelId);
-    } catch (err) {
-      if (controller.signal.aborted) return;
+    } catch {
       setError('Failed to create channel. Please try again.');
       setState('error');
       toast.error('Failed to create WhatsApp channel');
-    } finally {
-      abortRef.current = null;
     }
-  };
-
-  const handleCancelProvisioning = async () => {
-    // 1. Abort the in-flight POST (prevents callback from running)
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-    }
-
-    // 2. Stop all polling
-    clearTimers();
-
-    // 3. Clean up ALL pending channels for this user on both WhAPI and DB.
-    //    This covers the case where the POST completed server-side but the
-    //    client aborted before receiving the dbChannelId.
-    try {
-      await api.post('/whatsapp/cancel-provisioning');
-    } catch {
-      // Best-effort cleanup
-    }
-
-    // 4. Reset local state
-    setQrData(null);
-    setDbChannelId(null);
-    setState('idle');
-
-    // 5. Re-fetch channel list
-    onCreated();
   };
 
   const handleDelete = async () => {
@@ -342,13 +303,6 @@ export default function WhatsAppConnection({ onCreated }: Props) {
                         : 'Less than a minute left'
                       : 'Almost there...'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleCancelProvisioning}
-                    className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                  >
-                    Cancel
-                  </button>
                 </div>
               </div>
             </div>
