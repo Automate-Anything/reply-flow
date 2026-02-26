@@ -17,6 +17,8 @@ function gateApi(channelToken: string) {
   });
 }
 
+// ── Manager API (Partner Token) ──────────────────────────────────────────────
+
 export async function createChannel(name: string): Promise<WhapiChannel> {
   try {
     const projectId = env.WHAPI_PROJECT_ID;
@@ -60,35 +62,50 @@ export async function deleteChannel(channelId: string): Promise<void> {
   try {
     await managerApi.delete(`/channels/${channelId}`);
   } catch (err: unknown) {
-    // Ignore 404 — channel already gone
     if (axios.isAxiosError(err) && err.response?.status === 404) return;
     throw err;
   }
 }
 
+// ── Gate API (Channel Token) ─────────────────────────────────────────────────
+
 /**
- * Check if a channel is ready on the Gate API.
- * Uses ?wakeup=true to trigger initialization.
- * Returns the health data if ready, or null if still provisioning (404).
+ * Wait for the channel to finish provisioning on the Gate API.
+ * WhAPI docs say initialization can take up to 90 seconds.
+ * Polls /health?wakeup=true every 5s for up to timeoutMs.
  */
-export async function checkChannelReady(channelToken: string): Promise<WhapiHealthResponse | null> {
+export async function waitForReady(channelToken: string, timeoutMs = 120_000): Promise<void> {
   const gate = gateApi(channelToken);
-  try {
-    const { data } = await gate.get('/health', { params: { wakeup: true } });
-    return data;
-  } catch (err: unknown) {
-    if (axios.isAxiosError(err) && err.response?.status === 404) {
-      return null; // Not provisioned yet
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await gate.get('/health', { params: { wakeup: true } });
+      return; // 200 = channel is ready
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
+        // Not provisioned yet — wait and retry
+        await new Promise((r) => setTimeout(r, 5000));
+        continue;
+      }
+      throw err; // Unexpected error
     }
-    throw err;
   }
+  throw new Error('Channel provisioning timed out after 2 minutes');
 }
 
-export async function getQR(channelToken: string): Promise<string> {
+/**
+ * Get QR code as raw string data + expiry time.
+ * Uses /users/login/rowdata which returns the raw QR string
+ * that can be rendered by qrcode.react's QRCodeSVG.
+ */
+export async function getQR(channelToken: string): Promise<{ qr: string; expire: number | null }> {
   const gate = gateApi(channelToken);
   try {
-    const { data } = await gate.get('/users/login');
-    return data.qr ?? data.image;
+    const { data } = await gate.get('/users/login/rowdata');
+    return {
+      qr: data.qr || data.data || data.rowdata || '',
+      expire: typeof data.expire === 'number' ? data.expire : null,
+    };
   } catch (err: unknown) {
     if (axios.isAxiosError(err) && err.response) {
       const status = err.response.status;
