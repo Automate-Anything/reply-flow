@@ -34,16 +34,13 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage your WhatsApp channels and AI assistant preferences.
+          Manage your connected accounts and AI preferences.
         </p>
       </div>
 
       {/* WhatsApp Channels Section */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">WhatsApp Channels</h2>
-        <p className="text-sm text-muted-foreground">
-          Each channel connects to one WhatsApp account. Add as many channels as you need.
-        </p>
 
         {loading ? (
           <div className="space-y-3">

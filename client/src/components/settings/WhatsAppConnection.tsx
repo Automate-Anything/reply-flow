@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,18 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const createAbortRef = useRef<AbortController | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  const ESTIMATED_SECONDS = 240; // ~4 minutes
+
+  useEffect(() => {
+    if (state !== 'creating') {
+      setElapsed(0);
+      return;
+    }
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [state]);
 
   const clearTimers = useCallback(() => {
     if (healthPollRef.current) {
@@ -88,7 +100,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     createAbortRef.current = controller;
     try {
       const { data } = await api.post('/whatsapp/create-channel', null, {
-        timeout: 150_000,
+        timeout: 300_000,
         signal: controller.signal,
       });
       setDbChannelId(data.dbChannelId);
@@ -155,12 +167,9 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     return (
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center gap-4 py-8">
-          <p className="text-sm text-muted-foreground">
-            Connect a new WhatsApp account
-          </p>
           <Button onClick={handleCreateChannel}>
             <Smartphone className="mr-2 h-4 w-4" />
-            Add WhatsApp Channel
+            Add Channel
           </Button>
         </CardContent>
       </Card>
@@ -173,9 +182,9 @@ export default function WhatsAppConnection({ onCreated }: Props) {
         <div className="flex items-center gap-3">
           <Smartphone className="h-5 w-5 text-primary" />
           <div>
-            <CardTitle>New WhatsApp Channel</CardTitle>
+            <CardTitle>New Channel</CardTitle>
             <CardDescription>
-              Connect a new WhatsApp account
+              Link a WhatsApp account by scanning the QR code
             </CardDescription>
           </div>
         </div>
@@ -190,9 +199,19 @@ export default function WhatsAppConnection({ onCreated }: Props) {
         {state === 'creating' && (
           <div className="flex flex-col items-center gap-4 py-8">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Creating and provisioning your channel. This can take up to 90 seconds...
-            </p>
+            <div className="w-full max-w-xs space-y-2">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear"
+                  style={{ width: `${Math.min((elapsed / ESTIMATED_SECONDS) * 100, 95)}%` }}
+                />
+              </div>
+              <p className="text-center text-sm text-muted-foreground">
+                {elapsed < ESTIMATED_SECONDS
+                  ? `About ${Math.ceil((ESTIMATED_SECONDS - elapsed) / 60)} min remaining...`
+                  : 'Almost there, just a little longer...'}
+              </p>
+            </div>
             <Button variant="outline" size="sm" onClick={handleCancelProvisioning}>
               <XCircle className="mr-2 h-3 w-3" />
               Cancel
