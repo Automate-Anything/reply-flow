@@ -9,16 +9,10 @@ const router = Router();
 // All routes require auth
 router.use(requireAuth);
 
-// In-memory map of channelDbId → AbortController for in-flight provisioning requests
-const provisioningControllers = new Map<string, AbortController>();
-
-// Create a WhatsApp channel, fund it, wait for provisioning, return QR.
-// This is a long-running request (up to ~2 min) — the client should use a long timeout.
+// Create a WhatsApp channel and fund it. Returns immediately after DB insert.
+// Provisioning continues in the background — the client polls /health-check.
 router.post('/create-channel', async (req, res) => {
   const userId = req.userId!;
-  const controller = new AbortController();
-
-  let channelDbId: string | null = null;
 
   try {
     // 1. Create channel on WhAPI
@@ -33,7 +27,7 @@ router.post('/create-channel', async (req, res) => {
       throw err;
     }
 
-    // 3. Save to DB immediately (so user can delete if they cancel)
+    // 3. Save to DB with pending status
     const { data: insertedRow, error: dbError } = await supabaseAdmin
       .from('whatsapp_channels')
       .insert({
@@ -47,79 +41,25 @@ router.post('/create-channel', async (req, res) => {
       .single();
 
     if (dbError || !insertedRow) throw dbError || new Error('Failed to insert channel');
-    channelDbId = String(insertedRow.id);
 
-    // Track provisioning by DB channel ID
-    provisioningControllers.set(channelDbId, controller);
+    // 4. Return immediately — client will poll /health-check for provisioning status
+    res.json({ dbChannelId: insertedRow.id });
 
-    // 4. Wait for channel to finish provisioning on WhAPI Gate API (up to 2 min)
-    await whapi.waitForReady(channel.token, 120_000, controller.signal);
-
-    // 5. Mark channel as ready for QR scanning
-    await supabaseAdmin
-      .from('whatsapp_channels')
-      .update({ channel_status: 'awaiting_scan', updated_at: new Date().toISOString() })
-      .eq('id', insertedRow.id);
-
-    // 6. Get QR code
-    const qrData = await whapi.getQR(channel.token);
-
-    res.json({
-      channelId: channel.id,
-      dbChannelId: insertedRow.id,
-      qr: qrData.qr,
-      expire: qrData.expire,
-    });
+    // 5. Fire-and-forget: wait for provisioning, then update DB status
+    whapi.waitForReady(channel.token, 120_000)
+      .then(async () => {
+        await supabaseAdmin
+          .from('whatsapp_channels')
+          .update({ channel_status: 'awaiting_scan', updated_at: new Date().toISOString() })
+          .eq('id', insertedRow.id);
+      })
+      .catch((err) => {
+        console.error('Background provisioning failed:', err instanceof Error ? err.message : err);
+      });
   } catch (err) {
-    // If cancelled, the cancel endpoint already handled cleanup — just return quietly
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      if (!res.headersSent) res.status(499).json({ error: 'Provisioning cancelled' });
-      return;
-    }
     console.error('Create channel failed:', err instanceof Error ? err.message : err);
     const message = err instanceof Error ? err.message : 'Failed to create channel';
     if (!res.headersSent) res.status(500).json({ error: message });
-  } finally {
-    if (channelDbId) provisioningControllers.delete(channelDbId);
-  }
-});
-
-// Cancel an in-flight channel provisioning
-router.post('/cancel-provisioning', async (req, res, next) => {
-  try {
-    const userId = req.userId!;
-    const { channelId } = req.body;
-
-    if (!channelId) {
-      res.status(400).json({ error: 'channelId is required' });
-      return;
-    }
-
-    // Abort the in-flight provisioning request
-    const controller = provisioningControllers.get(String(channelId));
-    if (controller) controller.abort();
-
-    // Clean up: delete channel from Whapi and DB if it was already created
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('channel_id, channel_token')
-      .eq('id', channelId)
-      .eq('user_id', userId)
-      .single();
-
-    if (channel) {
-      try { await whapi.logoutChannel(channel.channel_token); } catch { /* ignore */ }
-      await whapi.deleteChannel(channel.channel_id);
-      await supabaseAdmin
-        .from('whatsapp_channels')
-        .delete()
-        .eq('id', channelId)
-        .eq('user_id', userId);
-    }
-
-    res.json({ status: 'cancelled' });
-  } catch (err) {
-    next(err);
   }
 });
 

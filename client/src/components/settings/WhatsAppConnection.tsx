@@ -4,7 +4,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Smartphone, Loader2, XCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { Smartphone, Loader2, XCircle, RefreshCw, Trash2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 type ConnectionState = 'idle' | 'creating' | 'qr_display' | 'error';
@@ -25,7 +25,11 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const createAbortRef = useRef<AbortController | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
-  const ESTIMATED_SECONDS = 240; // ~4 minutes
+  const PROVISIONING_STEPS = [
+    { label: 'Preparing environment', duration: 80 },
+    { label: 'Creating channel', duration: 80 },
+    { label: 'Finalizing setup', duration: 80 },
+  ] as const;
 
   useEffect(() => {
     if (state !== 'creating') {
@@ -165,10 +169,18 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   // Idle state — show "Add Channel" button
   if (state === 'idle') {
     return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center gap-4 py-8">
-          <Button onClick={handleCreateChannel}>
-            <Smartphone className="mr-2 h-4 w-4" />
+      <Card className="border-dashed transition-colors hover:border-primary/40 hover:bg-muted/30">
+        <CardContent className="flex items-center gap-4 py-5 px-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <Smartphone className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium">Add a new channel</p>
+            <p className="text-xs text-muted-foreground">
+              Link a WhatsApp number by scanning a QR code
+            </p>
+          </div>
+          <Button size="sm" onClick={handleCreateChannel}>
             Add Channel
           </Button>
         </CardContent>
@@ -196,28 +208,90 @@ export default function WhatsAppConnection({ onCreated }: Props) {
           </div>
         )}
 
-        {state === 'creating' && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <div className="w-full max-w-xs space-y-2">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear"
-                  style={{ width: `${Math.min((elapsed / ESTIMATED_SECONDS) * 100, 95)}%` }}
-                />
+        {state === 'creating' && (() => {
+          let cumulative = 0;
+          const totalSeconds = PROVISIONING_STEPS.reduce((s, st) => s + st.duration, 0);
+          const overallPct = Math.min((elapsed / totalSeconds) * 100, 95);
+          const remaining = Math.max(0, totalSeconds - elapsed);
+
+          return (
+            <div className="space-y-6 py-4">
+              {/* Stepper */}
+              <div className="relative ml-4">
+                {PROVISIONING_STEPS.map((step, i) => {
+                  const stepStart = cumulative;
+                  cumulative += step.duration;
+                  const stepElapsed = Math.max(0, elapsed - stepStart);
+                  const done = stepElapsed >= step.duration;
+                  const active = !done && elapsed >= stepStart;
+                  const isLast = i === PROVISIONING_STEPS.length - 1;
+
+                  return (
+                    <div key={i} className={`relative flex gap-3 ${isLast ? '' : 'pb-6'}`}>
+                      {/* Connector line */}
+                      {!isLast && (
+                        <div className="absolute left-[11px] top-6 h-[calc(100%-12px)] w-0.5 bg-muted">
+                          <div
+                            className="w-full bg-primary transition-all duration-1000 ease-linear"
+                            style={{ height: done ? '100%' : active ? `${Math.min((stepElapsed / step.duration) * 100, 95)}%` : '0%' }}
+                          />
+                        </div>
+                      )}
+                      {/* Step indicator */}
+                      <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center">
+                        {done ? (
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <Check className="h-3.5 w-3.5" />
+                          </div>
+                        ) : active ? (
+                          <div className="relative flex h-6 w-6 items-center justify-center">
+                            <span className="absolute h-6 w-6 animate-ping rounded-full bg-primary/20" />
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                          </div>
+                        ) : (
+                          <div className="h-2.5 w-2.5 rounded-full bg-muted" />
+                        )}
+                      </div>
+                      {/* Label */}
+                      <div className="pt-0.5">
+                        <p className={`text-sm leading-tight ${active ? 'font-medium text-foreground' : done ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          {step.label}
+                          {done && <span className="ml-2 text-xs text-muted-foreground">Done</span>}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="text-center text-sm text-muted-foreground">
-                {elapsed < ESTIMATED_SECONDS
-                  ? `About ${Math.ceil((ESTIMATED_SECONDS - elapsed) / 60)} min remaining...`
-                  : 'Almost there, just a little longer...'}
-              </p>
+
+              {/* Overall progress bar + time */}
+              <div className="space-y-2 px-1">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-1000 ease-linear"
+                    style={{ width: `${overallPct}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {remaining > 0
+                      ? remaining >= 60
+                        ? `~${Math.ceil(remaining / 60)} min remaining`
+                        : 'Less than a minute left'
+                      : 'Almost there...'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCancelProvisioning}
+                    className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </div>
-            <Button variant="outline" size="sm" onClick={handleCancelProvisioning}>
-              <XCircle className="mr-2 h-3 w-3" />
-              Cancel
-            </Button>
-          </div>
-        )}
+          );
+        })()}
 
         {state === 'qr_display' && (
           <div className="flex flex-col items-center gap-4">
@@ -249,11 +323,24 @@ export default function WhatsAppConnection({ onCreated }: Props) {
 
         {state === 'error' && (
           <div className="flex flex-col items-center gap-4 py-8">
-            <XCircle className="h-8 w-8 text-destructive" />
-            <Button variant="outline" onClick={handleCreateChannel}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Try Again
-            </Button>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <XCircle className="h-6 w-6 text-destructive" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium">Channel creation failed</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {error || 'Something went wrong. Please try again.'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setError(null); setState('idle'); }}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleCreateChannel}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Try Again
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

@@ -131,10 +131,11 @@ export async function getQR(channelToken: string): Promise<{ qr: string; expire:
 }
 
 export async function checkHealth(
-  channelToken: string
+  channelToken: string,
+  wakeup = false
 ): Promise<WhapiHealthResponse> {
   const gate = gateApi(channelToken);
-  const { data } = await gate.get('/health');
+  const { data } = await gate.get('/health', wakeup ? { params: { wakeup: true } } : {});
   return data;
 }
 
