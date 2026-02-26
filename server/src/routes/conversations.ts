@@ -1,20 +1,21 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
 const router = Router();
 router.use(requireAuth);
 
 // List conversations with optional search/filter
-router.get('/', async (req, res, next) => {
+router.get('/', requirePermission('conversations', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { search, status, archived, channelId, limit = '50', offset = '0' } = req.query;
 
     let query = supabaseAdmin
       .from('chat_sessions')
       .select('*, conversation_labels(label_id, labels(id, name, color))')
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .is('deleted_at', null)
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
@@ -75,9 +76,9 @@ router.get('/', async (req, res, next) => {
 });
 
 // Get messages for a conversation (cursor pagination)
-router.get('/:sessionId/messages', async (req, res, next) => {
+router.get('/:sessionId/messages', requirePermission('conversations', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId } = req.params;
     const { before, limit = '50' } = req.query;
 
@@ -86,7 +87,7 @@ router.get('/:sessionId/messages', async (req, res, next) => {
       .from('chat_sessions')
       .select('id')
       .eq('id', sessionId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!session) {
@@ -116,9 +117,9 @@ router.get('/:sessionId/messages', async (req, res, next) => {
 });
 
 // Mark messages as read
-router.post('/:sessionId/read', async (req, res, next) => {
+router.post('/:sessionId/read', requirePermission('conversations', 'edit'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId } = req.params;
 
     // Verify ownership
@@ -126,7 +127,7 @@ router.post('/:sessionId/read', async (req, res, next) => {
       .from('chat_sessions')
       .select('id')
       .eq('id', sessionId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!session) {
@@ -156,9 +157,9 @@ router.post('/:sessionId/read', async (req, res, next) => {
 });
 
 // Archive / unarchive a conversation
-router.post('/:sessionId/archive', async (req, res, next) => {
+router.post('/:sessionId/archive', requirePermission('conversations', 'edit'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId } = req.params;
     const { archived } = req.body;
 
@@ -169,7 +170,7 @@ router.post('/:sessionId/archive', async (req, res, next) => {
         updated_at: new Date().toISOString(),
       })
       .eq('id', sessionId)
-      .eq('user_id', userId);
+      .eq('company_id', companyId);
 
     res.json({ status: 'ok' });
   } catch (err) {

@@ -12,7 +12,6 @@ import {
   Wifi,
   WifiOff,
   Bot,
-  BotOff,
   ArrowRight,
   MessageCircle,
   UserPlus,
@@ -115,7 +114,7 @@ export default function DashboardPage() {
 
         <Card
           className="cursor-pointer transition-shadow hover:shadow-md"
-          onClick={() => navigate('/settings')}
+          onClick={() => navigate('/channels')}
         >
           <CardContent className="flex items-center gap-4 p-5">
             <div
@@ -213,27 +212,19 @@ export default function DashboardPage() {
           {/* AI Agent Status */}
           <Card>
             <CardContent className="flex items-center gap-4 p-5">
-              <div
-                className={`flex h-11 w-11 items-center justify-center rounded-lg ${
-                  data.aiSettings.is_enabled ? 'bg-primary/10' : 'bg-muted'
-                }`}
-              >
-                {data.aiSettings.is_enabled ? (
-                  <Bot className="h-5 w-5 text-primary" />
-                ) : (
-                  <BotOff className="h-5 w-5 text-muted-foreground" />
-                )}
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
+                <Bot className="h-5 w-5 text-primary" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold">AI Agent</p>
                 <p className="text-xs text-muted-foreground">
-                  {data.aiSettings.is_enabled ? 'Active' : 'Inactive'}
+                  Configure per channel
                 </p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate('/settings')}
+                onClick={() => navigate('/channels')}
                 className="text-xs"
               >
                 Configure
@@ -266,7 +257,7 @@ export default function DashboardPage() {
               <Button
                 variant="outline"
                 className="justify-start gap-2"
-                onClick={() => navigate('/settings')}
+                onClick={() => navigate('/channels')}
               >
                 <Settings className="h-4 w-4" /> Settings
               </Button>

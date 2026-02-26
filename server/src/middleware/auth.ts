@@ -2,11 +2,13 @@ import type { Request, Response, NextFunction } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../config/env.js';
 
-// Augment Express Request with userId
+// Augment Express Request with userId, companyId, and userRole
 declare global {
   namespace Express {
     interface Request {
       userId?: string;
+      companyId?: string;
+      userRole?: string;
     }
   }
 }
@@ -33,5 +35,19 @@ export async function requireAuth(
   }
 
   req.userId = data.user.id;
+
+  // Resolve company membership and role
+  const { data: membership } = await supabase
+    .from('company_members')
+    .select('company_id, roles(name)')
+    .eq('user_id', data.user.id)
+    .single();
+
+  if (membership) {
+    req.companyId = membership.company_id;
+    req.userRole = (membership.roles as unknown as { name: string })?.name || undefined;
+  }
+  // If no membership, user may be in invitation flow — allow through without companyId
+
   next();
 }

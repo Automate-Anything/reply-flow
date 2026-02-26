@@ -1,6 +1,7 @@
 export interface ChatSession {
   id: string;
   user_id: string;
+  company_id: string;
   channel_id: number | null;
   contact_id: string | null;
   chat_id: string;
@@ -25,6 +26,7 @@ export interface ChatMessage {
   id: string;
   session_id: string | null;
   user_id: string;
+  company_id: string;
   chat_id_normalized: string | null;
   phone_number: string | null;
   message_body: string | null;
@@ -42,6 +44,8 @@ export interface ChatMessage {
 export interface Contact {
   id: string;
   user_id: string;
+  company_id: string;
+  created_by: string | null;
   phone_number: string;
   first_name: string | null;
   last_name: string | null;
@@ -58,7 +62,57 @@ export interface Contact {
 export interface Label {
   id: string;
   user_id: string;
+  company_id: string;
+  created_by: string | null;
   name: string;
   color: string;
+  created_at: string;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  slug: string | null;
+  logo_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+  hierarchy_level: number;
+  created_at: string;
+}
+
+export interface CompanyMember {
+  id: string;
+  company_id: string;
+  user_id: string;
+  role_id: string;
+  invited_by: string | null;
+  joined_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RolePermission {
+  id: string;
+  company_id: string;
+  role_id: string;
+  resource: string;
+  action: string;
+}
+
+export interface Invitation {
+  id: string;
+  company_id: string;
+  email: string;
+  role_id: string;
+  token: string;
+  invited_by: string;
+  accepted_at: string | null;
+  expires_at: string;
   created_at: string;
 }

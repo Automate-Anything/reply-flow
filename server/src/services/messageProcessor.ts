@@ -35,7 +35,7 @@ function extractMessageBody(msg: WhapiIncomingMessage): string {
  */
 export async function processIncomingMessage(
   msg: WhapiIncomingMessage,
-  channelUserId: string,
+  companyId: string,
   channelId: number
 ): Promise<void> {
   const phoneNumber = normalizeChatId(msg.from);
@@ -47,7 +47,7 @@ export async function processIncomingMessage(
   const { data: existingContact } = await supabaseAdmin
     .from('contacts')
     .select('id')
-    .eq('user_id', channelUserId)
+    .eq('company_id', companyId)
     .eq('phone_number', phoneNumber)
     .eq('is_deleted', false)
     .single();
@@ -67,7 +67,7 @@ export async function processIncomingMessage(
     const { data: newContact, error: contactError } = await supabaseAdmin
       .from('contacts')
       .insert({
-        user_id: channelUserId,
+        company_id: companyId,
         phone_number: phoneNumber,
         whatsapp_name: msg.from_name || null,
         first_name: msg.from_name || null,
@@ -95,7 +95,7 @@ export async function processIncomingMessage(
     const { data: newSession, error: sessionError } = await supabaseAdmin
       .from('chat_sessions')
       .insert({
-        user_id: channelUserId,
+        company_id: companyId,
         channel_id: channelId,
         contact_id: contactId,
         chat_id: chatId,
@@ -116,7 +116,7 @@ export async function processIncomingMessage(
       .from('chat_messages')
       .select('id')
       .eq('message_id_normalized', msg.id)
-      .eq('user_id', channelUserId)
+      .eq('company_id', companyId)
       .maybeSingle();
 
     if (existing) {
@@ -130,7 +130,7 @@ export async function processIncomingMessage(
     .from('chat_messages')
     .insert({
       session_id: sessionId,
-      user_id: channelUserId,
+      company_id: companyId,
       chat_id_normalized: chatId,
       phone_number: phoneNumber,
       message_body: messageBody,
@@ -164,10 +164,10 @@ export async function processIncomingMessage(
 
   // 6. Check if AI should respond (async, don't block)
   try {
-    const aiContext = await shouldAIRespond(channelUserId, sessionId);
+    const aiContext = await shouldAIRespond(companyId, sessionId);
     if (aiContext) {
       // Fire and forget — don't block the webhook response
-      generateAndSendAIReply(channelUserId, sessionId, aiContext).catch((err) => {
+      generateAndSendAIReply(companyId, sessionId, aiContext).catch((err) => {
         console.error('AI reply error:', err);
       });
     }

@@ -1,19 +1,20 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
 const router = Router();
 router.use(requireAuth);
 
 // List all labels for the user
-router.get('/', async (req, res, next) => {
+router.get('/', requirePermission('labels', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
 
     const { data, error } = await supabaseAdmin
       .from('labels')
       .select('*')
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .order('name');
 
     if (error) throw error;
@@ -24,9 +25,9 @@ router.get('/', async (req, res, next) => {
 });
 
 // Create a label
-router.post('/', async (req, res, next) => {
+router.post('/', requirePermission('labels', 'create'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { name, color } = req.body;
 
     if (!name) {
@@ -36,7 +37,7 @@ router.post('/', async (req, res, next) => {
 
     const { data, error } = await supabaseAdmin
       .from('labels')
-      .insert({ user_id: userId, name, color: color || '#6B7280' })
+      .insert({ company_id: companyId, created_by: req.userId, name, color: color || '#6B7280' })
       .select()
       .single();
 
@@ -48,16 +49,16 @@ router.post('/', async (req, res, next) => {
 });
 
 // Delete a label
-router.delete('/:labelId', async (req, res, next) => {
+router.delete('/:labelId', requirePermission('labels', 'delete'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { labelId } = req.params;
 
     await supabaseAdmin
       .from('labels')
       .delete()
       .eq('id', labelId)
-      .eq('user_id', userId);
+      .eq('company_id', companyId);
 
     res.json({ status: 'ok' });
   } catch (err) {
@@ -66,9 +67,9 @@ router.delete('/:labelId', async (req, res, next) => {
 });
 
 // Add label to conversation
-router.post('/assign', async (req, res, next) => {
+router.post('/assign', requirePermission('labels', 'create'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId, labelId } = req.body;
 
     if (!sessionId || !labelId) {
@@ -81,7 +82,7 @@ router.post('/assign', async (req, res, next) => {
       .from('chat_sessions')
       .select('id')
       .eq('id', sessionId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!session) {
@@ -101,9 +102,9 @@ router.post('/assign', async (req, res, next) => {
 });
 
 // Remove label from conversation
-router.delete('/assign/:sessionId/:labelId', async (req, res, next) => {
+router.delete('/assign/:sessionId/:labelId', requirePermission('labels', 'delete'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId, labelId } = req.params;
 
     // Verify ownership
@@ -111,7 +112,7 @@ router.delete('/assign/:sessionId/:labelId', async (req, res, next) => {
       .from('chat_sessions')
       .select('id')
       .eq('id', sessionId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!session) {

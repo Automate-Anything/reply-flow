@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import * as whapi from '../services/whapi.js';
@@ -11,12 +12,12 @@ router.use(requireAuth);
 
 // Create a WhatsApp channel and fund it. Returns immediately after DB insert.
 // Provisioning continues in the background — the client polls /health-check.
-router.post('/create-channel', async (req, res) => {
-  const userId = req.userId!;
+router.post('/create-channel', requirePermission('channels', 'create'), async (req, res) => {
+  const companyId = req.companyId!;
 
   try {
     // 1. Create channel on WhAPI
-    const channel = await whapi.createChannel(`reply-flow-${userId.slice(0, 8)}-${Date.now()}`);
+    const channel = await whapi.createChannel(`reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`);
 
     // 2. Fund the channel with 1 day so it becomes active
     try {
@@ -31,7 +32,8 @@ router.post('/create-channel', async (req, res) => {
     const { data: insertedRow, error: dbError } = await supabaseAdmin
       .from('whatsapp_channels')
       .insert({
-        user_id: userId,
+        company_id: companyId,
+        created_by: req.userId,
         channel_id: channel.id,
         channel_token: channel.token,
         channel_name: channel.name,
@@ -66,14 +68,14 @@ router.post('/create-channel', async (req, res) => {
 // Cancel provisioning: deletes all pending channels for the user.
 // Used when the client aborts a create-channel request and doesn't have
 // the specific channel ID to delete.
-router.post('/cancel-provisioning', async (req, res, next) => {
+router.post('/cancel-provisioning', requirePermission('channels', 'delete'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
 
     const { data: pendingChannels, error } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('id, channel_id, channel_token')
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .eq('channel_status', 'pending');
 
     if (error) throw error;
@@ -86,7 +88,7 @@ router.post('/cancel-provisioning', async (req, res, next) => {
         .from('whatsapp_channels')
         .delete()
         .eq('id', ch.id)
-        .eq('user_id', userId);
+        .eq('company_id', companyId);
     }
 
     res.json({ deleted: (pendingChannels || []).length });
@@ -96,8 +98,8 @@ router.post('/cancel-provisioning', async (req, res, next) => {
 });
 
 // Refresh QR code for an existing channel
-router.get('/create-qr', async (req, res) => {
-  const userId = req.userId!;
+router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res) => {
+  const companyId = req.companyId!;
   const { channelId } = req.query;
 
   if (!channelId) {
@@ -110,7 +112,7 @@ router.get('/create-qr', async (req, res) => {
       .from('whatsapp_channels')
       .select('channel_token')
       .eq('id', Number(channelId))
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!channel) {
@@ -132,7 +134,7 @@ router.get('/create-qr', async (req, res) => {
           .from('whatsapp_channels')
           .update({ channel_status: 'connected', updated_at: new Date().toISOString() })
           .eq('id', Number(channelId))
-          .eq('user_id', userId);
+          .eq('company_id', companyId);
 
         // Register webhook while we're here
         try {
@@ -160,9 +162,9 @@ router.get('/create-qr', async (req, res) => {
 });
 
 // Check health / connection status for a specific channel
-router.get('/health-check', async (req, res, next) => {
+router.get('/health-check', requirePermission('channels', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { channelId } = req.query;
 
     if (!channelId) {
@@ -174,7 +176,7 @@ router.get('/health-check', async (req, res, next) => {
       .from('whatsapp_channels')
       .select('channel_token, channel_id, channel_status')
       .eq('id', Number(channelId))
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!channel) {
@@ -255,14 +257,14 @@ router.get('/health-check', async (req, res, next) => {
 });
 
 // Get all channels for the user
-router.get('/channels', async (req, res, next) => {
+router.get('/channels', requirePermission('channels', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
 
     const { data: channels, error } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
@@ -274,16 +276,16 @@ router.get('/channels', async (req, res, next) => {
 });
 
 // Get a single channel by ID
-router.get('/channels/:channelId', async (req, res, next) => {
+router.get('/channels/:channelId', requirePermission('channels', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { channelId } = req.params;
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
       .eq('id', Number(channelId))
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!channel) {
@@ -298,9 +300,9 @@ router.get('/channels/:channelId', async (req, res, next) => {
 });
 
 // Logout / disconnect WhatsApp for a specific channel
-router.post('/logout', async (req, res, next) => {
+router.post('/logout', requirePermission('channels', 'edit'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { channelId } = req.body;
 
     if (!channelId) {
@@ -312,7 +314,7 @@ router.post('/logout', async (req, res, next) => {
       .from('whatsapp_channels')
       .select('channel_token')
       .eq('id', channelId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!channel) {
@@ -338,9 +340,9 @@ router.post('/logout', async (req, res, next) => {
 });
 
 // Delete channel entirely
-router.delete('/delete-channel', async (req, res, next) => {
+router.delete('/delete-channel', requirePermission('channels', 'delete'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { channelId } = req.body;
 
     if (!channelId) {
@@ -352,7 +354,7 @@ router.delete('/delete-channel', async (req, res, next) => {
       .from('whatsapp_channels')
       .select('channel_id, channel_token')
       .eq('id', channelId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!channel) {
@@ -373,7 +375,7 @@ router.delete('/delete-channel', async (req, res, next) => {
       .from('whatsapp_channels')
       .delete()
       .eq('id', channelId)
-      .eq('user_id', userId);
+      .eq('company_id', companyId);
 
     res.json({ status: 'deleted' });
   } catch (err) {

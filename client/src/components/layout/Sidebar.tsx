@@ -3,21 +3,24 @@ import {
   LayoutDashboard,
   MessageSquare,
   Users,
-  Settings,
+  Smartphone,
   ChevronLeft,
   ChevronRight,
   MessageSquareText,
+  UserCog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useSession } from '@/contexts/SessionContext';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
   { to: '/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/contacts', icon: Users, label: 'Contacts' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/channels', icon: Smartphone, label: 'Channels' },
+  { to: '/team', icon: UserCog, label: 'Team', permission: { resource: 'team', action: 'view' } },
 ];
 
 interface SidebarProps {
@@ -26,6 +29,11 @@ interface SidebarProps {
 
 export default function Sidebar({ onNavigate }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const { hasPermission } = useSession();
+
+  const visibleNavItems = navItems.filter(
+    (item) => !item.permission || hasPermission(item.permission.resource, item.permission.action)
+  );
 
   return (
     <aside
@@ -62,7 +70,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-1 p-2">
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {visibleNavItems.map(({ to, icon: Icon, label }) => (
           <Tooltip key={to} delayDuration={collapsed ? 0 : 1000}>
             <TooltipTrigger asChild>
               <NavLink

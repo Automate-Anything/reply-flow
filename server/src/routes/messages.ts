@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from '../services/whapi.js';
 
@@ -7,9 +8,9 @@ const router = Router();
 router.use(requireAuth);
 
 // Send a message
-router.post('/send', async (req, res, next) => {
+router.post('/send', requirePermission('messages', 'create'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId, body } = req.body;
 
     if (!sessionId || !body) {
@@ -22,7 +23,7 @@ router.post('/send', async (req, res, next) => {
       .from('chat_sessions')
       .select('chat_id, phone_number, channel_id')
       .eq('id', sessionId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (sessionError || !session) {
@@ -61,7 +62,8 @@ router.post('/send', async (req, res, next) => {
       .from('chat_messages')
       .insert({
         session_id: sessionId,
-        user_id: userId,
+        company_id: companyId,
+        user_id: req.userId,
         chat_id_normalized: session.chat_id,
         phone_number: session.phone_number,
         message_body: body,

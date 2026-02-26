@@ -11,6 +11,10 @@ import DashboardPage from '@/pages/DashboardPage';
 import InboxPage from '@/pages/InboxPage';
 import ContactsPage from '@/pages/ContactsPage';
 import SettingsPage from '@/pages/SettingsPage';
+import TeamPage from '@/pages/TeamPage';
+import RolePermissionsPage from '@/pages/RolePermissionsPage';
+import CompanySettingsPage from '@/pages/CompanySettingsPage';
+import AcceptInvitePage from '@/pages/AcceptInvitePage';
 
 function App() {
   return (
@@ -21,12 +25,16 @@ function App() {
             <Routes>
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/invite/:token" element={<AcceptInvitePage />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<AppLayout />}>
                   <Route index element={<DashboardPage />} />
                   <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />
-                  <Route path="settings" element={<SettingsPage />} />
+                  <Route path="channels" element={<SettingsPage />} />
+                  <Route path="team" element={<TeamPage />} />
+                  <Route path="team/permissions" element={<RolePermissionsPage />} />
+                  <Route path="settings/company" element={<CompanySettingsPage />} />
                 </Route>
               </Route>
             </Routes>

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
 function validateAndFormatPhone(phone: string): { e164: string } | { error: string } {
@@ -8,22 +9,24 @@ function validateAndFormatPhone(phone: string): { e164: string } | { error: stri
   if (!parsed || !parsed.isValid()) {
     return { error: 'Invalid phone number. Please include a valid country code and number.' };
   }
-  return { e164: parsed.format('E.164') };
+  // Store without '+' prefix — Whapi expects bare international digits (e.g. 14155552671)
+  // and incoming WhatsApp messages arrive in the same format.
+  return { e164: parsed.format('E.164').replace(/^\+/, '') };
 }
 
 const router = Router();
 router.use(requireAuth);
 
 // List contacts with search
-router.get('/', async (req, res, next) => {
+router.get('/', requirePermission('contacts', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { search, limit = '50', offset = '0' } = req.query;
 
     let query = supabaseAdmin
       .from('contacts')
       .select('*', { count: 'exact' })
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .eq('is_deleted', false)
       .order('updated_at', { ascending: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
@@ -44,16 +47,16 @@ router.get('/', async (req, res, next) => {
 });
 
 // Get single contact
-router.get('/:contactId', async (req, res, next) => {
+router.get('/:contactId', requirePermission('contacts', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { contactId } = req.params;
 
     const { data, error } = await supabaseAdmin
       .from('contacts')
       .select('*')
       .eq('id', contactId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .eq('is_deleted', false)
       .single();
 
@@ -69,9 +72,9 @@ router.get('/:contactId', async (req, res, next) => {
 });
 
 // Create contact
-router.post('/', async (req, res, next) => {
+router.post('/', requirePermission('contacts', 'create'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { phone_number, first_name, last_name, email, company, notes, tags } = req.body;
 
     if (!phone_number) {
@@ -88,7 +91,8 @@ router.post('/', async (req, res, next) => {
     const { data, error } = await supabaseAdmin
       .from('contacts')
       .insert({
-        user_id: userId,
+        company_id: companyId,
+        created_by: req.userId,
         phone_number: phoneResult.e164,
         first_name: first_name || null,
         last_name: last_name || null,
@@ -108,9 +112,9 @@ router.post('/', async (req, res, next) => {
 });
 
 // Update contact
-router.put('/:contactId', async (req, res, next) => {
+router.put('/:contactId', requirePermission('contacts', 'edit'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { contactId } = req.params;
     const { first_name, last_name, email, company, notes, tags, phone_number } = req.body;
 
@@ -134,7 +138,7 @@ router.put('/:contactId', async (req, res, next) => {
       .from('contacts')
       .update(updates)
       .eq('id', contactId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .select()
       .single();
 
@@ -146,16 +150,16 @@ router.put('/:contactId', async (req, res, next) => {
 });
 
 // Soft delete contact
-router.delete('/:contactId', async (req, res, next) => {
+router.delete('/:contactId', requirePermission('contacts', 'delete'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { contactId } = req.params;
 
     await supabaseAdmin
       .from('contacts')
       .update({ is_deleted: true, updated_at: new Date().toISOString() })
       .eq('id', contactId)
-      .eq('user_id', userId);
+      .eq('company_id', companyId);
 
     res.json({ status: 'ok' });
   } catch (err) {
@@ -164,9 +168,9 @@ router.delete('/:contactId', async (req, res, next) => {
 });
 
 // Get message history for a contact
-router.get('/:contactId/messages', async (req, res, next) => {
+router.get('/:contactId/messages', requirePermission('contacts', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { contactId } = req.params;
     const { limit = '50', before } = req.query;
 
@@ -175,7 +179,7 @@ router.get('/:contactId/messages', async (req, res, next) => {
       .from('contacts')
       .select('phone_number')
       .eq('id', contactId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!contact) {
@@ -186,7 +190,7 @@ router.get('/:contactId/messages', async (req, res, next) => {
     let query = supabaseAdmin
       .from('chat_messages')
       .select('*')
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .eq('phone_number', contact.phone_number)
       .order('created_at', { ascending: false })
       .limit(Number(limit));

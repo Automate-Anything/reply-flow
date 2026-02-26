@@ -23,7 +23,7 @@ router.post('/', async (req, res) => {
       const toPhone = msg.to?.replace(/@.*$/, '');
       const { data: channel } = await supabaseAdmin
         .from('whatsapp_channels')
-        .select('id, user_id')
+        .select('id, company_id')
         .eq('phone_number', toPhone)
         .eq('channel_status', 'connected')
         .single();
@@ -33,7 +33,7 @@ router.post('/', async (req, res) => {
         continue;
       }
 
-      await processIncomingMessage(msg, channel.user_id, channel.id);
+      await processIncomingMessage(msg, channel.company_id, channel.id);
     }
   } catch (err) {
     console.error('Webhook processing error:', err);

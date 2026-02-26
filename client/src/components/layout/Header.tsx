@@ -19,7 +19,7 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
-  const { fullName } = useSession();
+  const { fullName, companyName } = useSession();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,8 +32,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
         return 'Inbox';
       case '/contacts':
         return 'Contacts';
-      case '/settings':
-        return 'Settings';
+      case '/channels':
+        return 'Channels';
+      case '/team':
+        return 'Team';
+      case '/team/permissions':
+        return 'Role Permissions';
+      case '/settings/company':
+        return 'Company Settings';
       default:
         return '';
     }
@@ -67,6 +73,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <span className="sr-only">Toggle menu</span>
         </Button>
         <h1 className="hidden text-lg font-semibold md:block">{pageTitle}</h1>
+        {companyName && (
+          <span className="hidden text-sm text-muted-foreground md:block">{companyName}</span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <Button
@@ -94,7 +103,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => navigate('/settings')}>
+            <DropdownMenuItem onClick={() => navigate('/channels')}>
               <User className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>

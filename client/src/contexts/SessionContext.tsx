@@ -9,6 +9,14 @@ import {
 } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import api from '@/lib/api';
+
+interface MeResponse {
+  user: { id: string; email: string; full_name: string; avatar_url: string | null };
+  company: { id: string; name: string; slug: string | null; logo_url: string | null } | null;
+  role: { id: string; name: string; hierarchy_level: number } | null;
+  permissions: string[];
+}
 
 interface SessionContextType {
   user: User | null;
@@ -16,6 +24,11 @@ interface SessionContextType {
   isAuthenticated: boolean;
   userId: string | null;
   fullName: string;
+  companyId: string | null;
+  companyName: string | null;
+  role: string | null;
+  permissions: Set<string>;
+  hasPermission: (resource: string, action: string) => boolean;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -37,7 +50,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const hasLoadedOnceRef = useRef(false);
+
+  const hasPermission = useCallback(
+    (resource: string, action: string) => {
+      if (role === 'owner') return true;
+      return permissions.has(`${resource}.${action}`);
+    },
+    [role, permissions]
+  );
+
+  const fetchMe = useCallback(async () => {
+    try {
+      const { data } = await api.get<MeResponse>('/me');
+      setCompanyId(data.company?.id ?? null);
+      setCompanyName(data.company?.name ?? null);
+      setRole(data.role?.name ?? null);
+      setPermissions(new Set(data.permissions));
+    } catch {
+      // User may not have a company yet (invitation flow)
+      setCompanyId(null);
+      setCompanyName(null);
+      setRole(null);
+      setPermissions(new Set());
+    }
+  }, []);
 
   const updateSession = useCallback((newSession: Session | null) => {
     setSession(newSession);
@@ -45,6 +86,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(CACHE_KEY, JSON.stringify(newSession));
     } else {
       localStorage.removeItem(CACHE_KEY);
+      setCompanyId(null);
+      setCompanyName(null);
+      setRole(null);
+      setPermissions(new Set());
     }
   }, []);
 
@@ -55,8 +100,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       updateSession(null);
     } else {
       updateSession(data.session);
+      if (data.session) await fetchMe();
     }
-  }, [updateSession]);
+  }, [updateSession, fetchMe]);
 
   useEffect(() => {
     // Safety timeout if loading gets stuck
@@ -68,12 +114,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }, LOADING_TIMEOUT);
 
     // Get initial session
-    supabase.auth.getSession().then(({ data, error: err }) => {
+    supabase.auth.getSession().then(async ({ data, error: err }) => {
       if (err) {
         setError(err.message);
         updateSession(null);
       } else {
         updateSession(data.session);
+        if (data.session) await fetchMe();
       }
       setLoading(false);
       hasLoadedOnceRef.current = true;
@@ -85,6 +132,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Avoid unnecessary updates on tab focus after first load
         if (hasLoadedOnceRef.current) {
           updateSession(newSession);
+          if (newSession) fetchMe();
           setLoading(false);
         }
       }
@@ -94,7 +142,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       clearTimeout(timeout);
       subscription.unsubscribe();
     };
-  }, [loading, updateSession]);
+  }, [loading, updateSession, fetchMe]);
 
   const user = session?.user ?? null;
 
@@ -108,6 +156,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       user?.user_metadata?.name ||
       user?.email ||
       '',
+    companyId,
+    companyName,
+    role,
+    permissions,
+    hasPermission,
     loading,
     error,
     refresh,

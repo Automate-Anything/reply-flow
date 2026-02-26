@@ -1,21 +1,22 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
 const router = Router();
 router.use(requireAuth);
 
 // List notes for a contact
-router.get('/:contactId', async (req, res, next) => {
+router.get('/:contactId', requirePermission('contact_notes', 'view'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { contactId } = req.params;
 
     const { data, error } = await supabaseAdmin
       .from('contact_notes')
       .select('*')
       .eq('contact_id', contactId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .eq('is_deleted', false)
       .order('created_at', { ascending: false });
 
@@ -27,9 +28,9 @@ router.get('/:contactId', async (req, res, next) => {
 });
 
 // Create a note
-router.post('/:contactId', async (req, res, next) => {
+router.post('/:contactId', requirePermission('contact_notes', 'create'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { contactId } = req.params;
     const { content } = req.body;
 
@@ -43,7 +44,7 @@ router.post('/:contactId', async (req, res, next) => {
       .from('contacts')
       .select('id')
       .eq('id', contactId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .single();
 
     if (!contact) {
@@ -53,7 +54,7 @@ router.post('/:contactId', async (req, res, next) => {
 
     const { data, error } = await supabaseAdmin
       .from('contact_notes')
-      .insert({ contact_id: contactId, user_id: userId, content })
+      .insert({ contact_id: contactId, company_id: companyId, created_by: req.userId, content })
       .select()
       .single();
 
@@ -65,9 +66,9 @@ router.post('/:contactId', async (req, res, next) => {
 });
 
 // Update a note
-router.put('/:contactId/:noteId', async (req, res, next) => {
+router.put('/:contactId/:noteId', requirePermission('contact_notes', 'edit'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { noteId } = req.params;
     const { content } = req.body;
 
@@ -75,7 +76,7 @@ router.put('/:contactId/:noteId', async (req, res, next) => {
       .from('contact_notes')
       .update({ content, updated_at: new Date().toISOString() })
       .eq('id', noteId)
-      .eq('user_id', userId)
+      .eq('company_id', companyId)
       .select()
       .single();
 
@@ -87,16 +88,16 @@ router.put('/:contactId/:noteId', async (req, res, next) => {
 });
 
 // Soft delete a note
-router.delete('/:contactId/:noteId', async (req, res, next) => {
+router.delete('/:contactId/:noteId', requirePermission('contact_notes', 'delete'), async (req, res, next) => {
   try {
-    const userId = req.userId!;
+    const companyId = req.companyId!;
     const { noteId } = req.params;
 
     await supabaseAdmin
       .from('contact_notes')
       .update({ is_deleted: true, updated_at: new Date().toISOString() })
       .eq('id', noteId)
-      .eq('user_id', userId);
+      .eq('company_id', companyId);
 
     res.json({ status: 'ok' });
   } catch (err) {

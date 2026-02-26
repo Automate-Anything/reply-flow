@@ -12,6 +12,10 @@ import labelsRouter from './routes/labels.js';
 import contactsRouter from './routes/contacts.js';
 import contactNotesRouter from './routes/contactNotes.js';
 import aiRouter from './routes/ai.js';
+import teamRouter from './routes/team.js';
+import companyRouter from './routes/company.js';
+import rolesRouter from './routes/roles.js';
+import meRouter from './routes/me.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -22,7 +26,7 @@ app.use(cors({
     : true,
   credentials: true,
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '12mb' }));
 app.use(sanitizeBody);
 
 app.get('/api/health', (_req, res) => {
@@ -42,6 +46,10 @@ app.use('/api/labels', labelsRouter);
 app.use('/api/contacts', contactsRouter);
 app.use('/api/contact-notes', contactNotesRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/team', teamRouter);
+app.use('/api/company', companyRouter);
+app.use('/api/roles', rolesRouter);
+app.use('/api/me', meRouter);
 
 app.use(errorHandler);
 

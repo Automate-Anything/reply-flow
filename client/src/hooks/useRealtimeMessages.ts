@@ -10,10 +10,10 @@ interface UseRealtimeOptions {
 }
 
 export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealtimeOptions) {
-  const { userId } = useSession();
+  const { companyId } = useSession();
 
   useEffect(() => {
-    if (!userId) return;
+    if (!companyId) return;
 
     const channel = supabase
       .channel('inbox-realtime')
@@ -23,7 +23,7 @@ export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealti
           event: 'INSERT',
           schema: 'public',
           table: 'chat_messages',
-          filter: `user_id=eq.${userId}`,
+          filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
           onNewMessage?.(payload.new as Message);
@@ -35,7 +35,7 @@ export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealti
           event: 'UPDATE',
           schema: 'public',
           table: 'chat_sessions',
-          filter: `user_id=eq.${userId}`,
+          filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
           onSessionUpdate?.(payload.new as Partial<Conversation> & { id: string });
@@ -46,5 +46,5 @@ export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealti
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, onNewMessage, onSessionUpdate]);
+  }, [companyId, onNewMessage, onSessionUpdate]);
 }

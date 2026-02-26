@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
+import { buildSystemPrompt } from './promptBuilder.js';
+import type { ProfileData, KBEntry } from './promptBuilder.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -15,46 +17,57 @@ interface AIContext {
 
 /**
  * Checks whether AI should respond to an incoming message for a given session.
+ * Reads from per-channel AI profiles (channel_ai_profiles table).
  * Returns null if AI should NOT respond, or the AI context if it should.
  */
 export async function shouldAIRespond(
-  userId: string,
+  companyId: string,
   sessionId: string
 ): Promise<AIContext | null> {
   if (!anthropic) return null;
 
-  // 1. Check global AI settings
-  const { data: settings } = await supabaseAdmin
-    .from('ai_settings')
-    .select('is_enabled, system_prompt, max_tokens')
-    .eq('user_id', userId)
-    .single();
-
-  if (!settings?.is_enabled) return null;
-
-  // 2. Check per-conversation human_takeover
+  // 1. Get session + channel_id
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
-    .select('human_takeover, auto_resume_at')
+    .select('channel_id, human_takeover, auto_resume_at')
     .eq('id', sessionId)
     .single();
 
-  if (!session) return null;
+  if (!session || !session.channel_id) return null;
 
+  // 2. Check per-channel AI profile
+  const { data: profile } = await supabaseAdmin
+    .from('channel_ai_profiles')
+    .select('is_enabled, profile_data, max_tokens')
+    .eq('channel_id', session.channel_id)
+    .single();
+
+  if (!profile?.is_enabled) return null;
+
+  // 3. Check per-conversation human_takeover
   if (session.human_takeover) {
-    // Check if auto_resume_at has passed
     if (session.auto_resume_at && new Date(session.auto_resume_at) <= new Date()) {
-      // Auto-resume: clear the takeover
       await supabaseAdmin
         .from('chat_sessions')
         .update({ human_takeover: false, auto_resume_at: null })
         .eq('id', sessionId);
     } else {
-      return null; // Human has taken over, AI should not respond
+      return null;
     }
   }
 
-  // 3. Build message context from last 20 messages
+  // 4. Fetch knowledge base entries for the channel
+  const { data: kbEntries } = await supabaseAdmin
+    .from('knowledge_base_entries')
+    .select('title, content')
+    .eq('channel_id', session.channel_id);
+
+  // 5. Build system prompt from profile data + KB
+  const profileData = (profile.profile_data || {}) as ProfileData;
+  const kbData = (kbEntries || []) as KBEntry[];
+  const systemPrompt = buildSystemPrompt(profileData, kbData);
+
+  // 6. Build message context from last 20 messages
   const { data: recentMessages } = await supabaseAdmin
     .from('chat_messages')
     .select('message_body, direction, sender_type')
@@ -70,8 +83,8 @@ export async function shouldAIRespond(
   }));
 
   return {
-    systemPrompt: settings.system_prompt || 'You are a helpful business assistant. Respond professionally and concisely.',
-    maxTokens: settings.max_tokens || 500,
+    systemPrompt,
+    maxTokens: profile.max_tokens || 500,
     messages,
   };
 }
@@ -80,7 +93,7 @@ export async function shouldAIRespond(
  * Generates an AI response and sends it via WhatsApp.
  */
 export async function generateAndSendAIReply(
-  userId: string,
+  companyId: string,
   sessionId: string,
   context: AIContext
 ): Promise<void> {
@@ -130,7 +143,7 @@ export async function generateAndSendAIReply(
   const now = new Date().toISOString();
   await supabaseAdmin.from('chat_messages').insert({
     session_id: sessionId,
-    user_id: userId,
+    company_id: companyId,
     chat_id_normalized: session.chat_id,
     phone_number: session.phone_number,
     message_body: aiReply,
