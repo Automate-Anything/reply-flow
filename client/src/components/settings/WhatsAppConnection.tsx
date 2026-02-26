@@ -29,6 +29,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Elapsed timer for provisioning stepper
   useEffect(() => {
@@ -51,17 +52,30 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     }
   }, []);
 
+  const markConnected = useCallback(() => {
+    clearTimers();
+    setState('idle');
+    setQrData(null);
+    setDbChannelId(null);
+    toast.success('WhatsApp connected successfully');
+    onCreated();
+  }, [clearTimers, onCreated]);
+
   const startQRRefresh = useCallback((channelId: number) => {
     if (qrRefreshRef.current) clearInterval(qrRefreshRef.current);
     qrRefreshRef.current = setInterval(async () => {
       try {
         const { data } = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
+        if (data.connected) {
+          markConnected();
+          return;
+        }
         setQrData(data.qr);
       } catch {
         // Ignore refresh errors
       }
     }, 30000);
-  }, []);
+  }, [markConnected]);
 
   const startHealthPolling = useCallback((channelId: number) => {
     if (healthPollRef.current) clearInterval(healthPollRef.current);
@@ -75,9 +89,13 @@ export default function WhatsAppConnection({ onCreated }: Props) {
           clearTimers();
           try {
             const qrRes = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
+            if (qrRes.data.connected) {
+              markConnected();
+              return;
+            }
             setQrData(qrRes.data.qr);
           } catch {
-            // QR fetch failed, still transition
+            // QR fetch failed, still transition to show Refresh QR button
           }
           setState('qr_display');
           startQRRefresh(channelId);
@@ -86,12 +104,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
             try {
               const { data: d } = await api.get(`/whatsapp/health-check?channelId=${channelId}`);
               if (d.status === 'connected') {
-                clearTimers();
-                setState('idle');
-                setQrData(null);
-                setDbChannelId(null);
-                toast.success('WhatsApp connected successfully');
-                onCreated();
+                markConnected();
               }
             } catch {
               // Ignore
@@ -100,45 +113,63 @@ export default function WhatsAppConnection({ onCreated }: Props) {
         }
 
         if (data.status === 'connected') {
-          clearTimers();
-          setState('idle');
-          setQrData(null);
-          setDbChannelId(null);
-          toast.success('WhatsApp connected successfully');
-          onCreated();
+          markConnected();
         }
       } catch {
         // Ignore polling errors
       }
     }, 5000);
-  }, [clearTimers, onCreated, startQRRefresh]);
+  }, [clearTimers, markConnected, startQRRefresh]);
 
   const handleCreateChannel = async () => {
     setState('provisioning');
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const { data } = await api.post('/whatsapp/create-channel');
+      const { data } = await api.post('/whatsapp/create-channel', null, {
+        signal: controller.signal,
+      });
+      // If cancelled while POST was in-flight, don't process the response
+      if (controller.signal.aborted) return;
       setDbChannelId(data.dbChannelId);
       startHealthPolling(data.dbChannelId);
-    } catch {
+    } catch (err) {
+      if (controller.signal.aborted) return;
       setError('Failed to create channel. Please try again.');
       setState('error');
       toast.error('Failed to create WhatsApp channel');
+    } finally {
+      abortRef.current = null;
     }
   };
 
   const handleCancelProvisioning = async () => {
-    clearTimers();
-    if (dbChannelId) {
-      try {
-        await api.delete('/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
-      } catch {
-        // Best-effort cleanup
-      }
+    // 1. Abort the in-flight POST (prevents callback from running)
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
     }
+
+    // 2. Stop all polling
+    clearTimers();
+
+    // 3. Clean up ALL pending channels for this user on both WhAPI and DB.
+    //    This covers the case where the POST completed server-side but the
+    //    client aborted before receiving the dbChannelId.
+    try {
+      await api.post('/whatsapp/cancel-provisioning');
+    } catch {
+      // Best-effort cleanup
+    }
+
+    // 4. Reset local state
     setQrData(null);
     setDbChannelId(null);
     setState('idle');
+
+    // 5. Re-fetch channel list
+    onCreated();
   };
 
   const handleDelete = async () => {

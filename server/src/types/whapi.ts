@@ -12,10 +12,12 @@ export interface WhapiQRResponse {
 
 export interface WhapiHealthResponse {
   status: {
-    text: string;
-    // 'connected', 'loading', etc.
+    code: number;
+    text: string; // 'INIT', 'AUTH', 'STOP', 'SYNC_ERROR'
   };
+  version?: string;
   phone?: string;
+  channel_id?: string;
 }
 
 export interface WhapiWebhookSettings {

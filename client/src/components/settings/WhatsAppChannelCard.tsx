@@ -154,12 +154,25 @@ export default function WhatsAppChannelCard({ channel, onUpdate }: Props) {
     let cancelled = false;
     cancelledRef.current = false;
 
+    const handleQRResponse = (data: { qr?: string; connected?: boolean }) => {
+      if (cancelled) return;
+      if (data.connected) {
+        // Channel is already authenticated — skip QR, go to connected
+        setEffectiveStatus('connected');
+        setQrData(null);
+        toast.success('WhatsApp connected successfully');
+        onUpdate();
+        return;
+      }
+      if (data.qr) setQrData(data.qr);
+    };
+
     // Fetch QR immediately
     const fetchQR = async () => {
       setLoadingQR(true);
       try {
         const { data } = await api.get(`/whatsapp/create-qr?channelId=${channel.id}`);
-        if (!cancelled) setQrData(data.qr);
+        handleQRResponse(data);
       } catch {
         // Will retry on interval
       } finally {
@@ -172,7 +185,7 @@ export default function WhatsAppChannelCard({ channel, onUpdate }: Props) {
     const qrInterval = setInterval(async () => {
       try {
         const { data } = await api.get(`/whatsapp/create-qr?channelId=${channel.id}`);
-        if (!cancelled) setQrData(data.qr);
+        handleQRResponse(data);
       } catch {
         // ignore
       }

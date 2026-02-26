@@ -63,17 +63,49 @@ router.post('/create-channel', async (req, res) => {
   }
 });
 
-// Refresh QR code for an existing channel
-router.get('/create-qr', async (req, res) => {
+// Cancel provisioning: deletes all pending channels for the user.
+// Used when the client aborts a create-channel request and doesn't have
+// the specific channel ID to delete.
+router.post('/cancel-provisioning', async (req, res, next) => {
   try {
     const userId = req.userId!;
-    const { channelId } = req.query;
 
-    if (!channelId) {
-      res.status(400).json({ error: 'channelId query param is required' });
-      return;
+    const { data: pendingChannels, error } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id, channel_id, channel_token')
+      .eq('user_id', userId)
+      .eq('channel_status', 'pending');
+
+    if (error) throw error;
+
+    // Delete each pending channel from WhAPI and DB
+    for (const ch of pendingChannels || []) {
+      try { await whapi.logoutChannel(ch.channel_token); } catch { /* ignore */ }
+      try { await whapi.deleteChannel(ch.channel_id); } catch { /* ignore */ }
+      await supabaseAdmin
+        .from('whatsapp_channels')
+        .delete()
+        .eq('id', ch.id)
+        .eq('user_id', userId);
     }
 
+    res.json({ deleted: (pendingChannels || []).length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Refresh QR code for an existing channel
+router.get('/create-qr', async (req, res) => {
+  const userId = req.userId!;
+  const { channelId } = req.query;
+
+  if (!channelId) {
+    res.status(400).json({ error: 'channelId query param is required' });
+    return;
+  }
+
+  try {
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('channel_token')
@@ -86,8 +118,40 @@ router.get('/create-qr', async (req, res) => {
       return;
     }
 
-    const qrData = await whapi.getQR(channel.channel_token);
-    res.json({ qr: qrData.qr, expire: qrData.expire });
+    try {
+      const qrData = await whapi.getQR(channel.channel_token);
+      res.json({ qr: qrData.qr, expire: qrData.expire });
+    } catch (err: unknown) {
+      // 409 = "channel already authenticated" — the channel is connected
+      const is409 =
+        (err as { response?: { status?: number } })?.response?.status === 409;
+
+      if (is409) {
+        // Update DB status to connected
+        await supabaseAdmin
+          .from('whatsapp_channels')
+          .update({ channel_status: 'connected', updated_at: new Date().toISOString() })
+          .eq('id', Number(channelId))
+          .eq('user_id', userId);
+
+        // Register webhook while we're here
+        try {
+          const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
+          await whapi.registerWebhook(channel.channel_token, webhookUrl);
+          await supabaseAdmin
+            .from('whatsapp_channels')
+            .update({ webhook_registered: true })
+            .eq('id', Number(channelId));
+        } catch {
+          // Best-effort webhook registration
+        }
+
+        res.json({ connected: true });
+        return;
+      }
+
+      throw err;
+    }
   } catch (err) {
     console.error('QR fetch failed:', err instanceof Error ? err.message : err);
     const message = err instanceof Error ? err.message : 'Failed to fetch QR code';
@@ -125,7 +189,9 @@ router.get('/health-check', async (req, res, next) => {
         const health = await whapi.checkHealth(channel.channel_token, true);
 
         // 200 response means the gate is ready — update status
-        const isConnected = health.status?.text === 'connected';
+        // WhAPI status text: INIT, AUTH (connected), STOP, SYNC_ERROR
+        const statusText = health.status?.text?.toUpperCase() || '';
+        const isConnected = statusText === 'AUTH';
         const newStatus = isConnected ? 'connected' : 'awaiting_scan';
 
         await supabaseAdmin
@@ -155,7 +221,10 @@ router.get('/health-check', async (req, res, next) => {
     }
 
     const health = await whapi.checkHealth(channel.channel_token);
-    const isConnected = health.status?.text === 'connected';
+
+    // WhAPI status text: INIT, AUTH (connected), STOP, SYNC_ERROR
+    const statusText = health.status?.text?.toUpperCase() || '';
+    const isConnected = statusText === 'AUTH';
 
     if (isConnected && channel.channel_status !== 'connected') {
       await supabaseAdmin
