@@ -8,6 +8,7 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   WHAPI_PARTNER_TOKEN: z.string().min(1),
+  WHAPI_PROJECT_ID: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().optional(),
   BACKEND_URL: z.string().url().default('http://localhost:3001'),
 });

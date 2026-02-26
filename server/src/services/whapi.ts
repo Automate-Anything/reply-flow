@@ -17,19 +17,8 @@ function gateApi(channelToken: string) {
   });
 }
 
-async function getOrCreateProjectId(): Promise<string> {
-  const { data: projects } = await managerApi.get('/projects');
-  if (Array.isArray(projects) && projects.length > 0) {
-    return projects[0].id;
-  }
-  const { data: newProject } = await managerApi.put('/projects', {
-    name: 'Reply Flow',
-  });
-  return newProject.id;
-}
-
 export async function createChannel(name: string): Promise<WhapiChannel> {
-  const projectId = await getOrCreateProjectId();
+  const projectId = env.WHAPI_PROJECT_ID;
   const { data } = await managerApi.put('/channels', {
     name,
     projectId,
