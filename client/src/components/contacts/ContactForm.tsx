@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
+import { isValidPhoneNumber } from 'libphonenumber-js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,8 +42,13 @@ export default function ContactForm({ contact, onSave, onCancel }: ContactFormPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setPhoneError('');
     if (!form.phone_number.trim()) {
-      setError('Phone number is required');
+      setPhoneError('Phone number is required');
+      return;
+    }
+    if (!isValidPhoneNumber(form.phone_number)) {
+      setPhoneError('Invalid phone number for the selected country');
       return;
     }
     setSaving(true);
@@ -82,11 +87,14 @@ export default function ContactForm({ contact, onSave, onCancel }: ContactFormPr
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Phone Number *</Label>
-            <Input
+            <PhoneInput
               value={form.phone_number}
-              onChange={(e) => update('phone_number', e.target.value)}
-              placeholder="+1234567890"
-              required
+              onChange={(val) => {
+                update('phone_number', val);
+                if (phoneError) setPhoneError('');
+              }}
+              error={phoneError}
+              disabled={saving}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
