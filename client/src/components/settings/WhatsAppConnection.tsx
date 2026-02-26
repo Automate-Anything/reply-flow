@@ -7,7 +7,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Smartphone, Loader2, XCircle, RefreshCw, Trash2, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
-type ConnectionState = 'idle' | 'creating' | 'qr_display' | 'error';
+type ConnectionState = 'idle' | 'provisioning' | 'qr_display' | 'error';
+
+const PROVISIONING_STEPS = [
+  { label: 'Preparing environment', duration: 80 },
+  { label: 'Creating channel', duration: 80 },
+  { label: 'Finalizing setup', duration: 80 },
+] as const;
 
 interface Props {
   onCreated: () => void;
@@ -20,19 +26,13 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const [refreshingQR, setRefreshingQR] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [dbChannelId, setDbChannelId] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const createAbortRef = useRef<AbortController | null>(null);
-  const [elapsed, setElapsed] = useState(0);
 
-  const PROVISIONING_STEPS = [
-    { label: 'Preparing environment', duration: 80 },
-    { label: 'Creating channel', duration: 80 },
-    { label: 'Finalizing setup', duration: 80 },
-  ] as const;
-
+  // Elapsed timer for provisioning stepper
   useEffect(() => {
-    if (state !== 'creating') {
+    if (state !== 'provisioning') {
       setElapsed(0);
       return;
     }
@@ -51,28 +51,54 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     }
   }, []);
 
-  const fetchQR = async (channelId: number) => {
-    try {
-      const { data } = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
-      setQrData(data.qr);
-      setError(null);
-      startHealthPolling(channelId);
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Failed to load QR code. Please try again.';
-      setError(message);
-      setState('error');
-    }
-  };
-
-  const startHealthPolling = (channelId: number) => {
-    if (healthPollRef.current) clearInterval(healthPollRef.current);
+  const startQRRefresh = useCallback((channelId: number) => {
     if (qrRefreshRef.current) clearInterval(qrRefreshRef.current);
+    qrRefreshRef.current = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
+        setQrData(data.qr);
+      } catch {
+        // Ignore refresh errors
+      }
+    }, 30000);
+  }, []);
+
+  const startHealthPolling = useCallback((channelId: number) => {
+    if (healthPollRef.current) clearInterval(healthPollRef.current);
 
     healthPollRef.current = setInterval(async () => {
       try {
         const { data } = await api.get(`/whatsapp/health-check?channelId=${channelId}`);
+
+        if (data.status === 'awaiting_scan') {
+          // Provisioning done — fetch QR and show it
+          clearTimers();
+          try {
+            const qrRes = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
+            setQrData(qrRes.data.qr);
+          } catch {
+            // QR fetch failed, still transition
+          }
+          setState('qr_display');
+          startQRRefresh(channelId);
+          // Restart health poll for connected status
+          healthPollRef.current = setInterval(async () => {
+            try {
+              const { data: d } = await api.get(`/whatsapp/health-check?channelId=${channelId}`);
+              if (d.status === 'connected') {
+                clearTimers();
+                setState('idle');
+                setQrData(null);
+                setDbChannelId(null);
+                toast.success('WhatsApp connected successfully');
+                onCreated();
+              }
+            } catch {
+              // Ignore
+            }
+          }, 5000);
+        }
+
         if (data.status === 'connected') {
           clearTimers();
           setState('idle');
@@ -85,57 +111,34 @@ export default function WhatsAppConnection({ onCreated }: Props) {
         // Ignore polling errors
       }
     }, 5000);
-
-    // Refresh QR every 30s
-    qrRefreshRef.current = setInterval(async () => {
-      try {
-        const { data } = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
-        setQrData(data.qr);
-      } catch {
-        // Ignore
-      }
-    }, 30000);
-  };
+  }, [clearTimers, onCreated, startQRRefresh]);
 
   const handleCreateChannel = async () => {
-    setState('creating');
+    setState('provisioning');
     setError(null);
-    const controller = new AbortController();
-    createAbortRef.current = controller;
     try {
-      const { data } = await api.post('/whatsapp/create-channel', null, {
-        timeout: 300_000,
-        signal: controller.signal,
-      });
+      const { data } = await api.post('/whatsapp/create-channel');
       setDbChannelId(data.dbChannelId);
-      setQrData(data.qr);
-      setState('qr_display');
       startHealthPolling(data.dbChannelId);
-    } catch (err) {
-      if (controller.signal.aborted) return;
+    } catch {
       setError('Failed to create channel. Please try again.');
       setState('error');
       toast.error('Failed to create WhatsApp channel');
-    } finally {
-      createAbortRef.current = null;
     }
   };
 
   const handleCancelProvisioning = async () => {
-    createAbortRef.current?.abort();
-    createAbortRef.current = null;
-    try {
-      if (dbChannelId) {
-        await api.post('/whatsapp/cancel-provisioning', { channelId: dbChannelId });
-      }
-    } catch {
-      // Best-effort
-    }
     clearTimers();
+    if (dbChannelId) {
+      try {
+        await api.delete('/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
+      } catch {
+        // Best-effort cleanup
+      }
+    }
     setQrData(null);
     setDbChannelId(null);
     setState('idle');
-    toast.success('Channel creation cancelled');
   };
 
   const handleDelete = async () => {
@@ -149,7 +152,6 @@ export default function WhatsAppConnection({ onCreated }: Props) {
       setState('idle');
       toast.success('Channel deleted');
     } catch {
-      setError('Failed to delete channel.');
       toast.error('Failed to delete channel');
     } finally {
       setDeleting(false);
@@ -160,13 +162,16 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     if (!dbChannelId) return;
     setRefreshingQR(true);
     try {
-      await fetchQR(dbChannelId);
+      const { data } = await api.get(`/whatsapp/create-qr?channelId=${dbChannelId}`);
+      setQrData(data.qr);
+    } catch {
+      toast.error('Failed to refresh QR code');
     } finally {
       setRefreshingQR(false);
     }
   };
 
-  // Idle state — show "Add Channel" button
+  // --- Idle state ---
   if (state === 'idle') {
     return (
       <Card className="border-dashed transition-colors hover:border-primary/40 hover:bg-muted/30">
@@ -188,6 +193,39 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     );
   }
 
+  // --- Error state ---
+  if (state === 'error') {
+    return (
+      <Card className="border-dashed border-destructive/30">
+        <CardContent className="flex items-center gap-4 py-5 px-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+            <XCircle className="h-5 w-5 text-destructive" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium">Failed to create channel</p>
+            <p className="text-xs text-muted-foreground">
+              {error || 'Something went wrong.'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setError(null); setState('idle'); }}>
+              Dismiss
+            </Button>
+            <Button size="sm" onClick={handleCreateChannel}>
+              <RefreshCw className="mr-2 h-3 w-3" />
+              Retry
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // --- Provisioning & QR states ---
+  const totalSeconds = PROVISIONING_STEPS.reduce((s, st) => s + st.duration, 0);
+  const overallPct = Math.min((elapsed / totalSeconds) * 100, 95);
+  const remaining = Math.max(0, totalSeconds - elapsed);
+
   return (
     <Card>
       <CardHeader>
@@ -196,27 +234,20 @@ export default function WhatsAppConnection({ onCreated }: Props) {
           <div>
             <CardTitle>New Channel</CardTitle>
             <CardDescription>
-              Link a WhatsApp account by scanning the QR code
+              {state === 'provisioning'
+                ? 'Setting up your WhatsApp channel'
+                : 'Scan the QR code with your WhatsApp app'}
             </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        {error && (
-          <div className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        {state === 'creating' && (() => {
+        {/* Provisioning stepper */}
+        {state === 'provisioning' && (() => {
           let cumulative = 0;
-          const totalSeconds = PROVISIONING_STEPS.reduce((s, st) => s + st.duration, 0);
-          const overallPct = Math.min((elapsed / totalSeconds) * 100, 95);
-          const remaining = Math.max(0, totalSeconds - elapsed);
 
           return (
-            <div className="space-y-6 py-4">
-              {/* Stepper */}
+            <div className="space-y-6 py-2">
               <div className="relative ml-4">
                 {PROVISIONING_STEPS.map((step, i) => {
                   const stepStart = cumulative;
@@ -245,7 +276,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
                           </div>
                         ) : active ? (
                           <div className="relative flex h-6 w-6 items-center justify-center">
-                            <span className="absolute h-6 w-6 animate-ping rounded-full bg-primary/20" />
+                            <span className="absolute h-6 w-6 animate-pulse rounded-full bg-primary/20" />
                             <Loader2 className="h-5 w-5 animate-spin text-primary" />
                           </div>
                         ) : (
@@ -293,11 +324,9 @@ export default function WhatsAppConnection({ onCreated }: Props) {
           );
         })()}
 
+        {/* QR code display */}
         {state === 'qr_display' && (
           <div className="flex flex-col items-center gap-4">
-            <p className="text-sm text-muted-foreground">
-              Scan this QR code with your WhatsApp app
-            </p>
             {qrData ? (
               <div className="rounded-lg border bg-white p-4">
                 <QRCodeSVG value={qrData} size={256} />
@@ -306,7 +335,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
               <Skeleton className="h-[288px] w-[288px]" />
             )}
             <p className="text-xs text-muted-foreground">
-              QR code refreshes automatically. Checking connection every 5 seconds...
+              QR code refreshes automatically
             </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
@@ -316,29 +345,6 @@ export default function WhatsAppConnection({ onCreated }: Props) {
               <Button variant="outline" size="sm" onClick={handleDelete} disabled={deleting}>
                 {deleting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Trash2 className="mr-2 h-3 w-3" />}
                 {deleting ? 'Deleting...' : 'Delete Channel'}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {state === 'error' && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <XCircle className="h-6 w-6 text-destructive" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium">Channel creation failed</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {error || 'Something went wrong. Please try again.'}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setError(null); setState('idle'); }}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleCreateChannel}>
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                Try Again
               </Button>
             </div>
           </div>

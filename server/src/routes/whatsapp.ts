@@ -108,7 +108,7 @@ router.get('/health-check', async (req, res, next) => {
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_token, channel_id')
+      .select('channel_token, channel_id, channel_status')
       .eq('id', Number(channelId))
       .eq('user_id', userId)
       .single();
@@ -118,10 +118,46 @@ router.get('/health-check', async (req, res, next) => {
       return;
     }
 
+    // For pending channels, check if provisioning is done
+    if (channel.channel_status === 'pending') {
+      try {
+        // wakeup=true nudges WhAPI to finish provisioning faster
+        const health = await whapi.checkHealth(channel.channel_token, true);
+
+        // 200 response means the gate is ready — update status
+        const isConnected = health.status?.text === 'connected';
+        const newStatus = isConnected ? 'connected' : 'awaiting_scan';
+
+        await supabaseAdmin
+          .from('whatsapp_channels')
+          .update({
+            channel_status: newStatus,
+            ...(isConnected ? { phone_number: health.phone || null } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', Number(channelId));
+
+        if (isConnected) {
+          const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
+          await whapi.registerWebhook(channel.channel_token, webhookUrl);
+          await supabaseAdmin
+            .from('whatsapp_channels')
+            .update({ webhook_registered: true })
+            .eq('id', Number(channelId));
+        }
+
+        res.json({ status: newStatus, phone: health.phone || null });
+      } catch {
+        // Gate not ready yet — still provisioning
+        res.json({ status: 'pending' });
+      }
+      return;
+    }
+
     const health = await whapi.checkHealth(channel.channel_token);
     const isConnected = health.status?.text === 'connected';
 
-    if (isConnected) {
+    if (isConnected && channel.channel_status !== 'connected') {
       await supabaseAdmin
         .from('whatsapp_channels')
         .update({
@@ -141,7 +177,7 @@ router.get('/health-check', async (req, res, next) => {
     }
 
     res.json({
-      status: isConnected ? 'connected' : 'pending',
+      status: isConnected ? 'connected' : channel.channel_status,
       phone: health.phone || null,
     });
   } catch (err) {
