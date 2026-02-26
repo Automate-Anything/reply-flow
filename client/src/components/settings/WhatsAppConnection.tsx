@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Smartphone, Loader2, CheckCircle2, XCircle, RefreshCw, Trash2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 
-type ConnectionState = 'loading' | 'no_channel' | 'creating' | 'qr_display' | 'connected' | 'error';
+type ConnectionState = 'loading' | 'no_channel' | 'creating' | 'provisioning' | 'qr_display' | 'connected' | 'error';
 
 interface ChannelInfo {
   channel_id: string;
@@ -25,6 +25,7 @@ export default function WhatsAppConnection() {
   const [error, setError] = useState<string | null>(null);
   const healthPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const provisionPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimers = useCallback(() => {
     if (healthPollRef.current) {
@@ -35,6 +36,10 @@ export default function WhatsAppConnection() {
       clearInterval(qrRefreshRef.current);
       qrRefreshRef.current = null;
     }
+    if (provisionPollRef.current) {
+      clearInterval(provisionPollRef.current);
+      provisionPollRef.current = null;
+    }
   }, []);
 
   const fetchChannel = useCallback(async () => {
@@ -44,8 +49,11 @@ export default function WhatsAppConnection() {
         setChannel(data.channel);
         if (data.channel.channel_status === 'connected') {
           setState('connected');
+        } else if (data.channel.channel_status === 'provisioning') {
+          setState('provisioning');
+          startProvisionPolling();
         } else {
-          // Channel exists but not connected — show QR
+          // Channel exists and is provisioned — show QR
           setState('qr_display');
           fetchQR();
         }
@@ -58,38 +66,50 @@ export default function WhatsAppConnection() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchQR = async () => {
-    await fetchQRWithRetry(0);
+  // Poll /channel-status every 5s until the channel is provisioned on WhAPI
+  const startProvisionPolling = () => {
+    // Clear any existing timers first
+    if (provisionPollRef.current) {
+      clearInterval(provisionPollRef.current);
+    }
+    provisionPollRef.current = setInterval(async () => {
+      try {
+        const { data } = await api.get('/whatsapp/channel-status');
+        if (data.status === 'ready') {
+          if (provisionPollRef.current) {
+            clearInterval(provisionPollRef.current);
+            provisionPollRef.current = null;
+          }
+          setState('qr_display');
+          fetchQR();
+        }
+        // If still 'provisioning', keep polling
+      } catch {
+        // Ignore — keep polling
+      }
+    }, 5000);
   };
 
-  const fetchQRWithRetry = async (retryCount: number) => {
+  const fetchQR = async () => {
     try {
       const { data } = await api.get('/whatsapp/create-qr');
       setQrData(data.qr);
+      setError(null);
       startHealthPolling();
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { error?: string; stale?: boolean } } };
-      const resp = axiosErr?.response?.data;
-      if (resp?.stale) {
-        setChannel(null);
-        setQrData(null);
-        setState('no_channel');
-        toast.error('Channel expired. Please reconnect.');
-        return;
-      }
-      // 503 = still provisioning, auto-retry up to 3 times
-      if (axiosErr?.response?.status === 503 && retryCount < 3) {
-        setTimeout(() => fetchQRWithRetry(retryCount + 1), 5000);
-        return;
-      }
-      const message = resp?.error || 'Failed to load QR code. Please try again.';
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'Failed to load QR code. Please try again.';
       setError(message);
       setState('error');
     }
   };
 
   const startHealthPolling = () => {
-    clearTimers();
+    // Clear health and QR refresh timers (not provision timer)
+    if (healthPollRef.current) clearInterval(healthPollRef.current);
+    if (qrRefreshRef.current) clearInterval(qrRefreshRef.current);
+
     healthPollRef.current = setInterval(async () => {
       try {
         const { data } = await api.get('/whatsapp/health-check');
@@ -122,8 +142,10 @@ export default function WhatsAppConnection() {
     setError(null);
     try {
       await api.post('/whatsapp/create-channel');
-      setState('qr_display');
-      await fetchQR();
+      // Channel created on WhAPI but needs up to 90s to provision.
+      // Show provisioning state and poll until ready.
+      setState('provisioning');
+      startProvisionPolling();
     } catch {
       setError('Failed to create channel. Please try again.');
       setState('error');
@@ -205,10 +227,19 @@ export default function WhatsAppConnection() {
           </div>
         )}
 
-        {state === 'creating' && (
+        {(state === 'creating' || state === 'provisioning') && (
           <div className="flex flex-col items-center gap-4 py-8">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Setting up your channel...</p>
+            <p className="text-sm text-muted-foreground">
+              {state === 'creating'
+                ? 'Creating your channel...'
+                : 'Initializing WhatsApp channel. This can take up to 90 seconds...'}
+            </p>
+            {state === 'provisioning' && (
+              <p className="text-xs text-muted-foreground">
+                Checking every 5 seconds...
+              </p>
+            )}
           </div>
         )}
 

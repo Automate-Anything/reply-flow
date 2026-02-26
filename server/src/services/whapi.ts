@@ -24,7 +24,6 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
       name,
       projectId,
     });
-    console.log('WhAPI channel created:', JSON.stringify(data, null, 2));
     return {
       id: data.id,
       token: data.token,
@@ -41,39 +40,47 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
   }
 }
 
-export async function listChannels(): Promise<unknown> {
-  const { data } = await managerApi.get('/channels');
-  return data;
-}
-
 export async function deleteChannel(channelId: string): Promise<void> {
-  await managerApi.delete(`/channels/${channelId}`);
+  try {
+    await managerApi.delete(`/channels/${channelId}`);
+  } catch (err: unknown) {
+    // Ignore 404 — channel already gone
+    if (axios.isAxiosError(err) && err.response?.status === 404) return;
+    throw err;
+  }
 }
 
-export async function getQR(channelToken: string, retries = 3): Promise<string> {
+/**
+ * Check if a channel is ready on the Gate API.
+ * Uses ?wakeup=true to trigger initialization.
+ * Returns the health data if ready, or null if still provisioning (404).
+ */
+export async function checkChannelReady(channelToken: string): Promise<WhapiHealthResponse | null> {
   const gate = gateApi(channelToken);
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const { data } = await gate.get('/users/login');
-      return data.qr ?? data.image;
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response) {
-        const status = err.response.status;
-        // Retry on 404 — channel may still be provisioning
-        if (status === 404 && attempt < retries) {
-          console.log(`WhAPI QR attempt ${attempt}/${retries} got 404, retrying in 3s...`);
-          await new Promise((r) => setTimeout(r, 3000));
-          continue;
-        }
-        const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
-        const error = new Error(`WhAPI QR error (${status}): ${detail}`);
-        (error as Error & { statusCode: number }).statusCode = status;
-        throw error;
-      }
-      throw err;
+  try {
+    const { data } = await gate.get('/health', { params: { wakeup: true } });
+    return data;
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) {
+      return null; // Not provisioned yet
     }
+    throw err;
   }
-  throw new Error('Failed to get QR code after retries');
+}
+
+export async function getQR(channelToken: string): Promise<string> {
+  const gate = gateApi(channelToken);
+  try {
+    const { data } = await gate.get('/users/login');
+    return data.qr ?? data.image;
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err) && err.response) {
+      const status = err.response.status;
+      const detail = err.response.data?.message || err.response.data?.error || JSON.stringify(err.response.data);
+      throw new Error(`WhAPI QR error (${status}): ${detail}`);
+    }
+    throw err;
+  }
 }
 
 export async function checkHealth(

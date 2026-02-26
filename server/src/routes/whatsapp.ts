@@ -9,16 +9,6 @@ const router = Router();
 // All routes require auth
 router.use(requireAuth);
 
-// DEBUG: List all channels on WhAPI (remove after debugging)
-router.get('/debug-channels', async (_req, res) => {
-  try {
-    const channels = await whapi.listChannels();
-    res.json({ channels });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
-  }
-});
-
 // Create a WhatsApp channel for the user
 router.post('/create-channel', async (req, res) => {
   try {
@@ -45,12 +35,12 @@ router.post('/create-channel', async (req, res) => {
         channel_id: channel.id,
         channel_token: channel.token,
         channel_name: channel.name,
-        channel_status: 'pending',
+        channel_status: 'provisioning',
       });
 
     if (dbError) throw dbError;
 
-    res.json({ channelId: channel.id, status: 'pending' });
+    res.json({ channelId: channel.id, status: 'provisioning' });
   } catch (err) {
     console.error('Create channel failed:', err instanceof Error ? err.message : err);
     const message = err instanceof Error ? err.message : 'Failed to create channel';
@@ -58,14 +48,16 @@ router.post('/create-channel', async (req, res) => {
   }
 });
 
-// Get QR code for the user's channel
-router.get('/create-qr', async (req, res) => {
+// Check if the channel is provisioned and ready on WhAPI's Gate API.
+// WhAPI docs say initialization can take up to 90 seconds.
+// The frontend polls this endpoint after channel creation.
+router.get('/channel-status', async (req, res) => {
   try {
     const userId = req.userId!;
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_token, created_at')
+      .select('channel_token, channel_status')
       .eq('user_id', userId)
       .single();
 
@@ -74,11 +66,49 @@ router.get('/create-qr', async (req, res) => {
       return;
     }
 
-    // Give more retries to freshly created channels (< 2 min old)
-    const ageMs = Date.now() - new Date(channel.created_at).getTime();
-    const isNew = ageMs < 120_000;
-    const qr = await whapi.getQR(channel.channel_token, isNew ? 6 : 3);
+    // If already past provisioning, just return current status
+    if (channel.channel_status !== 'provisioning') {
+      res.json({ status: channel.channel_status });
+      return;
+    }
 
+    // Ping Gate API with wakeup=true to check if provisioned
+    const health = await whapi.checkChannelReady(channel.channel_token);
+
+    if (health) {
+      // Channel is ready — update status
+      await supabaseAdmin
+        .from('whatsapp_channels')
+        .update({ channel_status: 'pending', updated_at: new Date().toISOString() })
+        .eq('user_id', userId);
+      res.json({ status: 'ready' });
+    } else {
+      res.json({ status: 'provisioning' });
+    }
+  } catch (err) {
+    console.error('Channel status check failed:', err instanceof Error ? err.message : err);
+    // Non-fatal — tell frontend to keep polling
+    res.json({ status: 'provisioning' });
+  }
+});
+
+// Get QR code — only call this after channel-status returns "ready"
+router.get('/create-qr', async (req, res) => {
+  try {
+    const userId = req.userId!;
+
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('channel_token')
+      .eq('user_id', userId)
+      .single();
+
+    if (!channel) {
+      res.status(404).json({ error: 'No channel found' });
+      return;
+    }
+
+    const qr = await whapi.getQR(channel.channel_token);
     if (!qr) {
       res.status(502).json({ error: 'QR code not available from WhatsApp provider' });
       return;
@@ -86,32 +116,6 @@ router.get('/create-qr', async (req, res) => {
     res.json({ qr });
   } catch (err) {
     console.error('QR fetch failed:', err instanceof Error ? err.message : err);
-    const userId = req.userId!;
-    const statusCode = (err as Error & { statusCode?: number }).statusCode;
-
-    if (statusCode === 404) {
-      // Check channel age — only auto-delete if it's old (truly stale)
-      const { data: ch } = await supabaseAdmin
-        .from('whatsapp_channels')
-        .select('created_at')
-        .eq('user_id', userId)
-        .single();
-
-      const ageMs = ch ? Date.now() - new Date(ch.created_at).getTime() : Infinity;
-      if (ageMs > 120_000) {
-        await supabaseAdmin
-          .from('whatsapp_channels')
-          .delete()
-          .eq('user_id', userId);
-        res.status(404).json({ error: 'Channel expired. Please create a new connection.', stale: true });
-        return;
-      }
-
-      // Channel is new but not ready yet — tell user to wait
-      res.status(503).json({ error: 'Channel is still being provisioned. Please wait a moment and try again.' });
-      return;
-    }
-
     const message = err instanceof Error ? err.message : 'Failed to fetch QR code';
     res.status(502).json({ error: message });
   }
