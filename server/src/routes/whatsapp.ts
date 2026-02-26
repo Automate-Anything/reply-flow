@@ -9,7 +9,7 @@ const router = Router();
 // All routes require auth
 router.use(requireAuth);
 
-// In-memory map of userId → AbortController for in-flight provisioning requests
+// In-memory map of channelDbId → AbortController for in-flight provisioning requests
 const provisioningControllers = new Map<string, AbortController>();
 
 // Create a WhatsApp channel, fund it, wait for provisioning, return QR.
@@ -17,23 +17,12 @@ const provisioningControllers = new Map<string, AbortController>();
 router.post('/create-channel', async (req, res) => {
   const userId = req.userId!;
   const controller = new AbortController();
-  provisioningControllers.set(userId, controller);
+
+  let channelDbId: string | null = null;
 
   try {
-    // Check if user already has a channel
-    const { data: existing } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('id')
-      .eq('user_id', userId)
-      .single();
-
-    if (existing) {
-      res.status(400).json({ error: 'Channel already exists' });
-      return;
-    }
-
     // 1. Create channel on WhAPI
-    const channel = await whapi.createChannel(`reply-flow-${userId.slice(0, 8)}`);
+    const channel = await whapi.createChannel(`reply-flow-${userId.slice(0, 8)}-${Date.now()}`);
 
     // 2. Fund the channel with 1 day so it becomes active
     try {
@@ -45,7 +34,7 @@ router.post('/create-channel', async (req, res) => {
     }
 
     // 3. Save to DB immediately (so user can delete if they cancel)
-    const { error: dbError } = await supabaseAdmin
+    const { data: insertedRow, error: dbError } = await supabaseAdmin
       .from('whatsapp_channels')
       .insert({
         user_id: userId,
@@ -53,9 +42,15 @@ router.post('/create-channel', async (req, res) => {
         channel_token: channel.token,
         channel_name: channel.name,
         channel_status: 'pending',
-      });
+      })
+      .select('id')
+      .single();
 
-    if (dbError) throw dbError;
+    if (dbError || !insertedRow) throw dbError || new Error('Failed to insert channel');
+    channelDbId = String(insertedRow.id);
+
+    // Track provisioning by DB channel ID
+    provisioningControllers.set(channelDbId, controller);
 
     // 4. Wait for channel to finish provisioning on WhAPI Gate API (up to 2 min)
     await whapi.waitForReady(channel.token, 120_000, controller.signal);
@@ -64,13 +59,14 @@ router.post('/create-channel', async (req, res) => {
     await supabaseAdmin
       .from('whatsapp_channels')
       .update({ channel_status: 'awaiting_scan', updated_at: new Date().toISOString() })
-      .eq('user_id', userId);
+      .eq('id', insertedRow.id);
 
     // 6. Get QR code
     const qrData = await whapi.getQR(channel.token);
 
     res.json({
       channelId: channel.id,
+      dbChannelId: insertedRow.id,
       qr: qrData.qr,
       expire: qrData.expire,
     });
@@ -84,7 +80,7 @@ router.post('/create-channel', async (req, res) => {
     const message = err instanceof Error ? err.message : 'Failed to create channel';
     if (!res.headersSent) res.status(500).json({ error: message });
   } finally {
-    provisioningControllers.delete(userId);
+    if (channelDbId) provisioningControllers.delete(channelDbId);
   }
 });
 
@@ -92,15 +88,22 @@ router.post('/create-channel', async (req, res) => {
 router.post('/cancel-provisioning', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const { channelId } = req.body;
+
+    if (!channelId) {
+      res.status(400).json({ error: 'channelId is required' });
+      return;
+    }
 
     // Abort the in-flight provisioning request
-    const controller = provisioningControllers.get(userId);
+    const controller = provisioningControllers.get(String(channelId));
     if (controller) controller.abort();
 
     // Clean up: delete channel from Whapi and DB if it was already created
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('channel_id, channel_token')
+      .eq('id', channelId)
       .eq('user_id', userId)
       .single();
 
@@ -110,6 +113,7 @@ router.post('/cancel-provisioning', async (req, res, next) => {
       await supabaseAdmin
         .from('whatsapp_channels')
         .delete()
+        .eq('id', channelId)
         .eq('user_id', userId);
     }
 
@@ -123,10 +127,17 @@ router.post('/cancel-provisioning', async (req, res, next) => {
 router.get('/create-qr', async (req, res) => {
   try {
     const userId = req.userId!;
+    const { channelId } = req.query;
+
+    if (!channelId) {
+      res.status(400).json({ error: 'channelId query param is required' });
+      return;
+    }
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('channel_token')
+      .eq('id', Number(channelId))
       .eq('user_id', userId)
       .single();
 
@@ -144,14 +155,21 @@ router.get('/create-qr', async (req, res) => {
   }
 });
 
-// Check health / connection status
+// Check health / connection status for a specific channel
 router.get('/health-check', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const { channelId } = req.query;
+
+    if (!channelId) {
+      res.status(400).json({ error: 'channelId query param is required' });
+      return;
+    }
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('channel_token, channel_id')
+      .eq('id', Number(channelId))
       .eq('user_id', userId)
       .single();
 
@@ -171,7 +189,7 @@ router.get('/health-check', async (req, res, next) => {
           phone_number: health.phone || null,
           updated_at: new Date().toISOString(),
         })
-        .eq('user_id', userId);
+        .eq('id', Number(channelId));
 
       // Register webhook
       const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
@@ -179,7 +197,7 @@ router.get('/health-check', async (req, res, next) => {
       await supabaseAdmin
         .from('whatsapp_channels')
         .update({ webhook_registered: true })
-        .eq('user_id', userId);
+        .eq('id', Number(channelId));
     }
 
     res.json({
@@ -191,19 +209,40 @@ router.get('/health-check', async (req, res, next) => {
   }
 });
 
-// Get current channel info
-router.get('/channel', async (req, res, next) => {
+// Get all channels for the user
+router.get('/channels', async (req, res, next) => {
   try {
     const userId = req.userId!;
 
+    const { data: channels, error } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ channels: channels || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get a single channel by ID
+router.get('/channels/:channelId', async (req, res, next) => {
+  try {
+    const userId = req.userId!;
+    const { channelId } = req.params;
+
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
+      .eq('id', Number(channelId))
       .eq('user_id', userId)
       .single();
 
     if (!channel) {
-      res.json({ channel: null });
+      res.status(404).json({ error: 'Channel not found' });
       return;
     }
 
@@ -213,14 +252,21 @@ router.get('/channel', async (req, res, next) => {
   }
 });
 
-// Logout / disconnect WhatsApp
+// Logout / disconnect WhatsApp for a specific channel
 router.post('/logout', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const { channelId } = req.body;
+
+    if (!channelId) {
+      res.status(400).json({ error: 'channelId is required' });
+      return;
+    }
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('channel_token')
+      .eq('id', channelId)
       .eq('user_id', userId)
       .single();
 
@@ -238,7 +284,7 @@ router.post('/logout', async (req, res, next) => {
         webhook_registered: false,
         updated_at: new Date().toISOString(),
       })
-      .eq('user_id', userId);
+      .eq('id', channelId);
 
     res.json({ status: 'disconnected' });
   } catch (err) {
@@ -250,10 +296,17 @@ router.post('/logout', async (req, res, next) => {
 router.delete('/delete-channel', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const { channelId } = req.body;
+
+    if (!channelId) {
+      res.status(400).json({ error: 'channelId is required' });
+      return;
+    }
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('channel_id, channel_token')
+      .eq('id', channelId)
       .eq('user_id', userId)
       .single();
 
@@ -274,6 +327,7 @@ router.delete('/delete-channel', async (req, res, next) => {
     await supabaseAdmin
       .from('whatsapp_channels')
       .delete()
+      .eq('id', channelId)
       .eq('user_id', userId);
 
     res.json({ status: 'deleted' });

@@ -23,30 +23,17 @@ router.post('/', async (req, res) => {
       const toPhone = msg.to?.replace(/@.*$/, '');
       const { data: channel } = await supabaseAdmin
         .from('whatsapp_channels')
-        .select('user_id')
+        .select('id, user_id')
         .eq('phone_number', toPhone)
         .eq('channel_status', 'connected')
         .single();
 
       if (!channel) {
-        // Try matching by chat_id pattern — fallback lookup via all connected channels
-        // This handles cases where phone_number format differs
-        const { data: channels } = await supabaseAdmin
-          .from('whatsapp_channels')
-          .select('user_id')
-          .eq('channel_status', 'connected');
-
-        if (!channels || channels.length === 0) {
-          console.warn(`No connected channel found for incoming message to ${toPhone}`);
-          continue;
-        }
-
-        // For single-user MVP, use the first connected channel
-        await processIncomingMessage(msg, channels[0].user_id);
+        console.warn(`No connected channel found for incoming message to ${toPhone}`);
         continue;
       }
 
-      await processIncomingMessage(msg, channel.user_id);
+      await processIncomingMessage(msg, channel.user_id, channel.id);
     }
   } catch (err) {
     console.error('Webhook processing error:', err);

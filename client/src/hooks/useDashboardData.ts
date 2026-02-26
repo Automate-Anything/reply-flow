@@ -4,6 +4,7 @@ import type { Conversation } from './useConversations';
 import type { AISettings } from './useAISettings';
 
 interface ChannelInfo {
+  id: number;
   channel_id: string;
   channel_name: string;
   channel_status: string;
@@ -16,7 +17,9 @@ export interface DashboardData {
   unreadCount: number;
   totalContacts: number;
   recentConversations: Conversation[];
-  channel: ChannelInfo | null;
+  channels: ChannelInfo[];
+  connectedChannelCount: number;
+  totalChannelCount: number;
   aiSettings: AISettings;
 }
 
@@ -25,7 +28,9 @@ const DEFAULT_DATA: DashboardData = {
   unreadCount: 0,
   totalContacts: 0,
   recentConversations: [],
-  channel: null,
+  channels: [],
+  connectedChannelCount: 0,
+  totalChannelCount: 0,
   aiSettings: { is_enabled: false, system_prompt: '', max_tokens: 500 },
 };
 
@@ -34,10 +39,10 @@ export function useDashboardData() {
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    const [convsRes, contactsRes, channelRes, aiRes] = await Promise.all([
+    const [convsRes, contactsRes, channelsRes, aiRes] = await Promise.all([
       api.get('/conversations').catch(() => ({ data: { sessions: [] } })),
       api.get('/contacts').catch(() => ({ data: { contacts: [] } })),
-      api.get('/whatsapp/channel').catch(() => ({ data: { channel: null } })),
+      api.get('/whatsapp/channels').catch(() => ({ data: { channels: [] } })),
       api.get('/ai/settings').catch(() => ({
         data: { settings: { is_enabled: false, system_prompt: '', max_tokens: 500 } },
       })),
@@ -45,6 +50,7 @@ export function useDashboardData() {
 
     const allConversations: Conversation[] = convsRes.data.sessions || [];
     const contacts = contactsRes.data.contacts || [];
+    const channels: ChannelInfo[] = channelsRes.data.channels || [];
 
     setData({
       totalConversations: allConversations.length,
@@ -54,7 +60,9 @@ export function useDashboardData() {
       ),
       totalContacts: contacts.length,
       recentConversations: allConversations.slice(0, 5),
-      channel: channelRes.data.channel || null,
+      channels,
+      connectedChannelCount: channels.filter((c) => c.channel_status === 'connected').length,
+      totalChannelCount: channels.length,
       aiSettings: aiRes.data.settings || DEFAULT_DATA.aiSettings,
     });
 

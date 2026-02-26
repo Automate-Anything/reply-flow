@@ -57,8 +57,7 @@ CREATE TABLE public.whatsapp_channels (
   phone_number        TEXT,
   webhook_registered  BOOLEAN DEFAULT FALSE,
   created_at          TIMESTAMPTZ DEFAULT NOW(),
-  updated_at          TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id)
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE public.whatsapp_channels ENABLE ROW LEVEL SECURITY;
@@ -79,12 +78,15 @@ CREATE POLICY "Users can delete own channels"
   ON public.whatsapp_channels FOR DELETE
   USING (auth.uid() = user_id);
 
+CREATE INDEX idx_whatsapp_channels_phone ON public.whatsapp_channels(phone_number) WHERE channel_status = 'connected';
+
 -- --------------------------------------------------------
 -- 3. CHAT SESSIONS
 -- --------------------------------------------------------
 CREATE TABLE public.chat_sessions (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id                 UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  channel_id              BIGINT REFERENCES public.whatsapp_channels(id) ON DELETE SET NULL,
   contact_id              UUID,
   chat_id                 TEXT NOT NULL,
   phone_number            TEXT NOT NULL,
@@ -102,7 +104,7 @@ CREATE TABLE public.chat_sessions (
   deleted_at              TIMESTAMPTZ,
   created_at              TIMESTAMPTZ DEFAULT NOW(),
   updated_at              TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, chat_id)
+  UNIQUE(channel_id, chat_id)
 );
 
 ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
@@ -122,6 +124,8 @@ CREATE POLICY "Users can update own sessions"
 CREATE POLICY "Users can delete own sessions"
   ON public.chat_sessions FOR DELETE
   USING (auth.uid() = user_id);
+
+CREATE INDEX idx_chat_sessions_channel ON public.chat_sessions(channel_id);
 
 -- --------------------------------------------------------
 -- 4. CHAT MESSAGES

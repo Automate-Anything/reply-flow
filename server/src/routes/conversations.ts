@@ -9,7 +9,7 @@ router.use(requireAuth);
 router.get('/', async (req, res, next) => {
   try {
     const userId = req.userId!;
-    const { search, status, archived, limit = '50', offset = '0' } = req.query;
+    const { search, status, archived, channelId, limit = '50', offset = '0' } = req.query;
 
     let query = supabaseAdmin
       .from('chat_sessions')
@@ -27,6 +27,10 @@ router.get('/', async (req, res, next) => {
 
     if (status && status !== 'all') {
       query = query.eq('status', status);
+    }
+
+    if (channelId) {
+      query = query.eq('channel_id', Number(channelId));
     }
 
     if (search) {

@@ -35,7 +35,8 @@ function extractMessageBody(msg: WhapiIncomingMessage): string {
  */
 export async function processIncomingMessage(
   msg: WhapiIncomingMessage,
-  channelUserId: string
+  channelUserId: string,
+  channelId: number
 ): Promise<void> {
   const phoneNumber = normalizeChatId(msg.from);
   const chatId = normalizeChatId(msg.chat_id);
@@ -82,7 +83,7 @@ export async function processIncomingMessage(
   const { data: existingSession } = await supabaseAdmin
     .from('chat_sessions')
     .select('id')
-    .eq('user_id', channelUserId)
+    .eq('channel_id', channelId)
     .eq('chat_id', chatId)
     .single();
 
@@ -95,6 +96,7 @@ export async function processIncomingMessage(
       .from('chat_sessions')
       .insert({
         user_id: channelUserId,
+        channel_id: channelId,
         contact_id: contactId,
         chat_id: chatId,
         phone_number: phoneNumber,

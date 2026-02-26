@@ -10,6 +10,7 @@ export interface ConversationLabel {
 export interface Conversation {
   id: string;
   chat_id: string;
+  channel_id: number | null;
   phone_number: string;
   contact_name: string | null;
   last_message: string | null;

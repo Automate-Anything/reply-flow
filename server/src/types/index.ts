@@ -1,6 +1,7 @@
 export interface ChatSession {
   id: string;
   user_id: string;
+  channel_id: number | null;
   contact_id: string | null;
   chat_id: string;
   phone_number: string;

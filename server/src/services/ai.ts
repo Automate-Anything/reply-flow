@@ -101,19 +101,19 @@ export async function generateAndSendAIReply(
 
   if (!aiReply.trim()) return;
 
-  // Get session + channel info
+  // Get session + channel info (derive channel from session's channel_id)
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
-    .select('chat_id, phone_number')
+    .select('chat_id, phone_number, channel_id')
     .eq('id', sessionId)
     .single();
 
-  if (!session) return;
+  if (!session || !session.channel_id) return;
 
   const { data: channel } = await supabaseAdmin
     .from('whatsapp_channels')
     .select('channel_token')
-    .eq('user_id', userId)
+    .eq('id', session.channel_id)
     .eq('channel_status', 'connected')
     .single();
 

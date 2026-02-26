@@ -17,10 +17,10 @@ router.post('/send', async (req, res, next) => {
       return;
     }
 
-    // Get session info
+    // Get session info (includes channel_id to derive which channel to send through)
     const { data: session, error: sessionError } = await supabaseAdmin
       .from('chat_sessions')
-      .select('chat_id, phone_number')
+      .select('chat_id, phone_number, channel_id')
       .eq('id', sessionId)
       .eq('user_id', userId)
       .single();
@@ -30,16 +30,21 @@ router.post('/send', async (req, res, next) => {
       return;
     }
 
-    // Get channel token
+    if (!session.channel_id) {
+      res.status(400).json({ error: 'Conversation is not linked to a channel' });
+      return;
+    }
+
+    // Get channel token via the session's channel
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('channel_token')
-      .eq('user_id', userId)
+      .eq('id', session.channel_id)
       .eq('channel_status', 'connected')
       .single();
 
     if (!channel) {
-      res.status(400).json({ error: 'No connected WhatsApp channel' });
+      res.status(400).json({ error: 'No connected WhatsApp channel for this conversation' });
       return;
     }
 

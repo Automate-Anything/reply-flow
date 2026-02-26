@@ -120,12 +120,12 @@ export default function DashboardPage() {
           <CardContent className="flex items-center gap-4 p-5">
             <div
               className={`flex h-11 w-11 items-center justify-center rounded-lg ${
-                data.channel?.channel_status === 'connected'
+                data.connectedChannelCount > 0
                   ? 'bg-primary/10'
                   : 'bg-destructive/10'
               }`}
             >
-              {data.channel?.channel_status === 'connected' ? (
+              {data.connectedChannelCount > 0 ? (
                 <Wifi className="h-5 w-5 text-primary" />
               ) : (
                 <WifiOff className="h-5 w-5 text-destructive" />
@@ -133,11 +133,11 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-semibold">
-                {data.channel?.channel_status === 'connected'
-                  ? 'Connected'
-                  : 'Disconnected'}
+                {data.totalChannelCount === 0
+                  ? 'No Channels'
+                  : `${data.connectedChannelCount} / ${data.totalChannelCount} Connected`}
               </p>
-              <p className="text-xs text-muted-foreground">WhatsApp</p>
+              <p className="text-xs text-muted-foreground">WhatsApp Channels</p>
             </div>
           </CardContent>
         </Card>
