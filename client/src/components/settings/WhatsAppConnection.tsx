@@ -68,11 +68,21 @@ export default function WhatsAppConnection() {
 
   // Poll /channel-status every 5s until the channel is provisioned on WhAPI
   const startProvisionPolling = () => {
-    // Clear any existing timers first
     if (provisionPollRef.current) {
       clearInterval(provisionPollRef.current);
     }
+    const startTime = Date.now();
     provisionPollRef.current = setInterval(async () => {
+      // Give up after 5 minutes
+      if (Date.now() - startTime > 5 * 60 * 1000) {
+        if (provisionPollRef.current) {
+          clearInterval(provisionPollRef.current);
+          provisionPollRef.current = null;
+        }
+        setError('Channel provisioning timed out. Please delete and try again.');
+        setState('error');
+        return;
+      }
       try {
         const { data } = await api.get('/whatsapp/channel-status');
         if (data.status === 'ready') {
@@ -83,7 +93,6 @@ export default function WhatsAppConnection() {
           setState('qr_display');
           fetchQR();
         }
-        // If still 'provisioning', keep polling
       } catch {
         // Ignore — keep polling
       }
@@ -236,9 +245,15 @@ export default function WhatsAppConnection() {
                 : 'Initializing WhatsApp channel. This can take up to 90 seconds...'}
             </p>
             {state === 'provisioning' && (
-              <p className="text-xs text-muted-foreground">
-                Checking every 5 seconds...
-              </p>
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Checking every 5 seconds...
+                </p>
+                <Button variant="outline" size="sm" onClick={handleDelete}>
+                  <Trash2 className="mr-2 h-3 w-3" />
+                  Cancel & Delete Channel
+                </Button>
+              </>
             )}
           </div>
         )}

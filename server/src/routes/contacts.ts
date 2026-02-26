@@ -1,6 +1,15 @@
 import { Router } from 'express';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
+
+function validateAndFormatPhone(phone: string): { e164: string } | { error: string } {
+  const parsed = parsePhoneNumberFromString(phone);
+  if (!parsed || !parsed.isValid()) {
+    return { error: 'Invalid phone number. Please include a valid country code and number.' };
+  }
+  return { e164: parsed.format('E.164') };
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -70,11 +79,17 @@ router.post('/', async (req, res, next) => {
       return;
     }
 
+    const phoneResult = validateAndFormatPhone(phone_number);
+    if ('error' in phoneResult) {
+      res.status(400).json({ error: phoneResult.error });
+      return;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('contacts')
       .insert({
         user_id: userId,
-        phone_number,
+        phone_number: phoneResult.e164,
         first_name: first_name || null,
         last_name: last_name || null,
         email: email || null,
@@ -106,7 +121,14 @@ router.put('/:contactId', async (req, res, next) => {
     if (company !== undefined) updates.company = company;
     if (notes !== undefined) updates.notes = notes;
     if (tags !== undefined) updates.tags = tags;
-    if (phone_number !== undefined) updates.phone_number = phone_number;
+    if (phone_number !== undefined) {
+      const phoneResult = validateAndFormatPhone(phone_number);
+      if ('error' in phoneResult) {
+        res.status(400).json({ error: phoneResult.error });
+        return;
+      }
+      updates.phone_number = phoneResult.e164;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('contacts')
