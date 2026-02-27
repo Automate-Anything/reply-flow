@@ -2,13 +2,11 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <WorkspaceProvider>
     <div className="flex h-screen overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -34,6 +32,5 @@ export default function AppLayout() {
         </main>
       </div>
     </div>
-    </WorkspaceProvider>
   );
 }

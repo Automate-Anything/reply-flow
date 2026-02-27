@@ -1,14 +1,29 @@
+export interface AudienceSegment {
+  label: string;
+  description?: string;
+}
+
 export interface ProfileData {
+  // Identity
   use_case?: 'business' | 'personal' | 'organization';
   business_name?: string;
   business_type?: string;
   business_description?: string;
+  // Audience
+  audiences?: AudienceSegment[];
+  common_topics?: string;
+  /** @deprecated Use audiences instead */
   target_audience?: string;
+  // Communication Style
   tone?: 'professional' | 'friendly' | 'casual' | 'formal';
-  language_preference?: 'match_customer' | string;
   response_length?: 'concise' | 'moderate' | 'detailed';
+  emoji_usage?: 'none' | 'minimal' | 'moderate';
+  language_preference?: 'match_customer' | string;
+  // Behavior & Rules
   response_rules?: string;
   greeting_message?: string;
+  escalation_rules?: string;
+  topics_to_avoid?: string;
 }
 
 export interface KBEntry {
@@ -29,6 +44,26 @@ const LENGTH_DESCRIPTIONS: Record<string, string> = {
   detailed: 'Give thorough, comprehensive responses. Include relevant details and explanations.',
 };
 
+const EMOJI_DESCRIPTIONS: Record<string, string> = {
+  none: 'Do not use emojis in your responses.',
+  minimal: 'Use emojis sparingly, only when they add warmth or clarity.',
+  moderate: 'Feel free to use emojis to add personality and friendliness.',
+};
+
+function buildAudienceSection(profile: ProfileData): string | null {
+  // Prefer new audiences array, fall back to deprecated target_audience
+  if (profile.audiences && profile.audiences.length > 0) {
+    const lines = profile.audiences.map((a) =>
+      a.description ? `- **${a.label}**: ${a.description}` : `- ${a.label}`
+    );
+    return `## Target Audience\n${lines.join('\n')}`;
+  }
+  if (profile.target_audience) {
+    return `## Target Audience\n${profile.target_audience}`;
+  }
+  return null;
+}
+
 function buildBusinessPrompt(profile: ProfileData): string {
   const sections: string[] = [];
 
@@ -43,8 +78,11 @@ function buildBusinessPrompt(profile: ProfileData): string {
     sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
   }
 
-  if (profile.target_audience) {
-    sections.push(`## Target Audience\n${profile.target_audience}`);
+  const audience = buildAudienceSection(profile);
+  if (audience) sections.push(audience);
+
+  if (profile.common_topics) {
+    sections.push(`## Common Topics & Questions\n${profile.common_topics}`);
   }
 
   return sections.join('\n\n');
@@ -57,6 +95,13 @@ function buildPersonalPrompt(profile: ProfileData): string {
 
   if (profile.business_description) {
     sections.push(`## Context\n${profile.business_description}`);
+  }
+
+  const audience = buildAudienceSection(profile);
+  if (audience) sections.push(audience);
+
+  if (profile.common_topics) {
+    sections.push(`## Common Topics & Questions\n${profile.common_topics}`);
   }
 
   return sections.join('\n\n');
@@ -72,8 +117,11 @@ function buildOrganizationPrompt(profile: ProfileData): string {
     sections.push(`## About the Organization\n${profile.business_description}`);
   }
 
-  if (profile.target_audience) {
-    sections.push(`## Audience\n${profile.target_audience}`);
+  const audience = buildAudienceSection(profile);
+  if (audience) sections.push(audience);
+
+  if (profile.common_topics) {
+    sections.push(`## Common Topics & Questions\n${profile.common_topics}`);
   }
 
   return sections.join('\n\n');
@@ -81,7 +129,6 @@ function buildOrganizationPrompt(profile: ProfileData): string {
 
 export interface ChannelOverrides {
   custom_instructions?: string;
-  greeting_override?: string;
 }
 
 export function buildSystemPrompt(
@@ -118,6 +165,10 @@ export function buildSystemPrompt(
     styleRules.push(LENGTH_DESCRIPTIONS[profile.response_length]);
   }
 
+  if (profile.emoji_usage && EMOJI_DESCRIPTIONS[profile.emoji_usage]) {
+    styleRules.push(EMOJI_DESCRIPTIONS[profile.emoji_usage]);
+  }
+
   if (profile.language_preference) {
     if (profile.language_preference === 'match_customer') {
       styleRules.push('Always respond in the same language the customer uses.');
@@ -135,8 +186,18 @@ export function buildSystemPrompt(
     parts.push(`## Response Guidelines\n${profile.response_rules}`);
   }
 
-  // Greeting (channel override takes precedence)
-  const greeting = channelOverrides?.greeting_override || profile.greeting_message;
+  // Topics to avoid
+  if (profile.topics_to_avoid) {
+    parts.push(`## Topics to Avoid\nNever discuss or share information about the following:\n${profile.topics_to_avoid}`);
+  }
+
+  // Escalation guidelines
+  if (profile.escalation_rules) {
+    parts.push(`## Escalation Guidelines\n${profile.escalation_rules}`);
+  }
+
+  // Greeting
+  const greeting = profile.greeting_message;
   if (greeting) {
     parts.push(`## First Contact Greeting\nWhen this is the first message from a new contact, greet them with: "${greeting}"`);
   }

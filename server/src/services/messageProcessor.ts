@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import type { WhapiIncomingMessage } from '../types/webhook.js';
-import { shouldAIRespond, generateAndSendAIReply } from './ai.js';
+import { shouldAIRespond, generateAndSendAIReply, sendOutsideHoursReply } from './ai.js';
 
 /**
  * Normalizes a WhatsApp chat_id to a phone number.
@@ -180,11 +180,14 @@ export async function processIncomingMessage(
 
   // 6. Check if AI should respond (async, don't block)
   try {
-    const aiContext = await shouldAIRespond(companyId, sessionId);
-    if (aiContext) {
-      // Fire and forget — don't block the webhook response
-      generateAndSendAIReply(companyId, sessionId, aiContext).catch((err) => {
+    const aiResult = await shouldAIRespond(companyId, sessionId);
+    if (aiResult.action === 'respond') {
+      generateAndSendAIReply(companyId, sessionId, aiResult.context).catch((err) => {
         console.error('AI reply error:', err);
+      });
+    } else if (aiResult.action === 'outside_hours') {
+      sendOutsideHoursReply(companyId, sessionId, aiResult.channelId, aiResult.outsideHoursMessage).catch((err) => {
+        console.error('Outside hours reply error:', err);
       });
     }
   } catch (err) {

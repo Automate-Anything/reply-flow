@@ -16,7 +16,7 @@ import teamRouter from './routes/team.js';
 import companyRouter from './routes/company.js';
 import rolesRouter from './routes/roles.js';
 import meRouter from './routes/me.js';
-import workspacesRouter from './routes/workspaces.js';
+
 import conversationNotesRouter from './routes/conversationNotes.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
 
@@ -53,7 +53,7 @@ app.use('/api/team', teamRouter);
 app.use('/api/company', companyRouter);
 app.use('/api/roles', rolesRouter);
 app.use('/api/me', meRouter);
-app.use('/api/workspaces', workspacesRouter);
+
 app.use('/api/conversation-notes', conversationNotesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
 

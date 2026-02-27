@@ -1,18 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
+import type { ProfileData, ScheduleMode } from '@/hooks/useCompanyAI';
+import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
 
 export interface ChannelAgentSettings {
   is_enabled: boolean;
   custom_instructions: string | null;
-  greeting_override: string | null;
-  max_tokens_override: number | null;
+  profile_data: ProfileData;
+  max_tokens: number;
+  schedule_mode: ScheduleMode;
+  ai_schedule: BusinessHours | null;
+  outside_hours_message: string | null;
+  default_language: string;
+  business_hours: BusinessHours | null;
 }
 
 const DEFAULT_SETTINGS: ChannelAgentSettings = {
   is_enabled: true,
   custom_instructions: null,
-  greeting_override: null,
-  max_tokens_override: null,
+  profile_data: {},
+  max_tokens: 500,
+  schedule_mode: 'always_on',
+  ai_schedule: null,
+  outside_hours_message: null,
+  default_language: 'en',
+  business_hours: null,
 };
 
 export function useChannelAgent(channelId: number | undefined) {

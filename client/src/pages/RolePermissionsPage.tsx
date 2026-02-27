@@ -11,7 +11,7 @@ import {
   Crown, Shield, UserCog, Users, User, Eye,
   MessageSquare, Mail, BookUser, StickyNote, Smartphone,
   Bot, Library, Tag, UsersRound, Building2, KeyRound,
-  FolderOpen, MessageCircle, Zap,
+  MessageCircle, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,7 +51,6 @@ const RESOURCE_ACTIONS: Record<string, string[]> = {
   ai_settings: ['view', 'edit'],
   knowledge_base: ['view', 'create', 'edit', 'delete'],
   labels: ['view', 'create', 'edit', 'delete'],
-  workspaces: ['view', 'create', 'edit', 'delete'],
   team: ['view', 'invite', 'edit_role', 'remove'],
   company_settings: ['view', 'edit'],
   role_permissions: ['view', 'edit'],
@@ -75,7 +74,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     label: 'Content',
     description: 'Channels, AI, knowledge base, and labels',
     icon: Zap,
-    resources: ['channels', 'ai_settings', 'knowledge_base', 'labels', 'workspaces'],
+    resources: ['channels', 'ai_settings', 'knowledge_base', 'labels'],
   },
   {
     label: 'Administration',
@@ -96,7 +95,6 @@ const RESOURCE_LABELS: Record<string, string> = {
   ai_settings: 'AI Settings',
   knowledge_base: 'Knowledge Base',
   labels: 'Labels',
-  workspaces: 'Workspaces',
   team: 'Team',
   company_settings: 'Company Settings',
   role_permissions: 'Role Permissions',
@@ -113,7 +111,6 @@ const RESOURCE_ICONS: Record<string, React.ComponentType<{ className?: string }>
   ai_settings: Bot,
   knowledge_base: Library,
   labels: Tag,
-  workspaces: FolderOpen,
   team: UsersRound,
   company_settings: Building2,
   role_permissions: KeyRound,

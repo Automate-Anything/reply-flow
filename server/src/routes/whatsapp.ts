@@ -14,27 +14,8 @@ router.use(requireAuth);
 // Provisioning continues in the background — the client polls /health-check.
 router.post('/create-channel', requirePermission('channels', 'create'), async (req, res) => {
   const companyId = req.companyId!;
-  const { workspaceId } = req.body;
-
-  if (!workspaceId) {
-    res.status(400).json({ error: 'workspaceId is required' });
-    return;
-  }
 
   try {
-    // Verify workspace belongs to company
-    const { data: workspace } = await supabaseAdmin
-      .from('workspaces')
-      .select('id')
-      .eq('id', workspaceId)
-      .eq('company_id', companyId)
-      .single();
-
-    if (!workspace) {
-      res.status(404).json({ error: 'Workspace not found' });
-      return;
-    }
-
     // 1. Create channel on WhAPI
     const channel = await whapi.createChannel(`reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`);
 
@@ -52,7 +33,6 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
       .from('whatsapp_channels')
       .insert({
         company_id: companyId,
-        workspace_id: workspaceId,
         created_by: req.userId,
         channel_id: channel.id,
         channel_token: channel.token,
@@ -64,7 +44,32 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
 
     if (dbError || !insertedRow) throw dbError || new Error('Failed to insert channel');
 
-    // 4. Return immediately — client will poll /health-check for provisioning status
+    // 4. Auto-create channel AI settings from company template
+    try {
+      const { data: template } = await supabaseAdmin
+        .from('company_ai_profiles')
+        .select('is_enabled, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message')
+        .eq('company_id', companyId)
+        .single();
+
+      await supabaseAdmin
+        .from('channel_agent_settings')
+        .insert({
+          channel_id: insertedRow.id,
+          company_id: companyId,
+          is_enabled: template?.is_enabled ?? true,
+          profile_data: template?.profile_data ?? {},
+          max_tokens: template?.max_tokens ?? 500,
+          schedule_mode: template?.schedule_mode ?? 'always_on',
+          ai_schedule: template?.ai_schedule ?? null,
+          outside_hours_message: template?.outside_hours_message ?? null,
+        });
+    } catch (err) {
+      console.error('Failed to create channel AI settings:', err);
+      // Non-fatal: channel works, AI settings can be configured later
+    }
+
+    // 5. Return immediately — client will poll /health-check for provisioning status
     res.json({ dbChannelId: insertedRow.id });
 
     // 5. Fire-and-forget: wait for provisioning, then update DB status
@@ -283,7 +288,7 @@ router.get('/channels', requirePermission('channels', 'view'), async (req, res, 
 
     const { data: channels, error } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, workspace_id, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
       .eq('company_id', companyId)
       .order('created_at', { ascending: true });
 
@@ -303,7 +308,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, workspace_id, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();

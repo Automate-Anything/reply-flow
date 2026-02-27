@@ -10,7 +10,7 @@ export default function KnowledgeBasePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Knowledge Base</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage information that your AI agent can reference across all workspaces.
+          Manage information that your AI agent can reference across all channels.
         </p>
       </div>
 

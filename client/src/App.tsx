@@ -16,7 +16,7 @@ import AcceptInvitePage from '@/pages/AcceptInvitePage';
 import OnboardingPage from '@/pages/OnboardingPage';
 import SettingsPage from '@/pages/SettingsPage';
 import ChannelsPage from '@/pages/ChannelsPage';
-import AIProfilePage from '@/pages/AIProfilePage';
+import ChannelDetailPage from '@/components/settings/ChannelDetailView';
 
 
 function App() {
@@ -37,7 +37,7 @@ function App() {
                   <Route path="contacts" element={<ContactsPage />} />
                   <Route path="knowledge-base" element={<KnowledgeBasePage />} />
                   <Route path="channels" element={<ChannelsPage />} />
-                  <Route path="ai-profile" element={<AIProfilePage />} />
+                  <Route path="channels/:channelId" element={<ChannelDetailPage />} />
 
                   <Route path="account" element={<SettingsPage />} />
                   <Route path="profile" element={<ProfileSettingsPage />} />

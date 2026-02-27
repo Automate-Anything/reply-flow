@@ -3,24 +3,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FileText, BookOpen } from 'lucide-react';
+import { Loader2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChannelAgent } from '@/hooks/useChannelAgent';
 import type { KBEntry } from '@/hooks/useCompanyKB';
 
 interface Props {
   channelId: number;
-  hasWorkspace: boolean;
-  workspaceKBEntries: KBEntry[];
+  kbEntries: KBEntry[];
   loadingKB: boolean;
 }
 
-export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBEntries, loadingKB }: Props) {
+export default function KBAssignmentList({ channelId, kbEntries, loadingKB }: Props) {
   const {
     assignedEntryIds,
     loadingAssignments,
     updateAssignments,
-  } = useChannelAgent(hasWorkspace ? channelId : undefined);
+  } = useChannelAgent(channelId);
 
   const [localAssigned, setLocalAssigned] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -32,17 +31,6 @@ export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBE
     setDirty(false);
   }, [assignedEntryIds]);
 
-  if (!hasWorkspace) {
-    return (
-      <div className="flex flex-col items-center gap-2 py-6 text-center">
-        <BookOpen className="h-6 w-6 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">
-          Assign this channel to a workspace to manage knowledge base assignments.
-        </p>
-      </div>
-    );
-  }
-
   if (loadingKB || loadingAssignments) {
     return (
       <div className="space-y-3">
@@ -53,7 +41,7 @@ export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBE
     );
   }
 
-  if (workspaceKBEntries.length === 0) {
+  if (kbEntries.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-6 text-center">
         <FileText className="h-6 w-6 text-muted-foreground/40" />
@@ -93,8 +81,7 @@ export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBE
     }
   };
 
-  const allSelected = workspaceKBEntries.every((e) => localAssigned.has(e.id));
-  const noneSelected = workspaceKBEntries.every((e) => !localAssigned.has(e.id));
+  const noneSelected = kbEntries.every((e) => !localAssigned.has(e.id));
 
   return (
     <div className="space-y-3">
@@ -104,7 +91,7 @@ export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBE
           <p className="text-xs text-muted-foreground">
             {noneSelected
               ? 'No entries assigned — AI will use all company entries.'
-              : `${localAssigned.size} of ${workspaceKBEntries.length} entries assigned`}
+              : `${localAssigned.size} of ${kbEntries.length} entries assigned`}
           </p>
         </div>
         {dirty && (
@@ -116,7 +103,7 @@ export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBE
       </div>
 
       <div className="space-y-1">
-        {workspaceKBEntries.map((entry) => (
+        {kbEntries.map((entry) => (
           <label
             key={entry.id}
             className="flex items-center gap-3 rounded-md px-3 py-2.5 cursor-pointer hover:bg-accent transition-colors"

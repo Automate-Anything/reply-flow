@@ -3,11 +3,10 @@ import { Settings } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import CompanySettingsPage from './CompanySettingsPage';
 import TeamPage from './TeamPage';
-import WorkspacesPage from './WorkspacesPage';
 import RolePermissionsPage from './RolePermissionsPage';
 import CannedResponsesManager from '@/components/settings/CannedResponsesManager';
 
-const TABS = ['company', 'team', 'workspaces', 'quick-replies', 'permissions'] as const;
+const TABS = ['company', 'team', 'quick-replies', 'permissions'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function SettingsPage() {
@@ -28,7 +27,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Account Settings</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Manage your company, team, and workspaces.
+            Manage your company and team.
           </p>
         </div>
       </div>
@@ -37,7 +36,6 @@ export default function SettingsPage() {
         <TabsList className="w-full">
           <TabsTrigger value="company" className="flex-1">Company</TabsTrigger>
           <TabsTrigger value="team" className="flex-1">Team</TabsTrigger>
-          <TabsTrigger value="workspaces" className="flex-1">Workspaces</TabsTrigger>
           <TabsTrigger value="quick-replies" className="flex-1">Quick Replies</TabsTrigger>
           <TabsTrigger value="permissions" className="flex-1">Permissions</TabsTrigger>
         </TabsList>
@@ -48,10 +46,6 @@ export default function SettingsPage() {
 
         <TabsContent value="team" className="mt-6">
           <TeamPage />
-        </TabsContent>
-
-        <TabsContent value="workspaces" className="mt-6">
-          <WorkspacesPage />
         </TabsContent>
 
         <TabsContent value="quick-replies" className="mt-6">

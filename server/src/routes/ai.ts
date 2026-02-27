@@ -26,32 +26,18 @@ const upload = multer({
 });
 
 // ────────────────────────────────────────────────
-// WORKSPACE AI PROFILE ROUTES
+// COMPANY AI PROFILE ROUTES (default template for new channels)
 // ────────────────────────────────────────────────
 
-// Get AI profile for a workspace
-router.get('/profile/:workspaceId', requirePermission('ai_settings', 'view'), async (req, res, next) => {
+// Get AI profile template for the company
+router.get('/profile', requirePermission('ai_settings', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { workspaceId } = req.params;
-
-    // Verify workspace ownership
-    const { data: workspace } = await supabaseAdmin
-      .from('workspaces')
-      .select('id')
-      .eq('id', workspaceId)
-      .eq('company_id', companyId)
-      .single();
-
-    if (!workspace) {
-      res.status(404).json({ error: 'Workspace not found' });
-      return;
-    }
 
     const { data, error } = await supabaseAdmin
-      .from('workspace_ai_profiles')
+      .from('company_ai_profiles')
       .select('*')
-      .eq('workspace_id', workspaceId)
+      .eq('company_id', companyId)
       .single();
 
     if (error && error.code === 'PGRST116') {
@@ -60,6 +46,9 @@ router.get('/profile/:workspaceId', requirePermission('ai_settings', 'view'), as
           is_enabled: false,
           profile_data: {},
           max_tokens: 500,
+          schedule_mode: 'always_on',
+          ai_schedule: null,
+          outside_hours_message: null,
         },
       });
       return;
@@ -72,28 +61,13 @@ router.get('/profile/:workspaceId', requirePermission('ai_settings', 'view'), as
   }
 });
 
-// Upsert AI profile for a workspace
-router.put('/profile/:workspaceId', requirePermission('ai_settings', 'edit'), async (req, res, next) => {
+// Upsert AI profile for the company
+router.put('/profile', requirePermission('ai_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { workspaceId } = req.params;
-    const { is_enabled, profile_data, max_tokens } = req.body;
-
-    // Verify workspace ownership
-    const { data: workspace } = await supabaseAdmin
-      .from('workspaces')
-      .select('id')
-      .eq('id', workspaceId)
-      .eq('company_id', companyId)
-      .single();
-
-    if (!workspace) {
-      res.status(404).json({ error: 'Workspace not found' });
-      return;
-    }
+    const { is_enabled, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message } = req.body;
 
     const updates: Record<string, unknown> = {
-      workspace_id: workspaceId,
       company_id: companyId,
       created_by: req.userId,
       updated_at: new Date().toISOString(),
@@ -101,10 +75,13 @@ router.put('/profile/:workspaceId', requirePermission('ai_settings', 'edit'), as
     if (is_enabled !== undefined) updates.is_enabled = is_enabled;
     if (profile_data !== undefined) updates.profile_data = profile_data;
     if (max_tokens !== undefined) updates.max_tokens = max_tokens;
+    if (schedule_mode !== undefined) updates.schedule_mode = schedule_mode;
+    if (ai_schedule !== undefined) updates.ai_schedule = ai_schedule;
+    if (outside_hours_message !== undefined) updates.outside_hours_message = outside_hours_message;
 
     const { data, error } = await supabaseAdmin
-      .from('workspace_ai_profiles')
-      .upsert(updates, { onConflict: 'workspace_id' })
+      .from('company_ai_profiles')
+      .upsert(updates, { onConflict: 'company_id' })
       .select()
       .single();
 
@@ -116,7 +93,7 @@ router.put('/profile/:workspaceId', requirePermission('ai_settings', 'edit'), as
 });
 
 // ────────────────────────────────────────────────
-// KNOWLEDGE BASE ROUTES (per-workspace)
+// KNOWLEDGE BASE ROUTES (company-level)
 // ────────────────────────────────────────────────
 
 // List KB entries for the company
@@ -326,8 +303,13 @@ router.get('/channel-settings/:channelId', requirePermission('ai_settings', 'vie
         settings: {
           is_enabled: true,
           custom_instructions: null,
-          greeting_override: null,
-          max_tokens_override: null,
+          profile_data: {},
+          max_tokens: 500,
+          schedule_mode: 'always_on',
+          ai_schedule: null,
+          outside_hours_message: null,
+          default_language: 'en',
+          business_hours: null,
         },
       });
       return;
@@ -345,7 +327,11 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
   try {
     const companyId = req.companyId!;
     const channelId = Number(req.params.channelId);
-    const { is_enabled, custom_instructions, greeting_override, max_tokens_override } = req.body;
+    const {
+      is_enabled, custom_instructions,
+      profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message,
+      default_language, business_hours,
+    } = req.body;
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
@@ -366,8 +352,13 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     };
     if (is_enabled !== undefined) updates.is_enabled = is_enabled;
     if (custom_instructions !== undefined) updates.custom_instructions = custom_instructions;
-    if (greeting_override !== undefined) updates.greeting_override = greeting_override;
-    if (max_tokens_override !== undefined) updates.max_tokens_override = max_tokens_override;
+    if (profile_data !== undefined) updates.profile_data = profile_data;
+    if (max_tokens !== undefined) updates.max_tokens = max_tokens;
+    if (schedule_mode !== undefined) updates.schedule_mode = schedule_mode;
+    if (ai_schedule !== undefined) updates.ai_schedule = ai_schedule;
+    if (outside_hours_message !== undefined) updates.outside_hours_message = outside_hours_message;
+    if (default_language !== undefined) updates.default_language = default_language;
+    if (business_hours !== undefined) updates.business_hours = business_hours;
 
     const { data, error } = await supabaseAdmin
       .from('channel_agent_settings')

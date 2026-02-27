@@ -50,7 +50,6 @@ export interface ConversationFilters {
 
 export function useConversations(
   search?: string,
-  workspaceId?: string | null,
   filters?: ConversationFilters
 ) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -60,7 +59,6 @@ export function useConversations(
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      if (workspaceId) params.set('workspaceId', workspaceId);
       if (filters?.status && filters.status !== 'all') params.set('status', filters.status);
       if (filters?.assignee && filters.assignee !== 'all') params.set('assignee', filters.assignee);
       if (filters?.priority && filters.priority !== 'all') params.set('priority', filters.priority);
@@ -75,7 +73,7 @@ export function useConversations(
     } finally {
       setLoading(false);
     }
-  }, [search, workspaceId, filters]);
+  }, [search, filters]);
 
   useEffect(() => {
     fetchConversations();

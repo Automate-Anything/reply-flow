@@ -47,10 +47,6 @@ const DEFAULT_PERMISSIONS: Record<string, { resource: string; action: string }[]
     { resource: 'company_settings', action: 'edit' },
     { resource: 'role_permissions', action: 'view' },
     { resource: 'role_permissions', action: 'edit' },
-    { resource: 'workspaces', action: 'view' },
-    { resource: 'workspaces', action: 'create' },
-    { resource: 'workspaces', action: 'edit' },
-    { resource: 'workspaces', action: 'delete' },
   ],
   admin: [
     { resource: 'conversations', action: 'view' },
@@ -88,10 +84,6 @@ const DEFAULT_PERMISSIONS: Record<string, { resource: string; action: string }[]
     { resource: 'company_settings', action: 'edit' },
     { resource: 'role_permissions', action: 'view' },
     { resource: 'role_permissions', action: 'edit' },
-    { resource: 'workspaces', action: 'view' },
-    { resource: 'workspaces', action: 'create' },
-    { resource: 'workspaces', action: 'edit' },
-    { resource: 'workspaces', action: 'delete' },
   ],
   manager: [
     { resource: 'conversations', action: 'view' },
@@ -113,10 +105,6 @@ const DEFAULT_PERMISSIONS: Record<string, { resource: string; action: string }[]
     { resource: 'labels', action: 'view' },
     { resource: 'labels', action: 'create' },
     { resource: 'labels', action: 'edit' },
-    { resource: 'workspaces', action: 'view' },
-    { resource: 'workspaces', action: 'create' },
-    { resource: 'workspaces', action: 'edit' },
-    { resource: 'workspaces', action: 'delete' },
   ],
   staff: [
     { resource: 'conversations', action: 'view' },
@@ -130,7 +118,6 @@ const DEFAULT_PERMISSIONS: Record<string, { resource: string; action: string }[]
     { resource: 'contact_notes', action: 'create' },
     { resource: 'channels', action: 'view' },
     { resource: 'labels', action: 'view' },
-    { resource: 'workspaces', action: 'view' },
   ],
   viewer: [
     { resource: 'conversations', action: 'view' },
@@ -139,7 +126,6 @@ const DEFAULT_PERMISSIONS: Record<string, { resource: string; action: string }[]
     { resource: 'contact_notes', action: 'view' },
     { resource: 'channels', action: 'view' },
     { resource: 'labels', action: 'view' },
-    { resource: 'workspaces', action: 'view' },
   ],
 };
 

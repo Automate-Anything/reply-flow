@@ -5,7 +5,6 @@ import api from '@/lib/api';
 import { useConversations, type Conversation, type ConversationFilters } from '@/hooks/useConversations';
 import { useMessages, type Message } from '@/hooks/useMessages';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationHeader from '@/components/inbox/ConversationHeader';
@@ -23,9 +22,8 @@ export default function InboxPage() {
   const [notesPanelOpen, setNotesPanelOpen] = useState(false);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
 
-  const { activeWorkspaceId } = useWorkspace();
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
-    useConversations(search, activeWorkspaceId, filters);
+    useConversations(search, filters);
   const { messages, setMessages, loading: msgsLoading, sendMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );

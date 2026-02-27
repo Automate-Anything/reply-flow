@@ -1,30 +1,25 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, WifiOff, QrCode, Bot, ExternalLink,
+  Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, WifiOff, QrCode,
+  Bot, ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ChannelAgentSettings from './ChannelAgentSettings';
-import KBAssignmentList from './KBAssignmentList';
+import { useChannelAgent } from '@/hooks/useChannelAgent';
+import { useCompanyAI } from '@/hooks/useCompanyAI';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
+import KBAssignmentList from './KBAssignmentList';
+import AIProfileSections from './AIProfileWizard';
+import type { AIProfileShape } from './AIProfileWizard';
 import type { ChannelInfo } from './channelHelpers';
 import { formatChannelName, getStatusConfig, timeAgo } from './channelHelpers';
-
-interface Props {
-  channel: ChannelInfo;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onUpdate: () => void;
-}
 
 function getStatusIcon(status: string) {
   switch (status) {
@@ -39,9 +34,15 @@ function getStatusIcon(status: string) {
   }
 }
 
-export default function ChannelDetailView({ channel, open, onOpenChange, onUpdate }: Props) {
+export default function ChannelDetailPage() {
+  const { channelId } = useParams<{ channelId: string }>();
   const navigate = useNavigate();
-  const [effectiveStatus, setEffectiveStatus] = useState(channel.channel_status);
+  const numericChannelId = Number(channelId);
+
+  // Channel data
+  const [channel, setChannel] = useState<ChannelInfo | null>(null);
+  const [loadingChannel, setLoadingChannel] = useState(true);
+  const [effectiveStatus, setEffectiveStatus] = useState('');
   const [qrData, setQrData] = useState<string | null>(null);
   const [loadingQR, setLoadingQR] = useState(false);
   const [refreshingQR, setRefreshingQR] = useState(false);
@@ -50,28 +51,67 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
   const [confirmDelete, setConfirmDelete] = useState(false);
   const cancelledRef = useRef(false);
 
-  // Company KB data for KB assignment list
+  // AI settings
+  const {
+    settings,
+    loadingSettings,
+    updateSettings,
+  } = useChannelAgent(numericChannelId);
+
+  // Company AI template (for "save as default")
+  const { updateProfile: updateTemplate } = useCompanyAI();
+
+  // Company KB data
   const { kbEntries, loading: loadingKB } = useCompanyKB();
 
-  // Sync state when channel prop changes
+  // Company timezone (still company-level)
+  const [companyTimezone, setCompanyTimezone] = useState('UTC');
+
+  // AI toggle state
+  const [toggling, setToggling] = useState(false);
+
+  // Fetch channel data
+  const fetchChannel = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/whatsapp/channels/${numericChannelId}`);
+      setChannel(data.channel);
+      setEffectiveStatus(data.channel.channel_status);
+    } catch {
+      toast.error('Failed to load channel');
+      navigate('/channels');
+    } finally {
+      setLoadingChannel(false);
+    }
+  }, [numericChannelId, navigate]);
+
+  // Fetch company timezone
   useEffect(() => {
-    setEffectiveStatus(channel.channel_status);
-    setQrData(null);
-    setConfirmDelete(false);
-  }, [channel.id, channel.channel_status]);
+    (async () => {
+      try {
+        const { data } = await api.get('/company');
+        setCompanyTimezone(data.company.timezone || 'UTC');
+      } catch {
+        // Ignore — use defaults
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    fetchChannel();
+  }, [fetchChannel]);
 
   // Poll health-check when pending
   useEffect(() => {
-    if (!open || effectiveStatus !== 'pending') return;
+    if (effectiveStatus !== 'pending') return;
 
     const poll = setInterval(async () => {
       try {
-        const { data } = await api.get(`/whatsapp/health-check?channelId=${channel.id}`);
+        const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
         if (data.status !== 'pending') {
           setEffectiveStatus(data.status);
           if (data.status === 'connected') {
             toast.success('WhatsApp connected successfully');
-            onUpdate();
+            fetchChannel();
           }
         }
       } catch {
@@ -80,11 +120,11 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
     }, 5000);
 
     return () => clearInterval(poll);
-  }, [open, effectiveStatus, channel.id, onUpdate]);
+  }, [effectiveStatus, numericChannelId, fetchChannel]);
 
   // When awaiting_scan: fetch QR, auto-refresh, poll for connection
   useEffect(() => {
-    if (!open || effectiveStatus !== 'awaiting_scan') return;
+    if (effectiveStatus !== 'awaiting_scan') return;
 
     let cancelled = false;
     cancelledRef.current = false;
@@ -95,7 +135,7 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
         setEffectiveStatus('connected');
         setQrData(null);
         toast.success('WhatsApp connected successfully');
-        onUpdate();
+        fetchChannel();
         return;
       }
       if (data.qr) setQrData(data.qr);
@@ -104,7 +144,7 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
     const fetchQR = async () => {
       setLoadingQR(true);
       try {
-        const { data } = await api.get(`/whatsapp/create-qr?channelId=${channel.id}`);
+        const { data } = await api.get(`/whatsapp/create-qr?channelId=${numericChannelId}`);
         handleQRResponse(data);
       } catch {
         // Will retry on interval
@@ -116,7 +156,7 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
 
     const qrInterval = setInterval(async () => {
       try {
-        const { data } = await api.get(`/whatsapp/create-qr?channelId=${channel.id}`);
+        const { data } = await api.get(`/whatsapp/create-qr?channelId=${numericChannelId}`);
         handleQRResponse(data);
       } catch {
         // ignore
@@ -125,12 +165,12 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
 
     const healthInterval = setInterval(async () => {
       try {
-        const { data } = await api.get(`/whatsapp/health-check?channelId=${channel.id}`);
+        const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
         if (data.status === 'connected' && !cancelled) {
           setEffectiveStatus('connected');
           setQrData(null);
           toast.success('WhatsApp connected successfully');
-          onUpdate();
+          fetchChannel();
         }
       } catch {
         // ignore
@@ -143,7 +183,7 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
       clearInterval(qrInterval);
       clearInterval(healthInterval);
     };
-  }, [open, effectiveStatus, channel.id, onUpdate]);
+  }, [effectiveStatus, numericChannelId, fetchChannel]);
 
   const handleReconnect = useCallback(() => {
     setEffectiveStatus('awaiting_scan');
@@ -152,12 +192,12 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
   const handleRefreshQR = async () => {
     setRefreshingQR(true);
     try {
-      const { data } = await api.get(`/whatsapp/create-qr?channelId=${channel.id}`);
+      const { data } = await api.get(`/whatsapp/create-qr?channelId=${numericChannelId}`);
       if (data.connected) {
         setEffectiveStatus('connected');
         setQrData(null);
         toast.success('WhatsApp connected successfully');
-        onUpdate();
+        fetchChannel();
       } else {
         setQrData(data.qr);
       }
@@ -171,9 +211,9 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
   const handleLogout = async () => {
     setDisconnecting(true);
     try {
-      await api.post('/whatsapp/logout', { channelId: channel.id });
+      await api.post('/whatsapp/logout', { channelId: numericChannelId });
       toast.success('WhatsApp disconnected');
-      onUpdate();
+      fetchChannel();
     } catch {
       toast.error('Failed to disconnect WhatsApp');
     } finally {
@@ -185,16 +225,52 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
     setDeleting(true);
     setConfirmDelete(false);
     try {
-      await api.delete('/whatsapp/delete-channel', { data: { channelId: channel.id } });
+      await api.delete('/whatsapp/delete-channel', { data: { channelId: numericChannelId } });
       toast.success('Channel deleted');
-      onOpenChange(false);
-      onUpdate();
+      navigate('/channels');
     } catch {
       toast.error('Failed to delete channel');
     } finally {
       setDeleting(false);
     }
   };
+
+  const handleToggleAI = async () => {
+    setToggling(true);
+    try {
+      await updateSettings({ is_enabled: !settings.is_enabled });
+      toast.success(settings.is_enabled ? 'AI disabled for this channel' : 'AI enabled for this channel');
+    } catch {
+      toast.error('Failed to toggle AI');
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  const handleSaveProfile = async (updates: Partial<AIProfileShape>) => {
+    await updateSettings(updates);
+  };
+
+  const handleSaveAsDefault = async (updates: Partial<AIProfileShape>) => {
+    await updateTemplate({
+      profile_data: updates.profile_data,
+      schedule_mode: updates.schedule_mode,
+      ai_schedule: updates.ai_schedule,
+      outside_hours_message: updates.outside_hours_message,
+    });
+  };
+
+  if (loadingChannel) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6 p-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-60 w-full" />
+      </div>
+    );
+  }
+
+  if (!channel) return null;
 
   const isConnected = effectiveStatus === 'connected';
   const isProvisioning = effectiveStatus === 'pending';
@@ -204,29 +280,37 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
   const displayName = formatChannelName(channel);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-3">
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${statusConfig.iconBg}`}>
-              {getStatusIcon(effectiveStatus)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <DialogTitle className="truncate">{displayName}</DialogTitle>
-                <Badge variant="outline" className={`shrink-0 ${statusConfig.badgeClass}`}>
-                  <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${statusConfig.dotClass}`} />
-                  {statusConfig.label}
-                </Badge>
-              </div>
-              <DialogDescription>
-                Created {timeAgo(channel.created_at)}
-              </DialogDescription>
-            </div>
+    <div className="mx-auto max-w-3xl space-y-6 p-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate('/channels')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${statusConfig.iconBg}`}>
+          {getStatusIcon(effectiveStatus)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-lg font-semibold">{displayName}</h2>
+            <Badge variant="outline" className={`shrink-0 ${statusConfig.badgeClass}`}>
+              <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${statusConfig.dotClass}`} />
+              {statusConfig.label}
+            </Badge>
           </div>
-        </DialogHeader>
+          <p className="text-sm text-muted-foreground">Created {timeAgo(channel.created_at)}</p>
+        </div>
+      </div>
 
-        <div className="space-y-5">
+      {/* Tabs */}
+      <Tabs defaultValue="ai-profile">
+        <TabsList className="w-full">
+          <TabsTrigger value="connection" className="flex-1">Connection</TabsTrigger>
+          <TabsTrigger value="ai-profile" className="flex-1">AI Profile</TabsTrigger>
+          <TabsTrigger value="knowledge-base" className="flex-1">Knowledge Base</TabsTrigger>
+        </TabsList>
+
+        {/* Connection Tab */}
+        <TabsContent value="connection" className="space-y-5">
           {/* Channel details */}
           <div className="grid gap-3 rounded-lg border p-4 text-sm">
             <div className="flex justify-between">
@@ -324,52 +408,77 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
               </div>
             )}
           </div>
+        </TabsContent>
 
-          {/* Agent Settings + KB Assignments */}
-          <div className="border-t pt-5">
-            <div className="flex items-center gap-3 mb-4">
-              <Bot className="h-5 w-5 text-primary" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">AI Configuration</p>
-                <p className="text-xs text-muted-foreground">
-                  Configure agent settings and knowledge base assignments for this channel.
-                </p>
-              </div>
-              {channel.workspace_id && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() => {
-                    onOpenChange(false);
-                    navigate('/channels');
-                  }}
-                >
-                  Workspace <ExternalLink className="h-3 w-3" />
-                </Button>
-              )}
+        {/* AI Profile Tab */}
+        <TabsContent value="ai-profile" className="space-y-5">
+          {/* AI Toggle */}
+          <div className="flex items-center gap-3">
+            <Bot className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">AI Agent</p>
+              <p className="text-xs text-muted-foreground">
+                {settings.is_enabled ? 'AI is responding on this channel' : 'AI is disabled for this channel'}
+              </p>
             </div>
-
-            <Tabs defaultValue="agent-settings">
-              <TabsList className="w-full">
-                <TabsTrigger value="agent-settings" className="flex-1">Agent Settings</TabsTrigger>
-                <TabsTrigger value="kb-assignments" className="flex-1">KB Assignments</TabsTrigger>
-              </TabsList>
-              <TabsContent value="agent-settings">
-                <ChannelAgentSettings channelId={channel.id} hasWorkspace={true} />
-              </TabsContent>
-              <TabsContent value="kb-assignments">
-                <KBAssignmentList
-                  channelId={channel.id}
-                  hasWorkspace={true}
-                  workspaceKBEntries={kbEntries}
-                  loadingKB={loadingKB}
-                />
-              </TabsContent>
-            </Tabs>
+            <button
+              onClick={handleToggleAI}
+              disabled={toggling || loadingSettings}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                toggling || loadingSettings ? 'cursor-wait opacity-60' : 'cursor-pointer'
+              } ${settings.is_enabled ? 'bg-primary' : 'bg-muted'}`}
+            >
+              <span
+                className={`pointer-events-none inline-flex h-5 w-5 items-center justify-center rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                  settings.is_enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              >
+                {toggling && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+              </span>
+            </button>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+
+          {/* Custom Instructions */}
+          {settings.is_enabled && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Channel-Specific Instructions</Label>
+              <textarea
+                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                placeholder="Additional instructions specific to this channel (optional)"
+                value={settings.custom_instructions || ''}
+                onChange={(e) => updateSettings({ custom_instructions: e.target.value || null })}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                These instructions are appended to the channel's AI profile.
+              </p>
+            </div>
+          )}
+
+          {/* AI Profile Wizard */}
+          {loadingSettings ? (
+            <div className="space-y-3">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-40 w-full" />
+            </div>
+          ) : (
+            <AIProfileSections
+              profile={settings}
+              onSave={handleSaveProfile}
+              companyTimezone={companyTimezone}
+              onSaveAsDefault={handleSaveAsDefault}
+            />
+          )}
+        </TabsContent>
+
+        {/* Knowledge Base Tab */}
+        <TabsContent value="knowledge-base">
+          <KBAssignmentList
+            channelId={numericChannelId}
+            kbEntries={kbEntries}
+            loadingKB={loadingKB}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

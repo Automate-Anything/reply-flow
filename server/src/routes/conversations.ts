@@ -15,7 +15,6 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       status,
       archived,
       channelId,
-      workspaceId,
       assignee,
       priority,
       starred,
@@ -33,21 +32,6 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       )
       .eq('company_id', companyId)
       .is('deleted_at', null);
-
-    // Workspace filtering: only show conversations from channels in this workspace
-    if (workspaceId) {
-      const { data: wsChannels } = await supabaseAdmin
-        .from('whatsapp_channels')
-        .select('id')
-        .eq('workspace_id', workspaceId)
-        .eq('company_id', companyId);
-      const wsChannelIds = (wsChannels || []).map((c) => c.id);
-      if (wsChannelIds.length === 0) {
-        res.json({ sessions: [], count: 0 });
-        return;
-      }
-      query = query.in('channel_id', wsChannelIds);
-    }
 
     // Archived filter
     if (archived === 'true') {
