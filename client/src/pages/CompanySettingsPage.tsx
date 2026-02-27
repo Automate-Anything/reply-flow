@@ -3,10 +3,11 @@ import api from '@/lib/api';
 import { useSession } from '@/contexts/SessionContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, Building2, Globe } from 'lucide-react';
+import { Loader2, Building2 } from 'lucide-react';
 
 interface Company {
   id: string;
@@ -107,72 +108,61 @@ export default function CompanySettingsPage() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardContent className="space-y-4 pt-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Building2 className="h-6 w-6 text-primary" />
-            </div>
-            <div className="flex-1 space-y-1.5">
-              <label htmlFor="company-name" className="text-sm font-medium">
-                Company Name
-              </label>
-              <Input
-                id="company-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={!canEdit}
-                placeholder="Your company name"
-              />
-            </div>
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Building2 className="h-4 w-4" />
+            Company Information
+          </CardTitle>
+          <CardDescription>General settings for your company.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="company-name">Company Name</Label>
+            <Input
+              id="company-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={!canEdit}
+              placeholder="Your company name"
+            />
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="company-timezone">Timezone</Label>
+            <p className="text-xs text-muted-foreground">
+              Used for business hours and scheduling across the platform.
+            </p>
+            <Input
+              id="company-timezone"
+              list="tz-list"
+              value={tzInput}
+              onChange={(e) => {
+                setTzInput(e.target.value);
+                if (TIMEZONES.includes(e.target.value)) {
+                  setTimezone(e.target.value);
+                }
+              }}
+              onBlur={handleTzBlur}
+              disabled={!canEdit}
+              placeholder="e.g., America/New_York"
+            />
+            <datalist id="tz-list">
+              {TIMEZONES.map((tz) => (
+                <option key={tz} value={tz} />
+              ))}
+            </datalist>
+          </div>
+
+          {canEdit && (
+            <div className="flex justify-end border-t pt-4">
+              <Button onClick={handleSave} disabled={saving || !hasChanges}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Globe className="h-6 w-6 text-primary" />
-            </div>
-            <div className="flex-1 space-y-1.5">
-              <label htmlFor="company-timezone" className="text-sm font-medium">
-                Timezone
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Used for business hours and scheduling across the platform.
-              </p>
-              <Input
-                id="company-timezone"
-                list="tz-list"
-                value={tzInput}
-                onChange={(e) => {
-                  setTzInput(e.target.value);
-                  if (TIMEZONES.includes(e.target.value)) {
-                    setTimezone(e.target.value);
-                  }
-                }}
-                onBlur={handleTzBlur}
-                disabled={!canEdit}
-                placeholder="e.g., America/New_York"
-              />
-              <datalist id="tz-list">
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz} />
-                ))}
-              </datalist>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {canEdit && (
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving || !hasChanges}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Changes
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

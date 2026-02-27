@@ -1,38 +1,48 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
-import { useConversations, type Conversation } from '@/hooks/useConversations';
+import { useConversations, type Conversation, type ConversationFilters } from '@/hooks/useConversations';
 import { useMessages, type Message } from '@/hooks/useMessages';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationHeader from '@/components/inbox/ConversationHeader';
 import MessageThread from '@/components/inbox/MessageThread';
 
 export default function InboxPage() {
   const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<ConversationFilters>({});
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [allLabels, setAllLabels] = useState<{ id: string; name: string; color: string }[]>([]);
+
   const { activeWorkspaceId } = useWorkspace();
-  const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } = useConversations(search, activeWorkspaceId);
+  const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
+    useConversations(search, activeWorkspaceId, filters);
   const { messages, setMessages, loading: msgsLoading, sendMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );
+  const { members: teamMembers } = useTeamMembers();
+
+  // Fetch labels for bulk actions
+  useEffect(() => {
+    api.get('/labels').then(({ data }) => setAllLabels(data.labels || []));
+  }, []);
 
   // Realtime updates
   useRealtimeMessages({
     onNewMessage: useCallback(
       (msg: Message) => {
-        // Add to current thread if it matches
         if (activeConversation && msg.session_id === activeConversation.id) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
-          // Auto-mark as read if viewing this conversation
           markRead();
         }
-        // Refresh conversation list to update last_message / unread counts
         refetchConvs();
       },
       [activeConversation, setMessages, markRead, refetchConvs]
@@ -42,6 +52,9 @@ export default function InboxPage() {
         setConversations((prev) =>
           prev.map((c) => (c.id === session.id ? { ...c, ...session } : c))
         );
+        setActiveConversation((prev) =>
+          prev && prev.id === session.id ? { ...prev, ...session } : prev
+        );
       },
       [setConversations]
     ),
@@ -49,7 +62,6 @@ export default function InboxPage() {
 
   const handleSelectConversation = (conv: Conversation) => {
     setActiveConversation(conv);
-    // Mark as read when selecting
     if (conv.unread_count > 0) {
       api.post(`/conversations/${conv.id}/read`).then(() => refetchConvs());
     }
@@ -76,11 +88,43 @@ export default function InboxPage() {
     }
   };
 
+  const handleConversationUpdate = (updated: Conversation) => {
+    setActiveConversation(updated);
+    setConversations((prev) =>
+      prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
+    );
+  };
+
   const handleBack = () => setActiveConversation(null);
+
+  // Selection handlers
+  const handleToggleSelectionMode = () => {
+    setSelectionMode((prev) => !prev);
+    setSelectedIds([]);
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedIds(conversations.map((c) => c.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  const handleBulkActionComplete = () => {
+    refetchConvs();
+    setSelectedIds([]);
+  };
 
   return (
     <div className="flex h-full">
-      {/* Conversation list — hidden on mobile when a conversation is selected */}
+      {/* Conversation list */}
       <div className={`${activeConversation ? 'hidden md:flex' : 'flex'} h-full w-full md:w-auto`}>
         <ConversationList
           conversations={conversations}
@@ -89,10 +133,21 @@ export default function InboxPage() {
           onSelect={handleSelectConversation}
           search={search}
           onSearchChange={setSearch}
+          filters={filters}
+          onFiltersChange={setFilters}
+          selectionMode={selectionMode}
+          onToggleSelectionMode={handleToggleSelectionMode}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onSelectAll={handleSelectAll}
+          onClearSelection={handleClearSelection}
+          onBulkActionComplete={handleBulkActionComplete}
+          teamMembers={teamMembers}
+          labels={allLabels}
         />
       </div>
 
-      {/* Message thread — full width on mobile */}
+      {/* Message thread */}
       {activeConversation ? (
         <div className={`${activeConversation ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
           <ConversationHeader
@@ -100,6 +155,8 @@ export default function InboxPage() {
             onArchive={handleArchive}
             onLabelsChange={refetchConvs}
             onBack={handleBack}
+            onConversationUpdate={handleConversationUpdate}
+            teamMembers={teamMembers}
           />
           <MessageThread
             messages={messages}

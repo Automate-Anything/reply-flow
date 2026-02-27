@@ -101,7 +101,7 @@ export async function processIncomingMessage(
         chat_id: chatId,
         phone_number: phoneNumber,
         contact_name: msg.from_name || phoneNumber,
-        status: 'active',
+        status: 'open',
       })
       .select('id')
       .single();
@@ -148,18 +148,34 @@ export async function processIncomingMessage(
 
   if (messageError) throw messageError;
 
-  // 5. Update session metadata
+  // 5. Update session metadata + auto-reopen resolved/closed conversations
+  const { data: currentSession } = await supabaseAdmin
+    .from('chat_sessions')
+    .select('status, snoozed_until')
+    .eq('id', sessionId)
+    .single();
+
+  const sessionUpdate: Record<string, unknown> = {
+    contact_id: contactId,
+    contact_name: msg.from_name || phoneNumber,
+    last_message: messageBody,
+    last_message_at: messageTs,
+    last_message_direction: 'inbound',
+    last_message_sender: 'contact',
+    updated_at: new Date().toISOString(),
+  };
+
+  if (currentSession?.status === 'resolved' || currentSession?.status === 'closed') {
+    sessionUpdate.status = 'open';
+  }
+
+  if (currentSession?.snoozed_until) {
+    sessionUpdate.snoozed_until = null;
+  }
+
   await supabaseAdmin
     .from('chat_sessions')
-    .update({
-      contact_id: contactId,
-      contact_name: msg.from_name || phoneNumber,
-      last_message: messageBody,
-      last_message_at: messageTs,
-      last_message_direction: 'inbound',
-      last_message_sender: 'contact',
-      updated_at: new Date().toISOString(),
-    })
+    .update(sessionUpdate)
     .eq('id', sessionId);
 
   // 6. Check if AI should respond (async, don't block)

@@ -26,26 +26,15 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const canViewCompanySettings = hasPermission('company_settings', 'view');
 
   const pageTitle = (() => {
-    switch (location.pathname) {
-      case '/':
-        return 'Dashboard';
-      case '/inbox':
-        return 'Inbox';
-      case '/contacts':
-        return 'Contacts';
-      case '/channels':
-        return 'Channels';
-      case '/team':
-        return 'Team';
-      case '/team/permissions':
-        return 'Role Permissions';
-      case '/settings/company':
-        return 'Company Settings';
-      case '/settings/profile':
-        return 'Profile Settings';
-      default:
-        return '';
-    }
+    const path = location.pathname;
+    if (path === '/') return 'Dashboard';
+    if (path === '/inbox') return 'Inbox';
+    if (path === '/contacts') return 'Contacts';
+    if (path === '/knowledge-base') return 'Knowledge Base';
+    if (path === '/account') return 'Account Settings';
+    if (path === '/profile') return 'Profile';
+    if (path.startsWith('/workspaces/')) return 'Workspace';
+    return '';
   })();
 
   const initials = fullName
@@ -75,7 +64,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <Menu className="h-5 w-5" />
           <span className="sr-only">Toggle menu</span>
         </Button>
-        <h1 className="hidden text-lg font-semibold md:block">{pageTitle}</h1>
+        {pageTitle && (
+          <h1 className="text-base font-semibold md:text-lg">{pageTitle}</h1>
+        )}
         {companyName && (
           <span className="hidden text-sm text-muted-foreground md:block">{companyName}</span>
         )}
@@ -107,14 +98,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => navigate('/settings/profile')}>
+            <DropdownMenuItem onClick={() => navigate('/profile')}>
               <User className="mr-2 h-4 w-4" />
               Profile
             </DropdownMenuItem>
             {canViewCompanySettings && (
-              <DropdownMenuItem onClick={() => navigate('/settings/company')}>
+              <DropdownMenuItem onClick={() => navigate('/account')}>
                 <Building2 className="mr-2 h-4 w-4" />
-                Company Settings
+                Account Settings
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />

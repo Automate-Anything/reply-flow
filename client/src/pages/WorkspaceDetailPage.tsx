@@ -105,7 +105,7 @@ export default function WorkspaceDetailPage() {
       setScheduleInitialized(true);
     } catch {
       toast.error('Failed to load workspace');
-      navigate('/settings?tab=workspaces');
+      navigate('/account?tab=workspaces');
     } finally {
       setLoading(false);
     }
@@ -140,7 +140,7 @@ export default function WorkspaceDetailPage() {
     try {
       await api.delete(`/workspaces/${workspaceId}`);
       toast.success('Workspace deleted');
-      navigate('/settings?tab=workspaces');
+      navigate('/account?tab=workspaces');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete workspace';
       toast.error(msg);
@@ -199,7 +199,7 @@ export default function WorkspaceDetailPage() {
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/settings?tab=workspaces')} className="mt-0.5">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/account?tab=workspaces')} className="mt-0.5">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">

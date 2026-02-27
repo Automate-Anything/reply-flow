@@ -1,6 +1,7 @@
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Copy } from 'lucide-react';
 
 export interface DaySchedule {
@@ -68,13 +69,13 @@ export default function BusinessHoursEditor({ value, onChange, disabled }: Props
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {DAYS.map((day) => {
         const schedule = value[day];
         return (
           <div
             key={day}
-            className="flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-accent/50"
+            className="flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-accent/50"
           >
             <Checkbox
               checked={schedule.enabled}
@@ -83,13 +84,13 @@ export default function BusinessHoursEditor({ value, onChange, disabled }: Props
             />
             <span className="w-10 text-sm font-medium">{DAY_LABELS[day]}</span>
             {schedule.enabled ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-1 items-center gap-2">
                 <Input
                   type="time"
                   value={schedule.open}
                   onChange={(e) => updateDay(day, { open: e.target.value })}
                   disabled={disabled}
-                  className="h-8 w-[120px] text-sm"
+                  className="h-8 w-[110px] text-sm"
                 />
                 <span className="text-xs text-muted-foreground">to</span>
                 <Input
@@ -97,21 +98,25 @@ export default function BusinessHoursEditor({ value, onChange, disabled }: Props
                   value={schedule.close}
                   onChange={(e) => updateDay(day, { close: e.target.value })}
                   disabled={disabled}
-                  className="h-8 w-[120px] text-sm"
+                  className="h-8 w-[110px] text-sm"
                 />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  title="Apply to all days"
-                  onClick={() => applyToAll(day)}
-                  disabled={disabled}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground"
+                      onClick={() => applyToAll(day)}
+                      disabled={disabled}
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Apply to all days</TooltipContent>
+                </Tooltip>
               </div>
             ) : (
-              <span className="text-sm text-muted-foreground">Closed</span>
+              <span className="text-sm italic text-muted-foreground">Closed</span>
             )}
           </div>
         );

@@ -34,8 +34,8 @@ function App() {
                   <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />
                   <Route path="knowledge-base" element={<KnowledgeBasePage />} />
-                  <Route path="settings" element={<SettingsPage />} />
-                  <Route path="settings/profile" element={<ProfileSettingsPage />} />
+                  <Route path="account" element={<SettingsPage />} />
+                  <Route path="profile" element={<ProfileSettingsPage />} />
                   <Route path="workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
                 </Route>
               </Route>

@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '@/lib/api';
 import { useSession } from '@/contexts/SessionContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
-import { RotateCcw, Save, Shield, Loader2 } from 'lucide-react';
+import {
+  RotateCcw, Save, Shield, Loader2, Lock,
+  Crown, UserCog, Users, User, Eye,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -69,7 +71,6 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
   },
 ];
 
-/** Display labels for resources */
 const RESOURCE_LABELS: Record<string, string> = {
   conversations: 'Conversations',
   messages: 'Messages',
@@ -84,7 +85,6 @@ const RESOURCE_LABELS: Record<string, string> = {
   role_permissions: 'Role Permissions',
 };
 
-/** Display labels for actions */
 const ACTION_LABELS: Record<string, string> = {
   view: 'View',
   create: 'Create',
@@ -95,12 +95,17 @@ const ACTION_LABELS: Record<string, string> = {
   remove: 'Remove',
 };
 
-/** Unique key for a permission change */
+const ROLE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  owner: Crown,
+  admin: Shield,
+  manager: UserCog,
+  staff: Users,
+  viewer: Eye,
+};
+
 function changeKey(roleId: string, resource: string, action: string): string {
   return `${roleId}:${resource}:${action}`;
 }
-
-// ─── Role column order (hierarchy descending) ────────────────────
 
 const ROLE_ORDER = ['owner', 'admin', 'manager', 'staff', 'viewer'];
 
@@ -115,16 +120,12 @@ export default function RolePermissionsPage() {
   const [saving, setSaving] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(new Map());
   const [resettingRoleId, setResettingRoleId] = useState<string | null>(null);
-  const saveBarRef = useRef<HTMLDivElement>(null);
-
-  // ─── Derived: current user hierarchy level ───────
+  const [selectedRoleName, setSelectedRoleName] = useState<string>('owner');
 
   const currentUserHierarchy = useMemo(() => {
     const match = roles.find((r) => r.name === currentUserRole);
     return match?.hierarchy_level ?? 0;
   }, [roles, currentUserRole]);
-
-  // ─── Sorted roles for columns ────────────────────
 
   const sortedRoles = useMemo(() => {
     return [...roles].sort((a, b) => {
@@ -133,6 +134,11 @@ export default function RolePermissionsPage() {
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
     });
   }, [roles]);
+
+  const selectedRole = useMemo(
+    () => sortedRoles.find((r) => r.name === selectedRoleName) || sortedRoles[0] || null,
+    [sortedRoles, selectedRoleName],
+  );
 
   // ─── Data fetching ───────────────────────────────
 
@@ -158,7 +164,6 @@ export default function RolePermissionsPage() {
 
   // ─── Permission helpers ──────────────────────────
 
-  /** Check if a role currently has a specific permission (considering pending changes) */
   const hasRolePermission = useCallback(
     (roleId: string, roleName: string, resource: string, action: string): boolean => {
       const key = changeKey(roleId, resource, action);
@@ -166,7 +171,6 @@ export default function RolePermissionsPage() {
       if (pending !== undefined) {
         return pending.enabled;
       }
-      // Check the matrix from the API
       const entry = matrix[roleName];
       if (!entry) return false;
       return entry.permissions.some((p) => p.resource === resource && p.action === action);
@@ -174,7 +178,6 @@ export default function RolePermissionsPage() {
     [matrix, pendingChanges],
   );
 
-  /** Whether the current user can edit a given role's permissions */
   const canEditRole = useCallback(
     (role: Role): boolean => {
       if (role.name === 'owner') return false;
@@ -196,25 +199,16 @@ export default function RolePermissionsPage() {
 
       setPendingChanges((prev) => {
         const next = new Map(prev);
-
-        // Check if this change reverts to the original API state
         const entry = matrix[role.name];
         const originalValue = entry
           ? entry.permissions.some((p) => p.resource === resource && p.action === action)
           : false;
 
         if (newValue === originalValue) {
-          // Revert — remove from pending
           next.delete(key);
         } else {
-          next.set(key, {
-            role_id: role.id,
-            resource,
-            action,
-            enabled: newValue,
-          });
+          next.set(key, { role_id: role.id, resource, action, enabled: newValue });
         }
-
         return next;
       });
     },
@@ -228,29 +222,20 @@ export default function RolePermissionsPage() {
     setSaving(true);
 
     try {
-      // Group pending changes by role_id
       const byRole = new Map<string, Array<{ resource: string; action: string; enabled: boolean }>>();
       for (const change of pendingChanges.values()) {
         const existing = byRole.get(change.role_id) || [];
-        existing.push({
-          resource: change.resource,
-          action: change.action,
-          enabled: change.enabled,
-        });
+        existing.push({ resource: change.resource, action: change.action, enabled: change.enabled });
         byRole.set(change.role_id, existing);
       }
 
-      // Send one PUT per role
       const promises = Array.from(byRole.entries()).map(([role_id, permissions]) =>
         api.put('/roles/permissions', { role_id, permissions }),
       );
 
       await Promise.all(promises);
-
       toast.success('Permissions updated successfully');
       setPendingChanges(new Map());
-
-      // Refresh data
       await fetchData();
     } catch (err) {
       console.error('Failed to save permissions:', err);
@@ -270,13 +255,10 @@ export default function RolePermissionsPage() {
       try {
         await api.post('/roles/permissions/reset', { role_id: role.id });
 
-        // Clear any pending changes for this role
         setPendingChanges((prev) => {
           const next = new Map(prev);
           for (const [key, change] of next) {
-            if (change.role_id === role.id) {
-              next.delete(key);
-            }
+            if (change.role_id === role.id) next.delete(key);
           }
           return next;
         });
@@ -293,105 +275,172 @@ export default function RolePermissionsPage() {
     [canEditRole, fetchData],
   );
 
-  // ─── Discard handler ─────────────────────────────
-
   const handleDiscard = useCallback(() => {
     setPendingChanges(new Map());
   }, []);
-
-  // ─── Collect all unique actions across all resources (for column sub-headers) ─
-  // We show per-resource actions inline, so we don't need global action columns.
 
   // ─── Loading state ───────────────────────────────
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-[600px] rounded-xl" />
+        <div className="grid grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-48 rounded-xl" />
       </div>
     );
   }
 
   const pendingCount = pendingChanges.size;
+  const isOwner = selectedRole?.name === 'owner';
+  const editable = selectedRole ? canEditRole(selectedRole) : false;
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Matrix Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              {/* ─── Header ─────────────────────── */}
-              <thead className="sticky top-0 z-10 bg-background">
-                <tr className="border-b">
-                  {/* Resource / Action column */}
-                  <th className="sticky left-0 z-20 min-w-[200px] bg-background px-4 py-3 text-left font-medium text-muted-foreground">
-                    Resource / Action
-                  </th>
+    <div className="space-y-8 pb-24">
+      {/* Role selector cards */}
+      <div className="grid grid-cols-5 gap-3">
+        {sortedRoles.map((role) => {
+          const Icon = ROLE_ICONS[role.name] || User;
+          const isSelected = role.name === selectedRoleName;
+          const rolePendingCount = Array.from(pendingChanges.values()).filter(
+            (c) => c.role_id === role.id,
+          ).length;
 
-                  {/* Role columns */}
-                  {sortedRoles.map((role) => {
-                    const editable = canEditRole(role);
-                    return (
-                      <th
-                        key={role.id}
-                        className="min-w-[140px] px-3 py-3 text-center"
-                      >
-                        <div className="flex flex-col items-center gap-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium capitalize">{role.name}</span>
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {role.hierarchy_level}
-                            </Badge>
-                          </div>
-                          {editable && (
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              className="h-6 gap-1 text-[11px] text-muted-foreground"
-                              disabled={resettingRoleId === role.id}
-                              onClick={() => handleReset(role)}
-                            >
-                              {resettingRoleId === role.id ? (
-                                <Loader2 className="size-3 animate-spin" />
-                              ) : (
-                                <RotateCcw className="size-3" />
-                              )}
-                              Reset
-                            </Button>
-                          )}
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
+          return (
+            <button
+              key={role.id}
+              onClick={() => setSelectedRoleName(role.name)}
+              className={cn(
+                'relative flex flex-col items-center gap-2 rounded-xl border-2 px-3 py-4 text-center transition-all',
+                isSelected
+                  ? 'border-primary bg-primary/5 shadow-sm'
+                  : 'border-transparent bg-muted/40 hover:bg-muted/70',
+              )}
+            >
+              <div
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                  isSelected ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+                )}
+              >
+                <Icon className="h-5 w-5" />
+              </div>
+              <span
+                className={cn(
+                  'text-sm font-medium capitalize',
+                  isSelected ? 'text-primary' : 'text-foreground',
+                )}
+              >
+                {role.name}
+              </span>
+              {rolePendingCount > 0 && (
+                <span className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
+                  {rolePendingCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-              {/* ─── Body ──────────────────────── */}
-              <tbody>
-                {RESOURCE_GROUPS.map((group, groupIdx) => (
-                  <GroupRows
-                    key={group.label}
-                    group={group}
-                    sortedRoles={sortedRoles}
-                    hasRolePermission={hasRolePermission}
-                    canEditRole={canEditRole}
-                    onToggle={handleToggle}
-                    isLastGroup={groupIdx === RESOURCE_GROUPS.length - 1}
-                  />
-                ))}
-              </tbody>
-            </table>
+      {/* Selected role permissions */}
+      {selectedRole && (
+        <>
+          {/* Role header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold capitalize">{selectedRole.name}</h2>
+              {selectedRole.description && (
+                <p className="mt-0.5 text-sm text-muted-foreground">{selectedRole.description}</p>
+              )}
+              {isOwner && (
+                <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Lock className="h-3.5 w-3.5" />
+                  Full access. Permissions cannot be changed.
+                </p>
+              )}
+              {!isOwner && !editable && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You don't have permission to edit this role.
+                </p>
+              )}
+            </div>
+            {editable && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                disabled={resettingRoleId === selectedRole.id}
+                onClick={() => handleReset(selectedRole)}
+              >
+                {resettingRoleId === selectedRole.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5" />
+                )}
+                Reset to Defaults
+              </Button>
+            )}
           </div>
-        </CardContent>
-      </Card>
 
-      {/* ─── Floating Save Bar ──────────────────── */}
+          {/* Permission groups */}
+          {RESOURCE_GROUPS.map((group) => (
+            <div key={group.label} className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {group.label}
+              </h3>
+              <div className="space-y-3">
+                {group.resources.map((resource) => {
+                  const actions = RESOURCE_ACTIONS[resource] || [];
+                  return (
+                    <Card key={resource}>
+                      <CardContent className="px-5 py-4">
+                        <p className="mb-3 text-sm font-medium">
+                          {RESOURCE_LABELS[resource] || resource}
+                        </p>
+                        <div className="space-y-2.5">
+                          {actions.map((action) => {
+                            const checked = isOwner
+                              ? true
+                              : hasRolePermission(selectedRole.id, selectedRole.name, resource, action);
+                            const disabled = isOwner || !editable;
+
+                            return (
+                              <div
+                                key={action}
+                                className="flex items-center justify-between"
+                              >
+                                <span className="text-sm text-muted-foreground">
+                                  {ACTION_LABELS[action] || action}
+                                </span>
+                                <Switch
+                                  checked={checked}
+                                  disabled={disabled}
+                                  onCheckedChange={() => {
+                                    if (!disabled) handleToggle(selectedRole, resource, action);
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Floating Save Bar */}
       {pendingCount > 0 && (
-        <div
-          ref={saveBarRef}
-          className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 px-6 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80"
-        >
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 px-6 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{pendingCount}</span>{' '}
@@ -403,9 +452,9 @@ export default function RolePermissionsPage() {
               </Button>
               <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
                 {saving ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Save className="size-3.5" />
+                  <Save className="h-3.5 w-3.5" />
                 )}
                 Save Changes
               </Button>
@@ -414,130 +463,5 @@ export default function RolePermissionsPage() {
         </div>
       )}
     </div>
-  );
-}
-
-// ─── Group Rows Sub-component ──────────────────────────────────
-
-interface GroupRowsProps {
-  group: ResourceGroup;
-  sortedRoles: Role[];
-  hasRolePermission: (roleId: string, roleName: string, resource: string, action: string) => boolean;
-  canEditRole: (role: Role) => boolean;
-  onToggle: (role: Role, resource: string, action: string) => void;
-  isLastGroup: boolean;
-}
-
-function GroupRows({
-  group,
-  sortedRoles,
-  hasRolePermission,
-  canEditRole,
-  onToggle,
-  isLastGroup,
-}: GroupRowsProps) {
-  return (
-    <>
-      {/* Group header row */}
-      <tr>
-        <td
-          colSpan={sortedRoles.length + 1}
-          className="bg-muted/40 px-4 py-2"
-        >
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {group.label}
-          </span>
-        </td>
-      </tr>
-
-      {/* Resource rows */}
-      {group.resources.map((resource, resIdx) => {
-        const actions = RESOURCE_ACTIONS[resource] || [];
-        const isLastResource = resIdx === group.resources.length - 1;
-
-        return (
-          <tr
-            key={resource}
-            className={
-              !isLastResource || !isLastGroup ? 'border-b border-border/50' : ''
-            }
-          >
-            {/* Resource name + action labels */}
-            <td className="sticky left-0 z-10 bg-background px-4 py-2.5 align-top">
-              <div className="font-medium text-foreground">
-                {RESOURCE_LABELS[resource] || resource}
-              </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                {actions.map((action) => (
-                  <span
-                    key={action}
-                    className="text-[11px] text-muted-foreground"
-                  >
-                    {ACTION_LABELS[action] || action}
-                  </span>
-                ))}
-              </div>
-            </td>
-
-            {/* Role cells */}
-            {sortedRoles.map((role) => {
-              const editable = canEditRole(role);
-              const isOwner = role.name === 'owner';
-
-              return (
-                <td
-                  key={role.id}
-                  className="px-3 py-2.5 align-top"
-                >
-                  <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
-                    {actions.map((action) => {
-                      const checked = isOwner
-                        ? true
-                        : hasRolePermission(role.id, role.name, resource, action);
-                      const disabled = isOwner || !editable;
-
-                      return (
-                        <div
-                          key={action}
-                          className="flex flex-col items-center gap-0.5"
-                          title={`${role.name}: ${resource}.${action}`}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            disabled={disabled}
-                            onCheckedChange={() => {
-                              if (!disabled) {
-                                onToggle(role, resource, action);
-                              }
-                            }}
-                            className={
-                              isOwner
-                                ? 'data-[state=checked]:bg-muted-foreground data-[state=checked]:border-muted-foreground'
-                                : ''
-                            }
-                          />
-                          <span className="text-[10px] leading-none text-muted-foreground">
-                            {ACTION_LABELS[action] || action}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </td>
-              );
-            })}
-          </tr>
-        );
-      })}
-
-      {/* Separator between groups */}
-      {!isLastGroup && (
-        <tr>
-          <td colSpan={sortedRoles.length + 1} className="p-0">
-            <Separator />
-          </td>
-        </tr>
-      )}
-    </>
   );
 }

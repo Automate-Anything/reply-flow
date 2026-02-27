@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useSession } from '@/contexts/SessionContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Camera, User, DoorOpen, Trash2 } from 'lucide-react';
+import { Loader2, Camera, User, DoorOpen, Trash2, KeyRound } from 'lucide-react';
 
 interface Profile {
   id: string;
@@ -47,6 +47,7 @@ export default function ProfileSettingsPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Password
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
@@ -129,8 +130,12 @@ export default function ProfileSettingsPage() {
   };
 
   const handleChangePassword = async () => {
+    if (!currentPassword) {
+      toast.error('Current password is required');
+      return;
+    }
     if (newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      toast.error('New password must be at least 6 characters');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -139,9 +144,20 @@ export default function ProfileSettingsPage() {
     }
     setSavingPassword(true);
     try {
+      // Verify current password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: profile?.email || '',
+        password: currentPassword,
+      });
+      if (signInError) {
+        toast.error('Current password is incorrect');
+        setSavingPassword(false);
+        return;
+      }
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
       toast.success('Password updated');
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
@@ -168,7 +184,7 @@ export default function ProfileSettingsPage() {
   };
 
   const nameChanged = profile && name.trim() !== (profile.full_name || '');
-  const passwordValid = newPassword.length >= 6 && newPassword === confirmPassword;
+  const passwordValid = currentPassword.length > 0 && newPassword.length >= 6 && newPassword === confirmPassword;
 
   if (loading) {
     return (
@@ -190,9 +206,9 @@ export default function ProfileSettingsPage() {
         </p>
       </div>
 
-      {/* Avatar */}
+      {/* Avatar & Info */}
       <Card>
-        <CardContent className="flex items-center gap-5 pt-6">
+        <CardContent className="flex items-center gap-5 pt-6 pb-6">
           <div className="relative">
             <Avatar className="h-16 w-16">
               {profile?.avatar_url && (
@@ -233,9 +249,16 @@ export default function ProfileSettingsPage() {
 
       {/* Display Name */}
       <Card>
-        <CardContent className="space-y-4 pt-6">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <User className="h-4 w-4" />
+            Display Name
+          </CardTitle>
+          <CardDescription>How your name appears to team members and in conversations.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="full-name">Display Name</Label>
+            <Label htmlFor="full-name">Full Name</Label>
             <Input
               id="full-name"
               value={name}
@@ -255,7 +278,24 @@ export default function ProfileSettingsPage() {
 
       {/* Change Password */}
       <Card>
-        <CardContent className="space-y-4 pt-6">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <KeyRound className="h-4 w-4" />
+            Change Password
+          </CardTitle>
+          <CardDescription>Update your password to keep your account secure.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="current-password">Current Password</Label>
+            <Input
+              id="current-password"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Enter current password"
+            />
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="new-password">New Password</Label>
             <Input
@@ -286,19 +326,20 @@ export default function ProfileSettingsPage() {
       </Card>
 
       {/* Leave / Delete Company */}
-      {(!isOwner || memberCount === 1) && (
+      {(
         <Card className="border-destructive/30">
-          <CardContent className="flex items-center justify-between pt-6">
-            <div>
-              <p className="text-sm font-medium">
-                {isOwner ? 'Delete Company' : 'Leave Company'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {isOwner
-                  ? 'You are the only member. This will permanently delete the company and all its data.'
-                  : 'You will lose access to all company data. This cannot be undone.'}
-              </p>
-            </div>
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base text-destructive">
+              {isOwner ? <Trash2 className="h-4 w-4" /> : <DoorOpen className="h-4 w-4" />}
+              {isOwner ? 'Delete Company' : 'Leave Company'}
+            </CardTitle>
+            <CardDescription>
+              {isOwner
+                ? 'You are the only member. This will permanently delete the company and all its data.'
+                : 'You will lose access to all company data. This cannot be undone.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-end">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">

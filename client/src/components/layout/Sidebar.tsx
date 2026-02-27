@@ -10,6 +10,7 @@ import {
   Bot,
   ChevronsUpDown,
   Settings,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -23,7 +24,7 @@ const navItems = [
   { to: '/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/contacts', icon: Users, label: 'Contacts' },
   { to: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', permission: { resource: 'knowledge_base', action: 'view' } },
-  { to: '/settings', icon: Settings, label: 'Settings', permission: { resource: 'company_settings', action: 'view' } },
+  { to: '/account', icon: Settings, label: 'Account', permission: { resource: 'company_settings', action: 'view' } },
 ];
 
 interface SidebarProps {
@@ -106,8 +107,13 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
                         ws.id === activeWorkspaceId && 'bg-accent font-medium'
                       )}
                     >
+                      {ws.id === activeWorkspaceId ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      ) : (
+                        <span className="h-3.5 w-3.5 shrink-0" />
+                      )}
                       <span className="truncate">{ws.name}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                         {ws.channel_count} ch
                       </span>
                     </button>

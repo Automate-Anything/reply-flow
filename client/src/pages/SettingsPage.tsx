@@ -19,13 +19,13 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className={`mx-auto space-y-6 p-6 ${activeTab === 'permissions' ? 'max-w-6xl' : 'max-w-4xl'}`}>
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
           <Settings className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Account Settings</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Manage your company, team, and workspaces.
           </p>
