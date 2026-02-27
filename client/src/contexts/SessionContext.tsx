@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import api from '@/lib/api';
 
 interface MeResponse {
-  user: { id: string; email: string; full_name: string; avatar_url: string | null };
+  profile: { id: string; email: string; full_name: string; avatar_url: string | null };
   company: { id: string; name: string; slug: string | null; logo_url: string | null } | null;
   role: { id: string; name: string; hierarchy_level: number } | null;
   permissions: string[];
@@ -24,6 +24,7 @@ interface SessionContextType {
   isAuthenticated: boolean;
   userId: string | null;
   fullName: string;
+  avatarUrl: string | null;
   companyId: string | null;
   companyName: string | null;
   role: string | null;
@@ -50,6 +51,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profileFullName, setProfileFullName] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -67,12 +70,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const fetchMe = useCallback(async () => {
     try {
       const { data } = await api.get<MeResponse>('/me');
+      setProfileFullName(data.profile?.full_name ?? null);
+      setAvatarUrl(data.profile?.avatar_url ?? null);
       setCompanyId(data.company?.id ?? null);
       setCompanyName(data.company?.name ?? null);
       setRole(data.role?.name ?? null);
       setPermissions(new Set(data.permissions));
     } catch {
       // User may not have a company yet (invitation flow)
+      setProfileFullName(null);
+      setAvatarUrl(null);
       setCompanyId(null);
       setCompanyName(null);
       setRole(null);
@@ -86,6 +93,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(CACHE_KEY, JSON.stringify(newSession));
     } else {
       localStorage.removeItem(CACHE_KEY);
+      setProfileFullName(null);
+      setAvatarUrl(null);
       setCompanyId(null);
       setCompanyName(null);
       setRole(null);
@@ -152,10 +161,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!session,
     userId: user?.id ?? null,
     fullName:
+      profileFullName ||
       user?.user_metadata?.full_name ||
       user?.user_metadata?.name ||
       user?.email ||
       '',
+    avatarUrl,
     companyId,
     companyName,
     role,

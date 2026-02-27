@@ -7,6 +7,89 @@ const router = Router();
 router.use(requireAuth);
 
 // ────────────────────────────────────────────────
+// CREATE COMPANY (for users with no company)
+// ────────────────────────────────────────────────
+router.post('/create', async (req, res, next) => {
+  try {
+    const userId = req.userId!;
+
+    // Check if user already has a company
+    const { data: existing } = await supabaseAdmin
+      .from('company_members')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (existing) {
+      res.status(409).json({ error: 'You already belong to a company' });
+      return;
+    }
+
+    // Get user info for company name
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('full_name, email')
+      .eq('id', userId)
+      .single();
+
+    const name = user?.full_name
+      ? `${user.full_name}'s Company`
+      : `${user?.email}'s Company`;
+
+    // Get owner role
+    const { data: ownerRole } = await supabaseAdmin
+      .from('roles')
+      .select('id')
+      .eq('name', 'owner')
+      .single();
+
+    if (!ownerRole) {
+      res.status(500).json({ error: 'Owner role not found' });
+      return;
+    }
+
+    // Create company
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .insert({ name })
+      .select()
+      .single();
+
+    if (companyError) throw companyError;
+
+    // Create membership
+    const { error: memberError } = await supabaseAdmin
+      .from('company_members')
+      .insert({
+        company_id: company.id,
+        user_id: userId,
+        role_id: ownerRole.id,
+      });
+
+    if (memberError) throw memberError;
+
+    // Update user's company_id
+    const { error: userError } = await supabaseAdmin
+      .from('users')
+      .update({ company_id: company.id })
+      .eq('id', userId);
+
+    if (userError) throw userError;
+
+    // Seed default permissions
+    const { error: seedError } = await supabaseAdmin.rpc('seed_default_permissions', {
+      p_company_id: company.id,
+    });
+
+    if (seedError) throw seedError;
+
+    res.json({ company });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
 // GET COMPANY INFO
 // ────────────────────────────────────────────────
 router.get('/', requirePermission('company_settings', 'view'), async (req, res, next) => {

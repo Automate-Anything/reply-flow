@@ -4,6 +4,39 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { requirePermission } from '../middleware/permissions.js';
 
 const router = Router();
+
+// ────────────────────────────────────────────────
+// PREVIEW INVITATION (by token — public, no auth required)
+// ────────────────────────────────────────────────
+router.get('/invite-preview/:token', async (req, res, next) => {
+  try {
+    const { token } = req.params;
+
+    const { data: invitation, error } = await supabaseAdmin
+      .from('invitations')
+      .select('id, email, expires_at, accepted_at, companies:company_id(name), roles:role_id(name)')
+      .eq('token', token)
+      .single();
+
+    if (error || !invitation) {
+      res.status(404).json({ error: 'Invitation not found' });
+      return;
+    }
+
+    res.json({
+      invitation: {
+        email: invitation.email,
+        expires_at: invitation.expires_at,
+        accepted_at: invitation.accepted_at,
+        company_name: (invitation.companies as unknown as { name: string })?.name,
+        role_name: (invitation.roles as unknown as { name: string })?.name,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.use(requireAuth);
 
 // ────────────────────────────────────────────────
@@ -111,38 +144,6 @@ router.get('/invite-link/:invitationId', requirePermission('team', 'invite'), as
 });
 
 // ────────────────────────────────────────────────
-// PREVIEW INVITATION (by token — no permission needed, just auth)
-// ────────────────────────────────────────────────
-router.get('/invite-preview/:token', async (req, res, next) => {
-  try {
-    const { token } = req.params;
-
-    const { data: invitation, error } = await supabaseAdmin
-      .from('invitations')
-      .select('id, email, expires_at, accepted_at, companies:company_id(name), roles:role_id(name)')
-      .eq('token', token)
-      .single();
-
-    if (error || !invitation) {
-      res.status(404).json({ error: 'Invitation not found' });
-      return;
-    }
-
-    res.json({
-      invitation: {
-        email: invitation.email,
-        expires_at: invitation.expires_at,
-        accepted_at: invitation.accepted_at,
-        company_name: (invitation.companies as unknown as { name: string })?.name,
-        role_name: (invitation.roles as unknown as { name: string })?.name,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ────────────────────────────────────────────────
 // ACCEPT INVITATION
 // ────────────────────────────────────────────────
 router.post('/accept-invite', async (req, res, next) => {
@@ -164,6 +165,20 @@ router.post('/accept-invite', async (req, res, next) => {
 
     if (invError || !invitation) {
       res.status(404).json({ error: 'Invitation not found' });
+      return;
+    }
+
+    // Verify the accepting user's email matches the invitation
+    const { data: acceptingUser } = await supabaseAdmin
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (!acceptingUser || acceptingUser.email !== invitation.email) {
+      res.status(403).json({
+        error: `This invitation was sent to ${invitation.email}. Please sign in with that email address.`,
+      });
       return;
     }
 
@@ -322,6 +337,90 @@ router.put('/members/:memberId/role', requirePermission('team', 'edit_role'), as
 });
 
 // ────────────────────────────────────────────────
+// LEAVE COMPANY (owners allowed only if sole member)
+// ────────────────────────────────────────────────
+router.post('/leave', async (req, res, next) => {
+  try {
+    const userId = req.userId!;
+    const companyId = req.companyId;
+
+    if (!companyId) {
+      res.status(400).json({ error: 'You are not a member of any company' });
+      return;
+    }
+
+    // Get current membership with role
+    const { data: membership, error: memberError } = await supabaseAdmin
+      .from('company_members')
+      .select('id, roles:role_id(name)')
+      .eq('user_id', userId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (memberError || !membership) {
+      res.status(404).json({ error: 'Membership not found' });
+      return;
+    }
+
+    const roleName = (membership.roles as unknown as { name: string }).name;
+
+    if (roleName === 'owner') {
+      // Owners can only leave if they're the sole member (dissolves the company)
+      const { count } = await supabaseAdmin
+        .from('company_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId);
+
+      if ((count ?? 0) > 1) {
+        res.status(403).json({ error: 'Owners cannot leave while other members exist. Transfer ownership or remove members first.' });
+        return;
+      }
+
+      // Sole owner — remove membership, clear user, delete company (cascade cleans up)
+      const { error: deleteError } = await supabaseAdmin
+        .from('company_members')
+        .delete()
+        .eq('id', membership.id);
+
+      if (deleteError) throw deleteError;
+
+      const { error: updateError } = await supabaseAdmin
+        .from('users')
+        .update({ company_id: null })
+        .eq('id', userId);
+
+      if (updateError) throw updateError;
+
+      const { error: companyDeleteError } = await supabaseAdmin
+        .from('companies')
+        .delete()
+        .eq('id', companyId);
+
+      if (companyDeleteError) throw companyDeleteError;
+    } else {
+      // Non-owners can always leave
+      const { error: deleteError } = await supabaseAdmin
+        .from('company_members')
+        .delete()
+        .eq('id', membership.id);
+
+      if (deleteError) throw deleteError;
+
+      const { error: updateError } = await supabaseAdmin
+        .from('users')
+        .update({ company_id: null })
+        .eq('id', userId);
+
+      if (updateError) throw updateError;
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
 // REMOVE MEMBER
 // ────────────────────────────────────────────────
 router.delete('/members/:memberId', requirePermission('team', 'remove'), async (req, res, next) => {
@@ -404,39 +503,16 @@ router.get('/invitations', requirePermission('team', 'view'), async (req, res, n
     const { data: existingUsers } = emails.length
       ? await supabaseAdmin
           .from('users')
-          .select('id, email')
+          .select('email')
           .in('email', emails)
       : { data: [] };
 
-    const emailToUserId = new Map<string, string>();
-    for (const u of existingUsers || []) {
-      emailToUserId.set(u.email, u.id);
-    }
-
-    // For users that exist, check email confirmation via auth admin API
-    const confirmedSet = new Set<string>();
-    await Promise.all(
-      Array.from(emailToUserId.entries()).map(async ([email, uid]) => {
-        try {
-          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(uid);
-          if (authUser?.user?.email_confirmed_at) {
-            confirmedSet.add(email);
-          }
-        } catch {
-          // If lookup fails, treat as unconfirmed
-        }
-      })
-    );
+    const existingEmails = new Set((existingUsers || []).map((u: any) => u.email));
 
     const enriched = invitations.map((inv: any) => {
-      let recipient_status: 'invite_sent' | 'account_unconfirmed' | 'account_confirmed';
-      if (!emailToUserId.has(inv.email)) {
-        recipient_status = 'invite_sent';
-      } else if (confirmedSet.has(inv.email)) {
-        recipient_status = 'account_confirmed';
-      } else {
-        recipient_status = 'account_unconfirmed';
-      }
+      const recipient_status: 'invite_sent' | 'signed_up' = existingEmails.has(inv.email)
+        ? 'signed_up'
+        : 'invite_sent';
       return { ...inv, recipient_status };
     });
 

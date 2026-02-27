@@ -8,6 +8,7 @@ import {
   ChevronRight,
   MessageSquareText,
   UserCog,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/contacts', icon: Users, label: 'Contacts' },
   { to: '/channels', icon: Smartphone, label: 'Channels' },
   { to: '/team', icon: UserCog, label: 'Team', permission: { resource: 'team', action: 'view' } },
+  { to: '/settings/company', icon: Building2, label: 'Company', permission: { resource: 'company_settings', action: 'view' } },
 ];
 
 interface SidebarProps {

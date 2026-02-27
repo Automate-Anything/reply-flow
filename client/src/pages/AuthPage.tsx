@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/contexts/SessionContext';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Eye, EyeOff, Loader2, MessageSquareText } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Eye, EyeOff, Loader2, MessageSquareText, Building2 } from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+interface InviteContext {
+  company_name: string;
+  role_name: string;
+  email: string;
+}
 
 type AuthTab = 'signin' | 'signup' | 'forgot';
 
@@ -17,6 +27,19 @@ export default function AuthPage() {
   const { isAuthenticated } = useSession();
   const isRecovery = searchParams.get('type') === 'recovery';
   const redirectTo = searchParams.get('redirect');
+
+  // Extract invite token from redirect path like /invite/abc123
+  const inviteToken = redirectTo?.match(/^\/invite\/(.+)$/)?.[1] || null;
+  const [inviteCtx, setInviteCtx] = useState<InviteContext | null>(null);
+
+  // Fetch invite preview (public endpoint, no auth needed)
+  useEffect(() => {
+    if (!inviteToken) return;
+    axios
+      .get(`${API_URL}/api/team/invite-preview/${inviteToken}`)
+      .then(({ data }) => setInviteCtx(data.invitation))
+      .catch(() => {}); // Silently ignore — context is optional
+  }, [inviteToken]);
 
   // Persist redirect so it survives OAuth round-trip
   useEffect(() => {
@@ -72,12 +95,17 @@ export default function AuthPage() {
     return null;
   };
 
+  // Build callback URL with redirect param baked in so it survives cross-device / new-tab
+  const callbackUrl = redirectTo
+    ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`
+    : `${window.location.origin}/auth/callback`;
+
   const handleGoogleOAuth = async () => {
     clearMessages();
     setOauthLoading(true);
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: callbackUrl },
     });
     if (err) {
       setError(err.message);
@@ -117,14 +145,14 @@ export default function AuthPage() {
       password: signUpPassword,
       options: {
         data: { full_name: `${firstName} ${lastName}`.trim() },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: callbackUrl,
       },
     });
     if (err) {
       setError(err.message);
-    } else {
-      setMessage('Check your email for a confirmation link.');
     }
+    // With email confirmation disabled, signup auto-logs in.
+    // The isAuthenticated effect will handle redirect.
     setLoading(false);
   };
 
@@ -193,6 +221,25 @@ export default function AuthPage() {
           </p>
         </CardHeader>
         <CardContent>
+          {inviteCtx && (
+            <div className="mb-4 flex items-center gap-3 rounded-lg border bg-muted/50 px-4 py-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <Building2 className="h-4 w-4 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  You've been invited to join{' '}
+                  <span className="font-semibold">{inviteCtx.company_name}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Sign in or create an account to continue as{' '}
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0 align-middle">
+                    {inviteCtx.role_name}
+                  </Badge>
+                </p>
+              </div>
+            </div>
+          )}
           {error && (
             <div className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}

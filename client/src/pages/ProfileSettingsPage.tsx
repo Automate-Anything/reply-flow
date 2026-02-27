@@ -1,0 +1,328 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '@/lib/api';
+import { supabase } from '@/lib/supabase';
+import { useSession } from '@/contexts/SessionContext';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Loader2, Camera, User, DoorOpen } from 'lucide-react';
+
+interface Profile {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url: string | null;
+}
+
+export default function ProfileSettingsPage() {
+  const navigate = useNavigate();
+  const { role, companyName, refresh } = useSession();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isOwner = role === 'owner';
+
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Name editing
+  const [name, setName] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
+  // Avatar uploading
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Password
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  // Leave company
+  const [leaving, setLeaving] = useState(false);
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      const { data } = await api.get('/me');
+      setProfile(data.profile);
+      setName(data.profile.full_name || '');
+    } catch {
+      toast.error('Failed to load profile');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  const initials = (profile?.full_name || '')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  const handleSaveName = async () => {
+    if (!name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+    setSavingName(true);
+    try {
+      const { data } = await api.put('/me', { full_name: name.trim() });
+      setProfile(data.profile);
+      await refresh();
+      toast.success('Name updated');
+    } catch {
+      toast.error('Failed to update name');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image must be under 2MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const { data } = await api.post('/me/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setProfile(data.profile);
+      await refresh();
+      toast.success('Avatar updated');
+    } catch {
+      toast.error('Failed to upload avatar');
+    } finally {
+      setUploadingAvatar(false);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast.success('Password updated');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Failed to update password';
+      toast.error(msg);
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const handleLeave = async () => {
+    setLeaving(true);
+    try {
+      await api.post('/team/leave');
+      await refresh();
+      navigate('/onboarding', { replace: true });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to leave company';
+      toast.error(msg);
+      setLeaving(false);
+    }
+  };
+
+  const nameChanged = profile && name.trim() !== (profile.full_name || '');
+  const passwordValid = newPassword.length >= 6 && newPassword === confirmPassword;
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6 p-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-40 rounded-xl" />
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-40 rounded-xl" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6 p-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Profile Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage your personal information.
+        </p>
+      </div>
+
+      {/* Avatar */}
+      <Card>
+        <CardContent className="flex items-center gap-5 pt-6">
+          <div className="relative">
+            <Avatar className="h-16 w-16">
+              {profile?.avatar_url && (
+                <AvatarImage src={profile.avatar_url} alt={profile.full_name} />
+              )}
+              <AvatarFallback className="text-lg">
+                {initials || <User size={24} />}
+              </AvatarFallback>
+            </Avatar>
+            {uploadingAvatar && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+                <Loader2 className="h-5 w-5 animate-spin text-white" />
+              </div>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">{profile?.full_name || 'No name set'}</p>
+            <p className="text-xs text-muted-foreground">{profile?.email}</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+            >
+              <Camera className="mr-1.5 h-3.5 w-3.5" />
+              Change Avatar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Display Name */}
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="full-name">Display Name</Label>
+            <Input
+              id="full-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              maxLength={100}
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveName} disabled={savingName || !nameChanged}>
+              {savingName && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Name
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Change Password */}
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="new-password">New Password</Label>
+            <Input
+              id="new-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 6 characters"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm-password">Confirm Password</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repeat new password"
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleChangePassword} disabled={savingPassword || !passwordValid}>
+              {savingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Change Password
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Leave Company */}
+      {!isOwner && (
+        <Card className="border-destructive/30">
+          <CardContent className="flex items-center justify-between pt-6">
+            <div>
+              <p className="text-sm font-medium">Leave Company</p>
+              <p className="text-xs text-muted-foreground">
+                You will lose access to all company data. This cannot be undone.
+              </p>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <DoorOpen className="mr-1.5 h-3.5 w-3.5" />
+                  Leave
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Leave {companyName || 'this company'}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You will be removed from the company and lose access to all its data.
+                    You'll need a new invitation to rejoin.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleLeave}
+                    disabled={leaving}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {leaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Leave Company
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

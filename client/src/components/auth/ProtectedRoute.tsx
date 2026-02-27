@@ -2,7 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 
 export default function ProtectedRoute() {
-  const { isAuthenticated, loading } = useSession();
+  const { isAuthenticated, loading, companyId } = useSession();
 
   if (loading) {
     return (
@@ -14,6 +14,11 @@ export default function ProtectedRoute() {
 
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Authenticated but no company — must complete onboarding
+  if (!companyId) {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return <Outlet />;

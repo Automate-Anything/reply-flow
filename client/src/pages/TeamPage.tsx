@@ -83,7 +83,7 @@ interface Invitation {
   expires_at: string;
   created_at: string;
   roles: { name: string };
-  recipient_status: 'invite_sent' | 'account_unconfirmed' | 'account_confirmed';
+  recipient_status: 'invite_sent' | 'signed_up';
 }
 
 // ---------------------------------------------------------------------------
@@ -124,10 +124,8 @@ function recipientStatusConfig(status: Invitation['recipient_status']) {
   switch (status) {
     case 'invite_sent':
       return { label: 'Invite Sent', dot: 'bg-muted-foreground' };
-    case 'account_unconfirmed':
-      return { label: 'Unconfirmed', dot: 'bg-amber-500' };
-    case 'account_confirmed':
-      return { label: 'Confirmed', dot: 'bg-green-500' };
+    case 'signed_up':
+      return { label: 'Signed Up', dot: 'bg-green-500' };
   }
 }
 
@@ -244,11 +242,16 @@ export default function TeamPage() {
 
     setInviting(true);
     try {
-      await api.post('/team/invite', {
+      const { data: invData } = await api.post<{ invitation: { id: string } }>('/team/invite', {
         email: inviteEmail.trim(),
         role_id: inviteRoleId,
       });
-      toast.success(`Invitation sent to ${inviteEmail.trim()}`);
+      // Immediately fetch and copy the invite link
+      const { data: linkData } = await api.get<{ link: string }>(
+        `/team/invite-link/${invData.invitation.id}`
+      );
+      await navigator.clipboard.writeText(linkData.link);
+      toast.success('Invite link copied to clipboard');
       setInviteEmail('');
       setInviteRoleId('');
       fetchInvitations();
@@ -567,9 +570,9 @@ export default function TeamPage() {
                   {inviting ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    <UserPlus className="size-4" />
+                    <Copy className="size-4" />
                   )}
-                  Send Invite
+                  Copy Invite Link
                 </Button>
               </div>
             </CardContent>

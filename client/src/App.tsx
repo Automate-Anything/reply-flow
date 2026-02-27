@@ -14,7 +14,9 @@ import SettingsPage from '@/pages/SettingsPage';
 import TeamPage from '@/pages/TeamPage';
 import RolePermissionsPage from '@/pages/RolePermissionsPage';
 import CompanySettingsPage from '@/pages/CompanySettingsPage';
+import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import AcceptInvitePage from '@/pages/AcceptInvitePage';
+import OnboardingPage from '@/pages/OnboardingPage';
 
 function App() {
   return (
@@ -26,6 +28,7 @@ function App() {
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/invite/:token" element={<AcceptInvitePage />} />
+              <Route path="/onboarding" element={<OnboardingPage />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<AppLayout />}>
                   <Route index element={<DashboardPage />} />
@@ -35,6 +38,7 @@ function App() {
                   <Route path="team" element={<TeamPage />} />
                   <Route path="team/permissions" element={<RolePermissionsPage />} />
                   <Route path="settings/company" element={<CompanySettingsPage />} />
+                  <Route path="settings/profile" element={<ProfileSettingsPage />} />
                 </Route>
               </Route>
             </Routes>

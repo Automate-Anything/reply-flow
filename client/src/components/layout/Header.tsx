@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/lib/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Moon, Sun, LogOut, Loader2, User } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, Loader2, User, Building2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,17 +12,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface HeaderProps {
   onMenuClick?: () => void;
 }
 
 export default function Header({ onMenuClick }: HeaderProps) {
-  const { fullName, companyName } = useSession();
+  const { fullName, avatarUrl, companyName, hasPermission } = useSession();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const canViewCompanySettings = hasPermission('company_settings', 'view');
 
   const pageTitle = (() => {
     switch (location.pathname) {
@@ -40,6 +41,8 @@ export default function Header({ onMenuClick }: HeaderProps) {
         return 'Role Permissions';
       case '/settings/company':
         return 'Company Settings';
+      case '/settings/profile':
+        return 'Profile Settings';
       default:
         return '';
     }
@@ -93,6 +96,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
               <Avatar className="h-7 w-7 ring-2 ring-primary/20">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName} />}
                 <AvatarFallback className="text-xs">
                   {initials || <User size={14} />}
                 </AvatarFallback>
@@ -103,10 +107,16 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => navigate('/channels')}>
+            <DropdownMenuItem onClick={() => navigate('/settings/profile')}>
               <User className="mr-2 h-4 w-4" />
-              Settings
+              Profile
             </DropdownMenuItem>
+            {canViewCompanySettings && (
+              <DropdownMenuItem onClick={() => navigate('/settings/company')}>
+                <Building2 className="mr-2 h-4 w-4" />
+                Company Settings
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} disabled={signingOut}>
               {signingOut ? (
