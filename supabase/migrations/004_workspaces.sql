@@ -14,7 +14,7 @@ CREATE TABLE public.workspaces (
   company_id  UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
   description TEXT,
-  created_by  UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_by  UUID REFERENCES public.users(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(company_id, name)
@@ -38,7 +38,7 @@ CREATE TABLE public.workspace_ai_profiles (
   is_enabled    BOOLEAN DEFAULT FALSE,
   profile_data  JSONB DEFAULT '{}',
   max_tokens    INTEGER DEFAULT 500,
-  created_by    UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_by    UUID REFERENCES public.users(id) ON DELETE SET NULL,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(workspace_id)
@@ -214,7 +214,7 @@ CREATE POLICY "Company members can view channel kb assignments"
   USING (
     EXISTS (
       SELECT 1 FROM public.whatsapp_channels wc
-      WHERE wc.id = channel_id
+      WHERE wc.id = channel_kb_assignments.channel_id
         AND wc.company_id = public.get_user_company_id()
     )
     AND public.has_permission('knowledge_base', 'view')
@@ -225,7 +225,7 @@ CREATE POLICY "Authorized users can create channel kb assignments"
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM public.whatsapp_channels wc
-      WHERE wc.id = channel_id
+      WHERE wc.id = channel_kb_assignments.channel_id
         AND wc.company_id = public.get_user_company_id()
     )
     AND public.has_permission('knowledge_base', 'edit')
@@ -236,7 +236,7 @@ CREATE POLICY "Authorized users can delete channel kb assignments"
   USING (
     EXISTS (
       SELECT 1 FROM public.whatsapp_channels wc
-      WHERE wc.id = channel_id
+      WHERE wc.id = channel_kb_assignments.channel_id
         AND wc.company_id = public.get_user_company_id()
     )
     AND public.has_permission('knowledge_base', 'edit')
@@ -246,195 +246,201 @@ CREATE POLICY "Authorized users can delete channel kb assignments"
 -- STEP 9: ADD WORKSPACE PERMISSIONS TO SEED FUNCTION
 -- ============================================================
 
--- Add workspace permissions to existing seed_default_permissions function
--- We need to insert rows for existing companies that have already been seeded
+-- Add workspace permissions for existing companies
 DO $$
 DECLARE
   comp RECORD;
-  role_rec RECORD;
+  v_owner_id UUID;
+  v_admin_id UUID;
+  v_manager_id UUID;
+  v_staff_id UUID;
+  v_viewer_id UUID;
 BEGIN
-  FOR comp IN SELECT id FROM public.companies LOOP
-    FOR role_rec IN
-      SELECT r.id, r.name FROM public.roles r WHERE r.company_id = comp.id
-    LOOP
-      -- owner, admin, manager get full workspace access
-      IF role_rec.name IN ('owner', 'admin', 'manager') THEN
-        INSERT INTO public.role_permissions (company_id, role_id, resource, action)
-        VALUES
-          (comp.id, role_rec.id, 'workspaces', 'view'),
-          (comp.id, role_rec.id, 'workspaces', 'create'),
-          (comp.id, role_rec.id, 'workspaces', 'edit'),
-          (comp.id, role_rec.id, 'workspaces', 'delete')
-        ON CONFLICT DO NOTHING;
-      END IF;
+  SELECT id INTO v_owner_id FROM public.roles WHERE name = 'owner';
+  SELECT id INTO v_admin_id FROM public.roles WHERE name = 'admin';
+  SELECT id INTO v_manager_id FROM public.roles WHERE name = 'manager';
+  SELECT id INTO v_staff_id FROM public.roles WHERE name = 'staff';
+  SELECT id INTO v_viewer_id FROM public.roles WHERE name = 'viewer';
 
-      -- staff gets view only
-      IF role_rec.name = 'staff' THEN
-        INSERT INTO public.role_permissions (company_id, role_id, resource, action)
-        VALUES
-          (comp.id, role_rec.id, 'workspaces', 'view')
-        ON CONFLICT DO NOTHING;
-      END IF;
-    END LOOP;
+  FOR comp IN SELECT id FROM public.companies LOOP
+    INSERT INTO public.role_permissions (company_id, role_id, resource, action)
+    VALUES
+      -- owner, admin, manager: full workspace access
+      (comp.id, v_owner_id, 'workspaces', 'view'),
+      (comp.id, v_owner_id, 'workspaces', 'create'),
+      (comp.id, v_owner_id, 'workspaces', 'edit'),
+      (comp.id, v_owner_id, 'workspaces', 'delete'),
+      (comp.id, v_admin_id, 'workspaces', 'view'),
+      (comp.id, v_admin_id, 'workspaces', 'create'),
+      (comp.id, v_admin_id, 'workspaces', 'edit'),
+      (comp.id, v_admin_id, 'workspaces', 'delete'),
+      (comp.id, v_manager_id, 'workspaces', 'view'),
+      (comp.id, v_manager_id, 'workspaces', 'create'),
+      (comp.id, v_manager_id, 'workspaces', 'edit'),
+      (comp.id, v_manager_id, 'workspaces', 'delete'),
+      -- staff + viewer: view only
+      (comp.id, v_staff_id, 'workspaces', 'view'),
+      (comp.id, v_viewer_id, 'workspaces', 'view')
+    ON CONFLICT DO NOTHING;
   END LOOP;
 END $$;
 
--- Update the seed function for future companies
+-- Update the seed function for future companies (matches original pattern from 003)
 CREATE OR REPLACE FUNCTION public.seed_default_permissions(p_company_id UUID)
 RETURNS VOID AS $$
 DECLARE
-  v_role RECORD;
+  v_owner_id UUID;
+  v_admin_id UUID;
+  v_manager_id UUID;
+  v_staff_id UUID;
+  v_viewer_id UUID;
 BEGIN
-  FOR v_role IN
-    SELECT id, name FROM public.roles WHERE company_id = p_company_id
-  LOOP
-    IF v_role.name = 'owner' THEN
-      INSERT INTO public.role_permissions (company_id, role_id, resource, action) VALUES
-        (p_company_id, v_role.id, 'conversations', 'view'),
-        (p_company_id, v_role.id, 'conversations', 'create'),
-        (p_company_id, v_role.id, 'conversations', 'edit'),
-        (p_company_id, v_role.id, 'conversations', 'delete'),
-        (p_company_id, v_role.id, 'messages', 'view'),
-        (p_company_id, v_role.id, 'messages', 'create'),
-        (p_company_id, v_role.id, 'contacts', 'view'),
-        (p_company_id, v_role.id, 'contacts', 'create'),
-        (p_company_id, v_role.id, 'contacts', 'edit'),
-        (p_company_id, v_role.id, 'contacts', 'delete'),
-        (p_company_id, v_role.id, 'contact_notes', 'view'),
-        (p_company_id, v_role.id, 'contact_notes', 'create'),
-        (p_company_id, v_role.id, 'contact_notes', 'edit'),
-        (p_company_id, v_role.id, 'contact_notes', 'delete'),
-        (p_company_id, v_role.id, 'channels', 'view'),
-        (p_company_id, v_role.id, 'channels', 'create'),
-        (p_company_id, v_role.id, 'channels', 'edit'),
-        (p_company_id, v_role.id, 'channels', 'delete'),
-        (p_company_id, v_role.id, 'ai_settings', 'view'),
-        (p_company_id, v_role.id, 'ai_settings', 'edit'),
-        (p_company_id, v_role.id, 'knowledge_base', 'view'),
-        (p_company_id, v_role.id, 'knowledge_base', 'create'),
-        (p_company_id, v_role.id, 'knowledge_base', 'edit'),
-        (p_company_id, v_role.id, 'knowledge_base', 'delete'),
-        (p_company_id, v_role.id, 'labels', 'view'),
-        (p_company_id, v_role.id, 'labels', 'create'),
-        (p_company_id, v_role.id, 'labels', 'edit'),
-        (p_company_id, v_role.id, 'labels', 'delete'),
-        (p_company_id, v_role.id, 'team', 'view'),
-        (p_company_id, v_role.id, 'team', 'invite'),
-        (p_company_id, v_role.id, 'team', 'edit'),
-        (p_company_id, v_role.id, 'team', 'remove'),
-        (p_company_id, v_role.id, 'company_settings', 'view'),
-        (p_company_id, v_role.id, 'company_settings', 'edit'),
-        (p_company_id, v_role.id, 'roles', 'view'),
-        (p_company_id, v_role.id, 'roles', 'edit'),
-        (p_company_id, v_role.id, 'workspaces', 'view'),
-        (p_company_id, v_role.id, 'workspaces', 'create'),
-        (p_company_id, v_role.id, 'workspaces', 'edit'),
-        (p_company_id, v_role.id, 'workspaces', 'delete')
-      ON CONFLICT DO NOTHING;
+  SELECT id INTO v_owner_id FROM public.roles WHERE name = 'owner';
+  SELECT id INTO v_admin_id FROM public.roles WHERE name = 'admin';
+  SELECT id INTO v_manager_id FROM public.roles WHERE name = 'manager';
+  SELECT id INTO v_staff_id FROM public.roles WHERE name = 'staff';
+  SELECT id INTO v_viewer_id FROM public.roles WHERE name = 'viewer';
 
-    ELSIF v_role.name = 'admin' THEN
-      INSERT INTO public.role_permissions (company_id, role_id, resource, action) VALUES
-        (p_company_id, v_role.id, 'conversations', 'view'),
-        (p_company_id, v_role.id, 'conversations', 'create'),
-        (p_company_id, v_role.id, 'conversations', 'edit'),
-        (p_company_id, v_role.id, 'conversations', 'delete'),
-        (p_company_id, v_role.id, 'messages', 'view'),
-        (p_company_id, v_role.id, 'messages', 'create'),
-        (p_company_id, v_role.id, 'contacts', 'view'),
-        (p_company_id, v_role.id, 'contacts', 'create'),
-        (p_company_id, v_role.id, 'contacts', 'edit'),
-        (p_company_id, v_role.id, 'contacts', 'delete'),
-        (p_company_id, v_role.id, 'contact_notes', 'view'),
-        (p_company_id, v_role.id, 'contact_notes', 'create'),
-        (p_company_id, v_role.id, 'contact_notes', 'edit'),
-        (p_company_id, v_role.id, 'contact_notes', 'delete'),
-        (p_company_id, v_role.id, 'channels', 'view'),
-        (p_company_id, v_role.id, 'channels', 'create'),
-        (p_company_id, v_role.id, 'channels', 'edit'),
-        (p_company_id, v_role.id, 'channels', 'delete'),
-        (p_company_id, v_role.id, 'ai_settings', 'view'),
-        (p_company_id, v_role.id, 'ai_settings', 'edit'),
-        (p_company_id, v_role.id, 'knowledge_base', 'view'),
-        (p_company_id, v_role.id, 'knowledge_base', 'create'),
-        (p_company_id, v_role.id, 'knowledge_base', 'edit'),
-        (p_company_id, v_role.id, 'knowledge_base', 'delete'),
-        (p_company_id, v_role.id, 'labels', 'view'),
-        (p_company_id, v_role.id, 'labels', 'create'),
-        (p_company_id, v_role.id, 'labels', 'edit'),
-        (p_company_id, v_role.id, 'labels', 'delete'),
-        (p_company_id, v_role.id, 'team', 'view'),
-        (p_company_id, v_role.id, 'team', 'invite'),
-        (p_company_id, v_role.id, 'team', 'edit'),
-        (p_company_id, v_role.id, 'team', 'remove'),
-        (p_company_id, v_role.id, 'company_settings', 'view'),
-        (p_company_id, v_role.id, 'company_settings', 'edit'),
-        (p_company_id, v_role.id, 'roles', 'view'),
-        (p_company_id, v_role.id, 'roles', 'edit'),
-        (p_company_id, v_role.id, 'workspaces', 'view'),
-        (p_company_id, v_role.id, 'workspaces', 'create'),
-        (p_company_id, v_role.id, 'workspaces', 'edit'),
-        (p_company_id, v_role.id, 'workspaces', 'delete')
-      ON CONFLICT DO NOTHING;
+  -- Delete existing permissions for this company (for reset)
+  DELETE FROM public.role_permissions WHERE company_id = p_company_id;
 
-    ELSIF v_role.name = 'manager' THEN
-      INSERT INTO public.role_permissions (company_id, role_id, resource, action) VALUES
-        (p_company_id, v_role.id, 'conversations', 'view'),
-        (p_company_id, v_role.id, 'conversations', 'create'),
-        (p_company_id, v_role.id, 'conversations', 'edit'),
-        (p_company_id, v_role.id, 'messages', 'view'),
-        (p_company_id, v_role.id, 'messages', 'create'),
-        (p_company_id, v_role.id, 'contacts', 'view'),
-        (p_company_id, v_role.id, 'contacts', 'create'),
-        (p_company_id, v_role.id, 'contacts', 'edit'),
-        (p_company_id, v_role.id, 'contact_notes', 'view'),
-        (p_company_id, v_role.id, 'contact_notes', 'create'),
-        (p_company_id, v_role.id, 'contact_notes', 'edit'),
-        (p_company_id, v_role.id, 'channels', 'view'),
-        (p_company_id, v_role.id, 'channels', 'create'),
-        (p_company_id, v_role.id, 'channels', 'edit'),
-        (p_company_id, v_role.id, 'ai_settings', 'view'),
-        (p_company_id, v_role.id, 'ai_settings', 'edit'),
-        (p_company_id, v_role.id, 'knowledge_base', 'view'),
-        (p_company_id, v_role.id, 'knowledge_base', 'create'),
-        (p_company_id, v_role.id, 'knowledge_base', 'edit'),
-        (p_company_id, v_role.id, 'labels', 'view'),
-        (p_company_id, v_role.id, 'labels', 'create'),
-        (p_company_id, v_role.id, 'labels', 'edit'),
-        (p_company_id, v_role.id, 'team', 'view'),
-        (p_company_id, v_role.id, 'workspaces', 'view'),
-        (p_company_id, v_role.id, 'workspaces', 'create'),
-        (p_company_id, v_role.id, 'workspaces', 'edit'),
-        (p_company_id, v_role.id, 'workspaces', 'delete')
-      ON CONFLICT DO NOTHING;
+  INSERT INTO public.role_permissions (company_id, role_id, resource, action) VALUES
+    -- Owner: full access to everything
+    (p_company_id, v_owner_id, 'conversations', 'view'),
+    (p_company_id, v_owner_id, 'conversations', 'create'),
+    (p_company_id, v_owner_id, 'conversations', 'edit'),
+    (p_company_id, v_owner_id, 'conversations', 'delete'),
+    (p_company_id, v_owner_id, 'messages', 'view'),
+    (p_company_id, v_owner_id, 'messages', 'create'),
+    (p_company_id, v_owner_id, 'contacts', 'view'),
+    (p_company_id, v_owner_id, 'contacts', 'create'),
+    (p_company_id, v_owner_id, 'contacts', 'edit'),
+    (p_company_id, v_owner_id, 'contacts', 'delete'),
+    (p_company_id, v_owner_id, 'contact_notes', 'view'),
+    (p_company_id, v_owner_id, 'contact_notes', 'create'),
+    (p_company_id, v_owner_id, 'contact_notes', 'edit'),
+    (p_company_id, v_owner_id, 'contact_notes', 'delete'),
+    (p_company_id, v_owner_id, 'channels', 'view'),
+    (p_company_id, v_owner_id, 'channels', 'create'),
+    (p_company_id, v_owner_id, 'channels', 'edit'),
+    (p_company_id, v_owner_id, 'channels', 'delete'),
+    (p_company_id, v_owner_id, 'ai_settings', 'view'),
+    (p_company_id, v_owner_id, 'ai_settings', 'edit'),
+    (p_company_id, v_owner_id, 'knowledge_base', 'view'),
+    (p_company_id, v_owner_id, 'knowledge_base', 'create'),
+    (p_company_id, v_owner_id, 'knowledge_base', 'edit'),
+    (p_company_id, v_owner_id, 'knowledge_base', 'delete'),
+    (p_company_id, v_owner_id, 'labels', 'view'),
+    (p_company_id, v_owner_id, 'labels', 'create'),
+    (p_company_id, v_owner_id, 'labels', 'edit'),
+    (p_company_id, v_owner_id, 'labels', 'delete'),
+    (p_company_id, v_owner_id, 'team', 'view'),
+    (p_company_id, v_owner_id, 'team', 'invite'),
+    (p_company_id, v_owner_id, 'team', 'edit'),
+    (p_company_id, v_owner_id, 'team', 'remove'),
+    (p_company_id, v_owner_id, 'company_settings', 'view'),
+    (p_company_id, v_owner_id, 'company_settings', 'edit'),
+    (p_company_id, v_owner_id, 'roles', 'view'),
+    (p_company_id, v_owner_id, 'roles', 'edit'),
+    (p_company_id, v_owner_id, 'workspaces', 'view'),
+    (p_company_id, v_owner_id, 'workspaces', 'create'),
+    (p_company_id, v_owner_id, 'workspaces', 'edit'),
+    (p_company_id, v_owner_id, 'workspaces', 'delete'),
 
-    ELSIF v_role.name = 'staff' THEN
-      INSERT INTO public.role_permissions (company_id, role_id, resource, action) VALUES
-        (p_company_id, v_role.id, 'conversations', 'view'),
-        (p_company_id, v_role.id, 'conversations', 'create'),
-        (p_company_id, v_role.id, 'conversations', 'edit'),
-        (p_company_id, v_role.id, 'messages', 'view'),
-        (p_company_id, v_role.id, 'messages', 'create'),
-        (p_company_id, v_role.id, 'contacts', 'view'),
-        (p_company_id, v_role.id, 'contacts', 'create'),
-        (p_company_id, v_role.id, 'contact_notes', 'view'),
-        (p_company_id, v_role.id, 'contact_notes', 'create'),
-        (p_company_id, v_role.id, 'channels', 'view'),
-        (p_company_id, v_role.id, 'ai_settings', 'view'),
-        (p_company_id, v_role.id, 'knowledge_base', 'view'),
-        (p_company_id, v_role.id, 'labels', 'view'),
-        (p_company_id, v_role.id, 'workspaces', 'view')
-      ON CONFLICT DO NOTHING;
+    -- Admin: same as owner
+    (p_company_id, v_admin_id, 'conversations', 'view'),
+    (p_company_id, v_admin_id, 'conversations', 'create'),
+    (p_company_id, v_admin_id, 'conversations', 'edit'),
+    (p_company_id, v_admin_id, 'conversations', 'delete'),
+    (p_company_id, v_admin_id, 'messages', 'view'),
+    (p_company_id, v_admin_id, 'messages', 'create'),
+    (p_company_id, v_admin_id, 'contacts', 'view'),
+    (p_company_id, v_admin_id, 'contacts', 'create'),
+    (p_company_id, v_admin_id, 'contacts', 'edit'),
+    (p_company_id, v_admin_id, 'contacts', 'delete'),
+    (p_company_id, v_admin_id, 'contact_notes', 'view'),
+    (p_company_id, v_admin_id, 'contact_notes', 'create'),
+    (p_company_id, v_admin_id, 'contact_notes', 'edit'),
+    (p_company_id, v_admin_id, 'contact_notes', 'delete'),
+    (p_company_id, v_admin_id, 'channels', 'view'),
+    (p_company_id, v_admin_id, 'channels', 'create'),
+    (p_company_id, v_admin_id, 'channels', 'edit'),
+    (p_company_id, v_admin_id, 'channels', 'delete'),
+    (p_company_id, v_admin_id, 'ai_settings', 'view'),
+    (p_company_id, v_admin_id, 'ai_settings', 'edit'),
+    (p_company_id, v_admin_id, 'knowledge_base', 'view'),
+    (p_company_id, v_admin_id, 'knowledge_base', 'create'),
+    (p_company_id, v_admin_id, 'knowledge_base', 'edit'),
+    (p_company_id, v_admin_id, 'knowledge_base', 'delete'),
+    (p_company_id, v_admin_id, 'labels', 'view'),
+    (p_company_id, v_admin_id, 'labels', 'create'),
+    (p_company_id, v_admin_id, 'labels', 'edit'),
+    (p_company_id, v_admin_id, 'labels', 'delete'),
+    (p_company_id, v_admin_id, 'team', 'view'),
+    (p_company_id, v_admin_id, 'team', 'invite'),
+    (p_company_id, v_admin_id, 'team', 'edit'),
+    (p_company_id, v_admin_id, 'team', 'remove'),
+    (p_company_id, v_admin_id, 'company_settings', 'view'),
+    (p_company_id, v_admin_id, 'company_settings', 'edit'),
+    (p_company_id, v_admin_id, 'roles', 'view'),
+    (p_company_id, v_admin_id, 'roles', 'edit'),
+    (p_company_id, v_admin_id, 'workspaces', 'view'),
+    (p_company_id, v_admin_id, 'workspaces', 'create'),
+    (p_company_id, v_admin_id, 'workspaces', 'edit'),
+    (p_company_id, v_admin_id, 'workspaces', 'delete'),
 
-    ELSIF v_role.name = 'viewer' THEN
-      INSERT INTO public.role_permissions (company_id, role_id, resource, action) VALUES
-        (p_company_id, v_role.id, 'conversations', 'view'),
-        (p_company_id, v_role.id, 'messages', 'view'),
-        (p_company_id, v_role.id, 'contacts', 'view'),
-        (p_company_id, v_role.id, 'channels', 'view'),
-        (p_company_id, v_role.id, 'labels', 'view'),
-        (p_company_id, v_role.id, 'workspaces', 'view')
-      ON CONFLICT DO NOTHING;
-    END IF;
-  END LOOP;
+    -- Manager: most access, no delete conversations, no team manage, no company settings
+    (p_company_id, v_manager_id, 'conversations', 'view'),
+    (p_company_id, v_manager_id, 'conversations', 'create'),
+    (p_company_id, v_manager_id, 'conversations', 'edit'),
+    (p_company_id, v_manager_id, 'messages', 'view'),
+    (p_company_id, v_manager_id, 'messages', 'create'),
+    (p_company_id, v_manager_id, 'contacts', 'view'),
+    (p_company_id, v_manager_id, 'contacts', 'create'),
+    (p_company_id, v_manager_id, 'contacts', 'edit'),
+    (p_company_id, v_manager_id, 'contact_notes', 'view'),
+    (p_company_id, v_manager_id, 'contact_notes', 'create'),
+    (p_company_id, v_manager_id, 'contact_notes', 'edit'),
+    (p_company_id, v_manager_id, 'channels', 'view'),
+    (p_company_id, v_manager_id, 'channels', 'create'),
+    (p_company_id, v_manager_id, 'channels', 'edit'),
+    (p_company_id, v_manager_id, 'ai_settings', 'view'),
+    (p_company_id, v_manager_id, 'ai_settings', 'edit'),
+    (p_company_id, v_manager_id, 'knowledge_base', 'view'),
+    (p_company_id, v_manager_id, 'knowledge_base', 'create'),
+    (p_company_id, v_manager_id, 'knowledge_base', 'edit'),
+    (p_company_id, v_manager_id, 'labels', 'view'),
+    (p_company_id, v_manager_id, 'labels', 'create'),
+    (p_company_id, v_manager_id, 'labels', 'edit'),
+    (p_company_id, v_manager_id, 'team', 'view'),
+    (p_company_id, v_manager_id, 'workspaces', 'view'),
+    (p_company_id, v_manager_id, 'workspaces', 'create'),
+    (p_company_id, v_manager_id, 'workspaces', 'edit'),
+    (p_company_id, v_manager_id, 'workspaces', 'delete'),
+
+    -- Staff: basic access
+    (p_company_id, v_staff_id, 'conversations', 'view'),
+    (p_company_id, v_staff_id, 'conversations', 'create'),
+    (p_company_id, v_staff_id, 'conversations', 'edit'),
+    (p_company_id, v_staff_id, 'messages', 'view'),
+    (p_company_id, v_staff_id, 'messages', 'create'),
+    (p_company_id, v_staff_id, 'contacts', 'view'),
+    (p_company_id, v_staff_id, 'contacts', 'create'),
+    (p_company_id, v_staff_id, 'contact_notes', 'view'),
+    (p_company_id, v_staff_id, 'contact_notes', 'create'),
+    (p_company_id, v_staff_id, 'channels', 'view'),
+    (p_company_id, v_staff_id, 'ai_settings', 'view'),
+    (p_company_id, v_staff_id, 'knowledge_base', 'view'),
+    (p_company_id, v_staff_id, 'labels', 'view'),
+    (p_company_id, v_staff_id, 'workspaces', 'view'),
+
+    -- Viewer: read-only
+    (p_company_id, v_viewer_id, 'conversations', 'view'),
+    (p_company_id, v_viewer_id, 'messages', 'view'),
+    (p_company_id, v_viewer_id, 'contacts', 'view'),
+    (p_company_id, v_viewer_id, 'channels', 'view'),
+    (p_company_id, v_viewer_id, 'labels', 'view'),
+    (p_company_id, v_viewer_id, 'workspaces', 'view')
+  ON CONFLICT DO NOTHING;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
