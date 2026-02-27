@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { useSession } from '@/contexts/SessionContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +13,23 @@ type AuthTab = 'signin' | 'signup' | 'forgot';
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useSession();
   const isRecovery = searchParams.get('type') === 'recovery';
+  const redirectTo = searchParams.get('redirect');
+
+  // Persist redirect so it survives OAuth round-trip
+  useEffect(() => {
+    if (redirectTo) sessionStorage.setItem('auth_redirect', redirectTo);
+  }, [redirectTo]);
+
+  // Once authenticated, navigate to the saved redirect (or home)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const dest = sessionStorage.getItem('auth_redirect') || '/';
+    sessionStorage.removeItem('auth_redirect');
+    navigate(dest, { replace: true });
+  }, [isAuthenticated, navigate]);
 
   const [tab, setTab] = useState<AuthTab>('signin');
   const [loading, setLoading] = useState(false);

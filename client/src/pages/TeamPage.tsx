@@ -83,6 +83,7 @@ interface Invitation {
   expires_at: string;
   created_at: string;
   roles: { name: string };
+  recipient_status: 'invite_sent' | 'account_unconfirmed' | 'account_confirmed';
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +117,17 @@ function roleBadgeVariant(
       return 'secondary';
     default:
       return 'outline';
+  }
+}
+
+function recipientStatusConfig(status: Invitation['recipient_status']) {
+  switch (status) {
+    case 'invite_sent':
+      return { label: 'Invite Sent', dot: 'bg-muted-foreground' };
+    case 'account_unconfirmed':
+      return { label: 'Unconfirmed', dot: 'bg-amber-500' };
+    case 'account_confirmed':
+      return { label: 'Confirmed', dot: 'bg-green-500' };
   }
 }
 
@@ -208,9 +220,9 @@ export default function TeamPage() {
   const currentMember = members.find((m) => m.user_id === userId);
   const currentHierarchy = currentMember?.roles.hierarchy_level ?? Infinity;
 
-  // Roles below the current user's hierarchy (higher number = lower rank)
+  // Roles below the current user's hierarchy (higher number = higher rank)
   const assignableRoles = roles.filter(
-    (r) => r.hierarchy_level > currentHierarchy
+    (r) => r.hierarchy_level < currentHierarchy
   );
 
   // Filter pending invitations (not yet accepted)
@@ -326,7 +338,7 @@ export default function TeamPage() {
   const canChangeRole = (member: Member) =>
     canEditRole &&
     !isOwnerRow(member) &&
-    member.roles.hierarchy_level > currentHierarchy;
+    member.roles.hierarchy_level < currentHierarchy;
 
   const canDeleteMember = (member: Member) =>
     canRemove && !isOwnerRow(member) && member.user_id !== userId;
@@ -595,65 +607,67 @@ export default function TeamPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="hidden sm:table-cell">
-                    Invited
-                  </TableHead>
-                  <TableHead className="hidden sm:table-cell">
-                    Expires
-                  </TableHead>
-                  <TableHead className="pr-6 text-right">Actions</TableHead>
+                  <TableHead className="w-[40%] pl-6">Email</TableHead>
+                  <TableHead className="w-[10%]">Role</TableHead>
+                  <TableHead className="w-[15%]">Status</TableHead>
+                  <TableHead className="hidden w-[15%] sm:table-cell">Sent</TableHead>
+                  <TableHead className="w-[20%] pl-4">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingInvitations.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="pl-6 text-sm font-medium">
-                      {inv.email}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{inv.roles.name}</Badge>
-                    </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
-                      {formatDate(inv.created_at)}
-                    </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
-                      {formatDate(inv.expires_at)}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCopyLink(inv.id)}
-                          disabled={copyingLink === inv.id}
-                        >
-                          {copyingLink === inv.id ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <Copy className="size-3" />
-                          )}
-                          Copy Link
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleCancelInvitation(inv.id)}
-                          disabled={cancellingInvitation === inv.id}
-                        >
-                          {cancellingInvitation === inv.id ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="size-3" />
-                          )}
-                          Cancel
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {pendingInvitations.map((inv) => {
+                  const statusCfg = recipientStatusConfig(inv.recipient_status);
+                  return (
+                    <TableRow key={inv.id}>
+                      <TableCell className="pl-6 text-sm font-medium">
+                        {inv.email}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{inv.roles.name}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1.5 text-sm">
+                          <span className={`inline-block size-2 rounded-full ${statusCfg.dot}`} />
+                          {statusCfg.label}
+                        </span>
+                      </TableCell>
+                      <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                        {formatDate(inv.created_at)}
+                      </TableCell>
+                      <TableCell className="pr-6">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCopyLink(inv.id)}
+                            disabled={copyingLink === inv.id}
+                          >
+                            {copyingLink === inv.id ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <Copy className="size-3" />
+                            )}
+                            Copy Link
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleCancelInvitation(inv.id)}
+                            disabled={cancellingInvitation === inv.id}
+                          >
+                            {cancellingInvitation === inv.id ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-3" />
+                            )}
+                            Cancel
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
