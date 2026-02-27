@@ -17,6 +17,8 @@ import CompanySettingsPage from '@/pages/CompanySettingsPage';
 import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import AcceptInvitePage from '@/pages/AcceptInvitePage';
 import OnboardingPage from '@/pages/OnboardingPage';
+import WorkspacesPage from '@/pages/WorkspacesPage';
+import WorkspaceDetailPage from '@/pages/WorkspaceDetailPage';
 
 function App() {
   return (
@@ -35,6 +37,8 @@ function App() {
                   <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />
                   <Route path="channels" element={<SettingsPage />} />
+                  <Route path="workspaces" element={<WorkspacesPage />} />
+                  <Route path="workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
                   <Route path="team" element={<TeamPage />} />
                   <Route path="team/permissions" element={<RolePermissionsPage />} />
                   <Route path="settings/company" element={<CompanySettingsPage />} />

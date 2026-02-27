@@ -7,7 +7,7 @@ import {
   Plus, FileText, Upload, Trash2, Loader2, X, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { KBEntry } from '@/hooks/useChannelAI';
+import type { KBEntry } from '@/hooks/useWorkspaceAI';
 import { cn } from '@/lib/utils';
 
 interface Props {

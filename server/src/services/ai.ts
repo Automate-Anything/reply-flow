@@ -17,7 +17,7 @@ interface AIContext {
 
 /**
  * Checks whether AI should respond to an incoming message for a given session.
- * Reads from per-channel AI profiles (channel_ai_profiles table).
+ * Resolution path: session → channel → workspace → workspace_ai_profiles + channel_agent_settings
  * Returns null if AI should NOT respond, or the AI context if it should.
  */
 export async function shouldAIRespond(
@@ -35,16 +35,35 @@ export async function shouldAIRespond(
 
   if (!session || !session.channel_id) return null;
 
-  // 2. Check per-channel AI profile
+  // 2. Get channel's workspace_id
+  const { data: channel } = await supabaseAdmin
+    .from('whatsapp_channels')
+    .select('workspace_id')
+    .eq('id', session.channel_id)
+    .single();
+
+  if (!channel?.workspace_id) return null; // No workspace = no AI
+
+  // 3. Check workspace AI profile
   const { data: profile } = await supabaseAdmin
-    .from('channel_ai_profiles')
+    .from('workspace_ai_profiles')
     .select('is_enabled, profile_data, max_tokens')
-    .eq('channel_id', session.channel_id)
+    .eq('workspace_id', channel.workspace_id)
     .single();
 
   if (!profile?.is_enabled) return null;
 
-  // 3. Check per-conversation human_takeover
+  // 4. Check per-channel agent settings
+  const { data: channelSettings } = await supabaseAdmin
+    .from('channel_agent_settings')
+    .select('is_enabled, custom_instructions, greeting_override, max_tokens_override')
+    .eq('channel_id', session.channel_id)
+    .single();
+
+  // Default is enabled, but if settings exist and is_enabled is false, skip
+  if (channelSettings && !channelSettings.is_enabled) return null;
+
+  // 5. Check per-conversation human_takeover
   if (session.human_takeover) {
     if (session.auto_resume_at && new Date(session.auto_resume_at) <= new Date()) {
       await supabaseAdmin
@@ -56,18 +75,45 @@ export async function shouldAIRespond(
     }
   }
 
-  // 4. Fetch knowledge base entries for the channel
-  const { data: kbEntries } = await supabaseAdmin
-    .from('knowledge_base_entries')
-    .select('title, content')
+  // 6. Fetch KB entries assigned to this channel (via channel_kb_assignments)
+  const { data: assignedKB } = await supabaseAdmin
+    .from('channel_kb_assignments')
+    .select('entry_id')
     .eq('channel_id', session.channel_id);
 
-  // 5. Build system prompt from profile data + KB
-  const profileData = (profile.profile_data || {}) as ProfileData;
-  const kbData = (kbEntries || []) as KBEntry[];
-  const systemPrompt = buildSystemPrompt(profileData, kbData);
+  let kbData: KBEntry[] = [];
 
-  // 6. Build message context from last 20 messages
+  if (assignedKB && assignedKB.length > 0) {
+    // Only fetch assigned entries
+    const entryIds = assignedKB.map((a) => a.entry_id);
+    const { data: kbEntries } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('title, content')
+      .in('id', entryIds);
+    kbData = (kbEntries || []) as KBEntry[];
+  } else {
+    // No specific assignments — use all workspace KB entries
+    const { data: kbEntries } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('title, content')
+      .eq('workspace_id', channel.workspace_id);
+    kbData = (kbEntries || []) as KBEntry[];
+  }
+
+  // 7. Build system prompt from workspace profile + channel overrides + KB
+  const profileData = (profile.profile_data || {}) as ProfileData;
+  const channelOverrides = channelSettings
+    ? {
+        custom_instructions: channelSettings.custom_instructions || undefined,
+        greeting_override: channelSettings.greeting_override || undefined,
+      }
+    : undefined;
+  const systemPrompt = buildSystemPrompt(profileData, kbData, channelOverrides);
+
+  // Resolve max tokens: channel override > workspace profile > default
+  const maxTokens = channelSettings?.max_tokens_override || profile.max_tokens || 500;
+
+  // 8. Build message context from last 20 messages
   const { data: recentMessages } = await supabaseAdmin
     .from('chat_messages')
     .select('message_body, direction, sender_type')
@@ -84,7 +130,7 @@ export async function shouldAIRespond(
 
   return {
     systemPrompt,
-    maxTokens: profile.max_tokens || 500,
+    maxTokens,
     messages,
   };
 }
@@ -114,7 +160,7 @@ export async function generateAndSendAIReply(
 
   if (!aiReply.trim()) return;
 
-  // Get session + channel info (derive channel from session's channel_id)
+  // Get session + channel info
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
     .select('chat_id, phone_number, channel_id')
@@ -123,21 +169,21 @@ export async function generateAndSendAIReply(
 
   if (!session || !session.channel_id) return;
 
-  const { data: channel } = await supabaseAdmin
+  const { data: ch } = await supabaseAdmin
     .from('whatsapp_channels')
     .select('channel_token')
     .eq('id', session.channel_id)
     .eq('channel_status', 'connected')
     .single();
 
-  if (!channel) return;
+  if (!ch) return;
 
   // Send via Whapi
   const chatId = session.chat_id.includes('@')
     ? session.chat_id
     : `${session.chat_id}@s.whatsapp.net`;
 
-  const result = await whapi.sendTextMessage(channel.channel_token, chatId, aiReply);
+  const result = await whapi.sendTextMessage(ch.channel_token, chatId, aiReply);
 
   // Store AI message in DB
   const now = new Date().toISOString();

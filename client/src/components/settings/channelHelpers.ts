@@ -7,6 +7,7 @@ export interface ChannelInfo {
   channel_status: string;
   phone_number: string | null;
   webhook_registered: boolean;
+  workspace_id: string | null;
   created_at: string;
 }
 

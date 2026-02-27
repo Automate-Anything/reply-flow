@@ -26,36 +26,35 @@ const upload = multer({
 });
 
 // ────────────────────────────────────────────────
-// AI PROFILE ROUTES (per-channel)
+// WORKSPACE AI PROFILE ROUTES
 // ────────────────────────────────────────────────
 
-// Get AI profile for a channel
-router.get('/profile/:channelId', requirePermission('ai_settings', 'view'), async (req, res, next) => {
+// Get AI profile for a workspace
+router.get('/profile/:workspaceId', requirePermission('ai_settings', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const channelId = Number(req.params.channelId);
+    const { workspaceId } = req.params;
 
-    // Verify channel ownership
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+    // Verify workspace ownership
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
       .select('id')
-      .eq('id', channelId)
+      .eq('id', workspaceId)
       .eq('company_id', companyId)
       .single();
 
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
+    if (!workspace) {
+      res.status(404).json({ error: 'Workspace not found' });
       return;
     }
 
     const { data, error } = await supabaseAdmin
-      .from('channel_ai_profiles')
+      .from('workspace_ai_profiles')
       .select('*')
-      .eq('channel_id', channelId)
+      .eq('workspace_id', workspaceId)
       .single();
 
     if (error && error.code === 'PGRST116') {
-      // No profile yet — return defaults
       res.json({
         profile: {
           is_enabled: false,
@@ -73,28 +72,28 @@ router.get('/profile/:channelId', requirePermission('ai_settings', 'view'), asyn
   }
 });
 
-// Upsert AI profile for a channel
-router.put('/profile/:channelId', requirePermission('ai_settings', 'edit'), async (req, res, next) => {
+// Upsert AI profile for a workspace
+router.put('/profile/:workspaceId', requirePermission('ai_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const channelId = Number(req.params.channelId);
+    const { workspaceId } = req.params;
     const { is_enabled, profile_data, max_tokens } = req.body;
 
-    // Verify channel ownership
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+    // Verify workspace ownership
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
       .select('id')
-      .eq('id', channelId)
+      .eq('id', workspaceId)
       .eq('company_id', companyId)
       .single();
 
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
+    if (!workspace) {
+      res.status(404).json({ error: 'Workspace not found' });
       return;
     }
 
     const updates: Record<string, unknown> = {
-      channel_id: channelId,
+      workspace_id: workspaceId,
       company_id: companyId,
       created_by: req.userId,
       updated_at: new Date().toISOString(),
@@ -104,8 +103,8 @@ router.put('/profile/:channelId', requirePermission('ai_settings', 'edit'), asyn
     if (max_tokens !== undefined) updates.max_tokens = max_tokens;
 
     const { data, error } = await supabaseAdmin
-      .from('channel_ai_profiles')
-      .upsert(updates, { onConflict: 'channel_id' })
+      .from('workspace_ai_profiles')
+      .upsert(updates, { onConflict: 'workspace_id' })
       .select()
       .single();
 
@@ -117,19 +116,19 @@ router.put('/profile/:channelId', requirePermission('ai_settings', 'edit'), asyn
 });
 
 // ────────────────────────────────────────────────
-// KNOWLEDGE BASE ROUTES
+// KNOWLEDGE BASE ROUTES (per-workspace)
 // ────────────────────────────────────────────────
 
-// List KB entries for a channel
-router.get('/kb/:channelId', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
+// List KB entries for a workspace
+router.get('/kb/:workspaceId', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const channelId = Number(req.params.channelId);
+    const { workspaceId } = req.params;
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
       .select('*')
-      .eq('channel_id', channelId)
+      .eq('workspace_id', workspaceId)
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
@@ -140,11 +139,11 @@ router.get('/kb/:channelId', requirePermission('knowledge_base', 'view'), async 
   }
 });
 
-// Add text KB entry
-router.post('/kb/:channelId', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
+// Add text KB entry to a workspace
+router.post('/kb/:workspaceId', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const channelId = Number(req.params.channelId);
+    const { workspaceId } = req.params;
     const { title, content } = req.body;
 
     if (!title || !content) {
@@ -152,23 +151,23 @@ router.post('/kb/:channelId', requirePermission('knowledge_base', 'create'), asy
       return;
     }
 
-    // Verify channel ownership
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+    // Verify workspace ownership
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
       .select('id')
-      .eq('id', channelId)
+      .eq('id', workspaceId)
       .eq('company_id', companyId)
       .single();
 
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
+    if (!workspace) {
+      res.status(404).json({ error: 'Workspace not found' });
       return;
     }
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
       .insert({
-        channel_id: channelId,
+        workspace_id: workspaceId,
         company_id: companyId,
         created_by: req.userId,
         title,
@@ -185,11 +184,11 @@ router.post('/kb/:channelId', requirePermission('knowledge_base', 'create'), asy
   }
 });
 
-// Upload file KB entry
-router.post('/kb/:channelId/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
+// Upload file KB entry to a workspace
+router.post('/kb/:workspaceId/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const channelId = Number(req.params.channelId);
+    const { workspaceId } = req.params;
     const file = req.file;
 
     if (!file) {
@@ -197,16 +196,16 @@ router.post('/kb/:channelId/upload', requirePermission('knowledge_base', 'create
       return;
     }
 
-    // Verify channel ownership
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+    // Verify workspace ownership
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
       .select('id')
-      .eq('id', channelId)
+      .eq('id', workspaceId)
       .eq('company_id', companyId)
       .single();
 
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
+    if (!workspace) {
+      res.status(404).json({ error: 'Workspace not found' });
       return;
     }
 
@@ -237,7 +236,7 @@ router.post('/kb/:channelId/upload', requirePermission('knowledge_base', 'create
     }
 
     // Upload file to Supabase Storage
-    const storagePath = `${companyId}/${channelId}/${Date.now()}_${file.originalname}`;
+    const storagePath = `${companyId}/${workspaceId}/${Date.now()}_${file.originalname}`;
     const { error: storageError } = await supabaseAdmin.storage
       .from('knowledge-base')
       .upload(storagePath, file.buffer, {
@@ -255,7 +254,7 @@ router.post('/kb/:channelId/upload', requirePermission('knowledge_base', 'create
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
       .insert({
-        channel_id: channelId,
+        workspace_id: workspaceId,
         company_id: companyId,
         created_by: req.userId,
         title,
@@ -306,7 +305,6 @@ router.delete('/kb/entry/:entryId', requirePermission('knowledge_base', 'delete'
     const companyId = req.companyId!;
     const { entryId } = req.params;
 
-    // Get the entry to check for file_url
     const { data: entry } = await supabaseAdmin
       .from('knowledge_base_entries')
       .select('file_url')
@@ -319,7 +317,6 @@ router.delete('/kb/entry/:entryId', requirePermission('knowledge_base', 'delete'
       return;
     }
 
-    // Delete file from storage if it exists
     if (entry.file_url) {
       await supabaseAdmin.storage
         .from('knowledge-base')
@@ -334,6 +331,163 @@ router.delete('/kb/entry/:entryId', requirePermission('knowledge_base', 'delete'
 
     if (error) throw error;
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// CHANNEL AGENT SETTINGS ROUTES
+// ────────────────────────────────────────────────
+
+// Get per-channel agent settings
+router.get('/channel-settings/:channelId', requirePermission('ai_settings', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const channelId = Number(req.params.channelId);
+
+    const { data, error } = await supabaseAdmin
+      .from('channel_agent_settings')
+      .select('*')
+      .eq('channel_id', channelId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      res.json({
+        settings: {
+          is_enabled: true,
+          custom_instructions: null,
+          greeting_override: null,
+          max_tokens_override: null,
+        },
+      });
+      return;
+    }
+
+    if (error) throw error;
+    res.json({ settings: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Upsert per-channel agent settings
+router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const channelId = Number(req.params.channelId);
+    const { is_enabled, custom_instructions, greeting_override, max_tokens_override } = req.body;
+
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id')
+      .eq('id', channelId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {
+      channel_id: channelId,
+      company_id: companyId,
+      updated_at: new Date().toISOString(),
+    };
+    if (is_enabled !== undefined) updates.is_enabled = is_enabled;
+    if (custom_instructions !== undefined) updates.custom_instructions = custom_instructions;
+    if (greeting_override !== undefined) updates.greeting_override = greeting_override;
+    if (max_tokens_override !== undefined) updates.max_tokens_override = max_tokens_override;
+
+    const { data, error } = await supabaseAdmin
+      .from('channel_agent_settings')
+      .upsert(updates, { onConflict: 'channel_id' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ settings: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// KB ASSIGNMENT ROUTES
+// ────────────────────────────────────────────────
+
+// Get KB assignments for a channel
+router.get('/kb-assignments/:channelId', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const channelId = Number(req.params.channelId);
+
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id')
+      .eq('id', channelId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('channel_kb_assignments')
+      .select('entry_id')
+      .eq('channel_id', channelId);
+
+    if (error) throw error;
+    res.json({ assigned_entry_ids: (data || []).map((r) => r.entry_id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Set KB assignments for a channel (replace all)
+router.put('/kb-assignments/:channelId', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const channelId = Number(req.params.channelId);
+    const { entryIds } = req.body as { entryIds: string[] };
+
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id')
+      .eq('id', channelId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+
+    // Delete all existing assignments
+    await supabaseAdmin
+      .from('channel_kb_assignments')
+      .delete()
+      .eq('channel_id', channelId);
+
+    // Insert new assignments
+    if (entryIds && entryIds.length > 0) {
+      const rows = entryIds.map((entryId) => ({
+        channel_id: channelId,
+        entry_id: entryId,
+      }));
+
+      const { error } = await supabaseAdmin
+        .from('channel_kb_assignments')
+        .insert(rows);
+
+      if (error) throw error;
+    }
+
+    res.json({ assigned_entry_ids: entryIds || [] });
   } catch (err) {
     next(err);
   }

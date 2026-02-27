@@ -14,7 +14,7 @@ export interface ProfileData {
   greeting_message?: string;
 }
 
-export interface ChannelAIProfile {
+export interface WorkspaceAIProfile {
   is_enabled: boolean;
   profile_data: ProfileData;
   max_tokens: number;
@@ -22,7 +22,7 @@ export interface ChannelAIProfile {
 
 export interface KBEntry {
   id: string;
-  channel_id: number;
+  workspace_id: string;
   title: string;
   content: string;
   source_type: 'text' | 'file';
@@ -32,78 +32,90 @@ export interface KBEntry {
   updated_at: string;
 }
 
-const DEFAULT_PROFILE: ChannelAIProfile = {
+const DEFAULT_PROFILE: WorkspaceAIProfile = {
   is_enabled: false,
   profile_data: {},
   max_tokens: 500,
 };
 
-export function useChannelAI(channelId: number) {
-  const [profile, setProfile] = useState<ChannelAIProfile>(DEFAULT_PROFILE);
+export function useWorkspaceAI(workspaceId: string | undefined) {
+  const [profile, setProfile] = useState<WorkspaceAIProfile>(DEFAULT_PROFILE);
   const [kbEntries, setKbEntries] = useState<KBEntry[]>([]);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingKB, setLoadingKB] = useState(true);
 
   const fetchProfile = useCallback(async () => {
+    if (!workspaceId) return;
     try {
-      const { data } = await api.get(`/ai/profile/${channelId}`);
+      const { data } = await api.get(`/ai/profile/${workspaceId}`);
       setProfile(data.profile);
     } catch (err) {
       console.error('Failed to fetch AI profile:', err);
     } finally {
       setLoadingProfile(false);
     }
-  }, [channelId]);
+  }, [workspaceId]);
 
   const fetchKB = useCallback(async () => {
+    if (!workspaceId) return;
     try {
-      const { data } = await api.get(`/ai/kb/${channelId}`);
+      const { data } = await api.get(`/ai/kb/${workspaceId}`);
       setKbEntries(data.entries);
     } catch (err) {
       console.error('Failed to fetch KB entries:', err);
     } finally {
       setLoadingKB(false);
     }
-  }, [channelId]);
+  }, [workspaceId]);
 
   useEffect(() => {
+    if (!workspaceId) {
+      setProfile(DEFAULT_PROFILE);
+      setKbEntries([]);
+      setLoadingProfile(false);
+      setLoadingKB(false);
+      return;
+    }
     setLoadingProfile(true);
     setLoadingKB(true);
     fetchProfile();
     fetchKB();
-  }, [fetchProfile, fetchKB]);
+  }, [fetchProfile, fetchKB, workspaceId]);
 
   const updateProfile = useCallback(
-    async (updates: Partial<ChannelAIProfile>) => {
-      const { data } = await api.put(`/ai/profile/${channelId}`, updates);
+    async (updates: Partial<WorkspaceAIProfile>) => {
+      if (!workspaceId) return;
+      const { data } = await api.put(`/ai/profile/${workspaceId}`, updates);
       setProfile(data.profile);
       return data.profile;
     },
-    [channelId]
+    [workspaceId]
   );
 
   const addKBEntry = useCallback(
     async (entry: { title: string; content: string }) => {
-      const { data } = await api.post(`/ai/kb/${channelId}`, entry);
+      if (!workspaceId) return;
+      const { data } = await api.post(`/ai/kb/${workspaceId}`, entry);
       setKbEntries((prev) => [data.entry, ...prev]);
       return data.entry;
     },
-    [channelId]
+    [workspaceId]
   );
 
   const uploadKBFile = useCallback(
     async (file: File, title?: string) => {
+      if (!workspaceId) return;
       const formData = new FormData();
       formData.append('file', file);
       if (title) formData.append('title', title);
 
-      const { data } = await api.post(`/ai/kb/${channelId}/upload`, formData, {
+      const { data } = await api.post(`/ai/kb/${workspaceId}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setKbEntries((prev) => [data.entry, ...prev]);
       return data.entry;
     },
-    [channelId]
+    [workspaceId]
   );
 
   const updateKBEntry = useCallback(

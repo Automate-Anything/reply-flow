@@ -79,7 +79,16 @@ function buildOrganizationPrompt(profile: ProfileData): string {
   return sections.join('\n\n');
 }
 
-export function buildSystemPrompt(profile: ProfileData, kbEntries: KBEntry[] = []): string {
+export interface ChannelOverrides {
+  custom_instructions?: string;
+  greeting_override?: string;
+}
+
+export function buildSystemPrompt(
+  profile: ProfileData,
+  kbEntries: KBEntry[] = [],
+  channelOverrides?: ChannelOverrides,
+): string {
   const parts: string[] = [];
 
   // Identity section based on use case
@@ -126,9 +135,10 @@ export function buildSystemPrompt(profile: ProfileData, kbEntries: KBEntry[] = [
     parts.push(`## Response Guidelines\n${profile.response_rules}`);
   }
 
-  // Greeting
-  if (profile.greeting_message) {
-    parts.push(`## First Contact Greeting\nWhen this is the first message from a new contact, greet them with: "${profile.greeting_message}"`);
+  // Greeting (channel override takes precedence)
+  const greeting = channelOverrides?.greeting_override || profile.greeting_message;
+  if (greeting) {
+    parts.push(`## First Contact Greeting\nWhen this is the first message from a new contact, greet them with: "${greeting}"`);
   }
 
   // Knowledge base
@@ -137,6 +147,11 @@ export function buildSystemPrompt(profile: ProfileData, kbEntries: KBEntry[] = [
       .map((entry) => `### ${entry.title}\n${entry.content}`)
       .join('\n\n---\n\n');
     parts.push(`## Knowledge Base\nUse the following reference information to answer questions accurately. If a question isn't covered by this information, say so honestly.\n\n${kbSection}`);
+  }
+
+  // Channel-specific instructions
+  if (channelOverrides?.custom_instructions) {
+    parts.push(`## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
   }
 
   // Core behavioral rules (always included)

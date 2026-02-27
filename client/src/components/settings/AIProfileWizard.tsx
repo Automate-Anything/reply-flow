@@ -8,12 +8,12 @@ import {
   Check, Loader2, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { ProfileData, ChannelAIProfile } from '@/hooks/useChannelAI';
+import type { ProfileData, WorkspaceAIProfile } from '@/hooks/useWorkspaceAI';
 import { cn } from '@/lib/utils';
 
 interface Props {
-  profile: ChannelAIProfile;
-  onSave: (updates: Partial<ChannelAIProfile>) => Promise<unknown>;
+  profile: WorkspaceAIProfile;
+  onSave: (updates: Partial<WorkspaceAIProfile>) => Promise<unknown>;
 }
 
 const TOTAL_STEPS = 4;

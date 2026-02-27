@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -7,16 +8,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, WifiOff, QrCode, Bot,
+  Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, WifiOff, QrCode, Bot, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import AIProfileWizard from './AIProfileWizard';
-import KnowledgeBase from './KnowledgeBase';
-import { useChannelAI } from '@/hooks/useChannelAI';
+import ChannelAgentSettings from './ChannelAgentSettings';
+import KBAssignmentList from './KBAssignmentList';
+import { useWorkspaceAI } from '@/hooks/useWorkspaceAI';
 import type { ChannelInfo } from './channelHelpers';
 import { formatChannelName, getStatusConfig, timeAgo } from './channelHelpers';
+import type { Workspace } from '@/hooks/useWorkspaces';
 
 interface Props {
   channel: ChannelInfo;
@@ -39,6 +44,7 @@ function getStatusIcon(status: string) {
 }
 
 export default function ChannelDetailView({ channel, open, onOpenChange, onUpdate }: Props) {
+  const navigate = useNavigate();
   const [effectiveStatus, setEffectiveStatus] = useState(channel.channel_status);
   const [qrData, setQrData] = useState<string | null>(null);
   const [loadingQR, setLoadingQR] = useState(false);
@@ -46,27 +52,31 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
   const [deleting, setDeleting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [toggling, setToggling] = useState(false);
   const cancelledRef = useRef(false);
 
-  const {
-    profile,
-    kbEntries,
-    loadingProfile,
-    loadingKB,
-    updateProfile,
-    addKBEntry,
-    uploadKBFile,
-    updateKBEntry,
-    deleteKBEntry,
-  } = useChannelAI(channel.id);
+  // Workspace assignment state
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(channel.workspace_id || null);
+  const [assigningWorkspace, setAssigningWorkspace] = useState(false);
 
-  // Sync effectiveStatus when channel prop changes
+  // Workspace AI data for KB assignment list
+  const { kbEntries, loadingKB } = useWorkspaceAI(currentWorkspaceId || undefined);
+
+  // Sync state when channel prop changes
   useEffect(() => {
     setEffectiveStatus(channel.channel_status);
+    setCurrentWorkspaceId(channel.workspace_id || null);
     setQrData(null);
     setConfirmDelete(false);
-  }, [channel.id, channel.channel_status]);
+  }, [channel.id, channel.channel_status, channel.workspace_id]);
+
+  // Fetch available workspaces
+  useEffect(() => {
+    if (!open) return;
+    api.get('/workspaces').then(({ data }) => {
+      setWorkspaces(data.workspaces || []);
+    }).catch(() => {});
+  }, [open]);
 
   // Poll health-check when pending
   useEffect(() => {
@@ -204,15 +214,26 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
     }
   };
 
-  const handleToggleAI = async () => {
-    setToggling(true);
+  const handleWorkspaceChange = async (value: string) => {
+    const newWorkspaceId = value === 'none' ? null : value;
+    setAssigningWorkspace(true);
+
     try {
-      await updateProfile({ is_enabled: !profile.is_enabled });
-      toast.success(profile.is_enabled ? 'AI agent disabled' : 'AI agent enabled');
+      if (currentWorkspaceId) {
+        // Remove from current workspace
+        await api.delete(`/workspaces/${currentWorkspaceId}/channels/${channel.id}`);
+      }
+      if (newWorkspaceId) {
+        // Add to new workspace
+        await api.post(`/workspaces/${newWorkspaceId}/channels`, { channelId: channel.id });
+      }
+      setCurrentWorkspaceId(newWorkspaceId);
+      toast.success(newWorkspaceId ? 'Channel assigned to workspace' : 'Channel removed from workspace');
+      onUpdate();
     } catch {
-      toast.error('Failed to toggle AI');
+      toast.error('Failed to change workspace');
     } finally {
-      setToggling(false);
+      setAssigningWorkspace(false);
     }
   };
 
@@ -222,6 +243,8 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
   const isDisconnected = effectiveStatus === 'disconnected';
   const statusConfig = getStatusConfig(effectiveStatus);
   const displayName = formatChannelName(channel);
+  const hasWorkspace = !!currentWorkspaceId;
+  const currentWorkspace = workspaces.find((ws) => ws.id === currentWorkspaceId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -345,56 +368,65 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
             )}
           </div>
 
-          {/* AI Settings Section */}
+          {/* Workspace Assignment */}
           <div className="border-t pt-5">
-            {/* AI toggle */}
             <div className="flex items-center gap-3 mb-4">
               <Bot className="h-5 w-5 text-primary" />
               <div className="flex-1">
-                <p className="text-sm font-medium">AI Agent</p>
+                <p className="text-sm font-medium">AI Workspace</p>
                 <p className="text-xs text-muted-foreground">
-                  Configure the AI assistant for this channel
+                  Assign this channel to a workspace for AI and knowledge base access.
                 </p>
               </div>
-              <button
-                onClick={handleToggleAI}
-                disabled={toggling || loadingProfile}
-                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                  toggling || loadingProfile ? 'cursor-wait opacity-60' : 'cursor-pointer'
-                } ${profile.is_enabled ? 'bg-primary' : 'bg-muted'}`}
-              >
-                <span
-                  className={`pointer-events-none inline-flex h-5 w-5 items-center justify-center rounded-full bg-background shadow-lg ring-0 transition-transform ${
-                    profile.is_enabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
+              {currentWorkspace && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() => {
+                    onOpenChange(false);
+                    navigate(`/workspaces/${currentWorkspaceId}`);
+                  }}
                 >
-                  {toggling && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-                </span>
-              </button>
+                  Open <ExternalLink className="h-3 w-3" />
+                </Button>
+              )}
             </div>
 
-            {loadingProfile ? (
-              <div className="space-y-3">
-                <Skeleton className="h-6 w-32" />
-                <Skeleton className="h-24 w-full" />
-              </div>
-            ) : (
-              <Tabs defaultValue="profile">
+            <Select
+              value={currentWorkspaceId || 'none'}
+              onValueChange={handleWorkspaceChange}
+              disabled={assigningWorkspace}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a workspace" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No workspace</SelectItem>
+                {workspaces.map((ws) => (
+                  <SelectItem key={ws.id} value={ws.id}>
+                    {ws.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Agent Settings + KB Assignments */}
+            {hasWorkspace && (
+              <Tabs defaultValue="agent-settings" className="mt-4">
                 <TabsList className="w-full">
-                  <TabsTrigger value="profile">AI Profile</TabsTrigger>
-                  <TabsTrigger value="knowledge-base">Knowledge Base</TabsTrigger>
+                  <TabsTrigger value="agent-settings" className="flex-1">Agent Settings</TabsTrigger>
+                  <TabsTrigger value="kb-assignments" className="flex-1">KB Assignments</TabsTrigger>
                 </TabsList>
-                <TabsContent value="profile">
-                  <AIProfileWizard profile={profile} onSave={updateProfile} />
+                <TabsContent value="agent-settings">
+                  <ChannelAgentSettings channelId={channel.id} hasWorkspace={hasWorkspace} />
                 </TabsContent>
-                <TabsContent value="knowledge-base">
-                  <KnowledgeBase
-                    entries={kbEntries}
-                    onAdd={addKBEntry}
-                    onUpload={uploadKBFile}
-                    onUpdate={updateKBEntry}
-                    onDelete={deleteKBEntry}
-                    loading={loadingKB}
+                <TabsContent value="kb-assignments">
+                  <KBAssignmentList
+                    channelId={channel.id}
+                    hasWorkspace={hasWorkspace}
+                    workspaceKBEntries={kbEntries}
+                    loadingKB={loadingKB}
                   />
                 </TabsContent>
               </Tabs>

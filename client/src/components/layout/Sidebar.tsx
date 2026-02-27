@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   UserCog,
   Building2,
+  Bot,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/contacts', icon: Users, label: 'Contacts' },
   { to: '/channels', icon: Smartphone, label: 'Channels' },
+  { to: '/workspaces', icon: Bot, label: 'Workspaces', permission: { resource: 'workspaces', action: 'view' } },
   { to: '/team', icon: UserCog, label: 'Team', permission: { resource: 'team', action: 'view' } },
   { to: '/settings/company', icon: Building2, label: 'Company', permission: { resource: 'company_settings', action: 'view' } },
 ];

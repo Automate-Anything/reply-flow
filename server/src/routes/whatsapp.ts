@@ -263,7 +263,7 @@ router.get('/channels', requirePermission('channels', 'view'), async (req, res, 
 
     const { data: channels, error } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, workspace_id, created_at')
       .eq('company_id', companyId)
       .order('created_at', { ascending: true });
 
@@ -283,7 +283,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, workspace_id, created_at')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
