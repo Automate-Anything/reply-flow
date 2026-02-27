@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useWorkspaces, type Workspace } from '@/hooks/useWorkspaces';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,11 +8,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { Bot, Plus, Smartphone, Loader2, Pencil, Trash2, Check, X, ChevronRight } from 'lucide-react';
+import { Bot, Plus, Smartphone, Loader2, Pencil, Trash2, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function WorkspacesPage() {
-  const navigate = useNavigate();
   const { workspaces, loading, createWorkspace, updateWorkspace, deleteWorkspace } = useWorkspaces();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -86,7 +84,7 @@ export default function WorkspacesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Manage your workspaces. Click a workspace to configure channels, AI profile, and schedule.
+          Manage your workspaces. Use the sidebar dropdown to switch between workspaces.
         </p>
         <Button onClick={() => setShowCreate(true)} className="shrink-0 gap-2">
           <Plus className="h-4 w-4" /> New Workspace
@@ -150,10 +148,7 @@ export default function WorkspacesPage() {
                   </div>
                 ) : (
                   <>
-                    <button
-                      className="min-w-0 flex-1 text-left"
-                      onClick={() => navigate(`/workspaces/${ws.id}`)}
-                    >
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate text-sm font-medium">{ws.name}</p>
                         {ws.ai_enabled && (
@@ -171,7 +166,7 @@ export default function WorkspacesPage() {
                           <span className="truncate">{ws.description}</span>
                         )}
                       </div>
-                    </button>
+                    </div>
 
                     <div className="flex shrink-0 items-center gap-1">
                       {deletingId === ws.id ? (
@@ -196,7 +191,7 @@ export default function WorkspacesPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={(e) => { e.stopPropagation(); startEditing(ws); }}
+                            onClick={() => startEditing(ws)}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -204,11 +199,10 @@ export default function WorkspacesPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={(e) => { e.stopPropagation(); setDeletingId(ws.id); }}
+                            onClick={() => setDeletingId(ws.id)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
                         </>
                       )}
                     </div>

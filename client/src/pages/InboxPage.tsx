@@ -10,6 +10,8 @@ import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationHeader from '@/components/inbox/ConversationHeader';
 import MessageThread from '@/components/inbox/MessageThread';
+import ConversationNotes from '@/components/inbox/ConversationNotes';
+import ContactPanel from '@/components/inbox/ContactPanel';
 
 export default function InboxPage() {
   const [search, setSearch] = useState('');
@@ -18,6 +20,8 @@ export default function InboxPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [allLabels, setAllLabels] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [notesPanelOpen, setNotesPanelOpen] = useState(false);
+  const [contactPanelOpen, setContactPanelOpen] = useState(false);
 
   const { activeWorkspaceId } = useWorkspace();
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
@@ -147,23 +151,45 @@ export default function InboxPage() {
         />
       </div>
 
-      {/* Message thread */}
+      {/* Message thread + notes panel */}
       {activeConversation ? (
-        <div className={`${activeConversation ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
-          <ConversationHeader
-            conversation={activeConversation}
-            onArchive={handleArchive}
-            onLabelsChange={refetchConvs}
-            onBack={handleBack}
-            onConversationUpdate={handleConversationUpdate}
-            teamMembers={teamMembers}
+        <>
+          <div className={`${activeConversation ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
+            <ConversationHeader
+              conversation={activeConversation}
+              onArchive={handleArchive}
+              onLabelsChange={refetchConvs}
+              onBack={handleBack}
+              onConversationUpdate={handleConversationUpdate}
+              teamMembers={teamMembers}
+              onOpenContact={() => setContactPanelOpen(true)}
+              onToggleNotes={() => setNotesPanelOpen((prev) => !prev)}
+              notesPanelOpen={notesPanelOpen}
+            />
+            <MessageThread
+              messages={messages}
+              loading={msgsLoading}
+              onSend={handleSend}
+            />
+          </div>
+
+          {/* Notes side panel */}
+          {notesPanelOpen && (
+            <div className="hidden md:flex">
+              <ConversationNotes
+                sessionId={activeConversation.id}
+                onClose={() => setNotesPanelOpen(false)}
+              />
+            </div>
+          )}
+
+          {/* Contact slide-over */}
+          <ContactPanel
+            contactId={activeConversation.contact_id}
+            open={contactPanelOpen}
+            onClose={() => setContactPanelOpen(false)}
           />
-          <MessageThread
-            messages={messages}
-            loading={msgsLoading}
-            onSend={handleSend}
-          />
-        </div>
+        </>
       ) : (
         <div className="hidden flex-1 flex-col items-center justify-center gap-3 text-muted-foreground md:flex">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">

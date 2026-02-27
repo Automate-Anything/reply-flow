@@ -15,7 +15,9 @@ import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import AcceptInvitePage from '@/pages/AcceptInvitePage';
 import OnboardingPage from '@/pages/OnboardingPage';
 import SettingsPage from '@/pages/SettingsPage';
-import WorkspaceDetailPage from '@/pages/WorkspaceDetailPage';
+import ChannelsPage from '@/pages/ChannelsPage';
+import AIProfilePage from '@/pages/AIProfilePage';
+
 
 function App() {
   return (
@@ -34,9 +36,11 @@ function App() {
                   <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />
                   <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+                  <Route path="channels" element={<ChannelsPage />} />
+                  <Route path="ai-profile" element={<AIProfilePage />} />
+
                   <Route path="account" element={<SettingsPage />} />
                   <Route path="profile" element={<ProfileSettingsPage />} />
-                  <Route path="workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
                 </Route>
               </Route>
             </Routes>

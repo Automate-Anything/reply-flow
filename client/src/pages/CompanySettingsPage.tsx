@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { useSession } from '@/contexts/SessionContext';
 import { toast } from 'sonner';
@@ -7,7 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, Building2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Loader2, Building2, Trash2 } from 'lucide-react';
 
 interface Company {
   id: string;
@@ -33,12 +45,15 @@ const TIMEZONES = (() => {
 })();
 
 export default function CompanySettingsPage() {
-  const { hasPermission } = useSession();
+  const navigate = useNavigate();
+  const { hasPermission, role, companyName, refresh } = useSession();
   const canEdit = hasPermission('company_settings', 'edit');
+  const isOwner = role === 'owner';
 
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [tzInput, setTzInput] = useState('UTC');
@@ -93,6 +108,21 @@ export default function CompanySettingsPage() {
       toast.error('Failed to update company settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.delete('/company');
+      await refresh();
+      navigate('/onboarding', { replace: true });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error || 'Failed to delete company';
+      toast.error(msg);
+      setDeleting(false);
     }
   };
 
@@ -163,6 +193,51 @@ export default function CompanySettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {isOwner && (
+        <Card className="border-destructive/30">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base text-destructive">
+              <Trash2 className="h-4 w-4" />
+              Delete Company
+            </CardTitle>
+            <CardDescription>
+              This will permanently delete the company and all its data, including channels, conversations, and contacts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-end">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Delete {companyName || 'this company'}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete the company, all channels, conversations, contacts, and other data. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Delete Company
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

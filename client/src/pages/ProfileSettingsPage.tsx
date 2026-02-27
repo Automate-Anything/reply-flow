@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Camera, User, DoorOpen, Trash2, KeyRound } from 'lucide-react';
+import { Loader2, Camera, User, DoorOpen, KeyRound } from 'lucide-react';
 
 interface Profile {
   id: string;
@@ -52,19 +52,14 @@ export default function ProfileSettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
-  // Leave / delete company
+  // Leave company
   const [leaving, setLeaving] = useState(false);
-  const [memberCount, setMemberCount] = useState<number | null>(null);
 
   const fetchProfile = useCallback(async () => {
     try {
-      const [profileRes, membersRes] = await Promise.all([
-        api.get('/me'),
-        api.get('/team/members').catch(() => ({ data: { members: [] } })),
-      ]);
+      const profileRes = await api.get('/me');
       setProfile(profileRes.data.profile);
       setName(profileRes.data.profile.full_name || '');
-      setMemberCount(membersRes.data.members.length);
     } catch {
       toast.error('Failed to load profile');
     } finally {
@@ -325,41 +320,33 @@ export default function ProfileSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Leave / Delete Company */}
-      {(
+      {/* Leave Company (non-owners only — owners delete from Account settings) */}
+      {!isOwner && (
         <Card className="border-destructive/30">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 text-base text-destructive">
-              {isOwner ? <Trash2 className="h-4 w-4" /> : <DoorOpen className="h-4 w-4" />}
-              {isOwner ? 'Delete Company' : 'Leave Company'}
+              <DoorOpen className="h-4 w-4" />
+              Leave Company
             </CardTitle>
             <CardDescription>
-              {isOwner
-                ? 'You are the only member. This will permanently delete the company and all its data.'
-                : 'You will lose access to all company data. This cannot be undone.'}
+              You will lose access to all company data. This cannot be undone.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-end">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">
-                  {isOwner ? (
-                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                  ) : (
-                    <DoorOpen className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  {isOwner ? 'Delete' : 'Leave'}
+                  <DoorOpen className="mr-1.5 h-3.5 w-3.5" />
+                  Leave
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {isOwner ? 'Delete' : 'Leave'} {companyName || 'this company'}?
+                    Leave {companyName || 'this company'}?
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    {isOwner
-                      ? 'This will permanently delete the company, all channels, conversations, contacts, and other data. This cannot be undone.'
-                      : 'You will be removed from the company and lose access to all its data. You\'ll need a new invitation to rejoin.'}
+                    You will be removed from the company and lose access to all its data. You'll need a new invitation to rejoin.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -370,7 +357,7 @@ export default function ProfileSettingsPage() {
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     {leaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {isOwner ? 'Delete Company' : 'Leave Company'}
+                    Leave Company
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

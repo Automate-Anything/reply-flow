@@ -5,8 +5,9 @@ import CompanySettingsPage from './CompanySettingsPage';
 import TeamPage from './TeamPage';
 import WorkspacesPage from './WorkspacesPage';
 import RolePermissionsPage from './RolePermissionsPage';
+import CannedResponsesManager from '@/components/settings/CannedResponsesManager';
 
-const TABS = ['company', 'team', 'workspaces', 'permissions'] as const;
+const TABS = ['company', 'team', 'workspaces', 'quick-replies', 'permissions'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function SettingsPage() {
@@ -37,6 +38,7 @@ export default function SettingsPage() {
           <TabsTrigger value="company" className="flex-1">Company</TabsTrigger>
           <TabsTrigger value="team" className="flex-1">Team</TabsTrigger>
           <TabsTrigger value="workspaces" className="flex-1">Workspaces</TabsTrigger>
+          <TabsTrigger value="quick-replies" className="flex-1">Quick Replies</TabsTrigger>
           <TabsTrigger value="permissions" className="flex-1">Permissions</TabsTrigger>
         </TabsList>
 
@@ -50,6 +52,10 @@ export default function SettingsPage() {
 
         <TabsContent value="workspaces" className="mt-6">
           <WorkspacesPage />
+        </TabsContent>
+
+        <TabsContent value="quick-replies" className="mt-6">
+          <CannedResponsesManager />
         </TabsContent>
 
         <TabsContent value="permissions" className="mt-6">

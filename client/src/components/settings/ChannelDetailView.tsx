@@ -342,7 +342,7 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
                   className="gap-1 text-xs"
                   onClick={() => {
                     onOpenChange(false);
-                    navigate(`/workspaces/${channel.workspace_id}`);
+                    navigate('/channels');
                   }}
                 >
                   Workspace <ExternalLink className="h-3 w-3" />

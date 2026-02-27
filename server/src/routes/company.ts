@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requirePermission } from '../middleware/permissions.js';
+import * as whapi from '../services/whapi.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -141,6 +142,64 @@ router.put('/', requirePermission('company_settings', 'edit'), async (req, res, 
 
     if (error) throw error;
     res.json({ company: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// DELETE COMPANY (owner only)
+// ────────────────────────────────────────────────
+router.delete('/', async (req, res, next) => {
+  try {
+    const userId = req.userId!;
+    const companyId = req.companyId;
+    const userRole = req.userRole;
+
+    if (!companyId) {
+      res.status(400).json({ error: 'You are not a member of any company' });
+      return;
+    }
+
+    if (userRole !== 'owner') {
+      res.status(403).json({ error: 'Only the company owner can delete the company' });
+      return;
+    }
+
+    // 1. Clean up WhatsApp channels via Whapi
+    const { data: channels } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('channel_id, channel_token')
+      .eq('company_id', companyId);
+
+    for (const ch of channels || []) {
+      try {
+        await whapi.logoutChannel(ch.channel_token);
+      } catch {
+        // Channel may already be logged out
+      }
+      try {
+        await whapi.deleteChannel(ch.channel_id);
+      } catch {
+        // Channel may already be deleted
+      }
+    }
+
+    // 2. Clear company_id for all users in this company
+    await supabaseAdmin
+      .from('users')
+      .update({ company_id: null })
+      .eq('company_id', companyId);
+
+    // 3. Delete the company — CASCADE handles all related data
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .delete()
+      .eq('id', companyId);
+
+    if (error) throw error;
+
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

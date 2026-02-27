@@ -1,22 +1,56 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Briefcase, User, Building2, ChevronRight, ChevronLeft,
-  Check, Loader2, Pencil,
+  Check, Loader2, Pencil, Clock, Languages,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ProfileData, WorkspaceAIProfile } from '@/hooks/useWorkspaceAI';
 import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import BusinessHoursEditor, { getDefaultBusinessHours } from '@/components/settings/BusinessHoursEditor';
+import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
+
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'he', label: 'Hebrew' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+  { value: 'pt', label: 'Portuguese' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'it', label: 'Italian' },
+  { value: 'tr', label: 'Turkish' },
+];
+
+export interface ScheduleData {
+  default_language: string;
+  business_hours: BusinessHours;
+}
 
 interface Props {
   profile: WorkspaceAIProfile;
   onSave: (updates: Partial<WorkspaceAIProfile>) => Promise<unknown>;
+  schedule: ScheduleData;
+  onSaveSchedule: (schedule: ScheduleData) => Promise<unknown>;
 }
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 const USE_CASE_OPTIONS = [
   { value: 'business' as const, label: 'Business', icon: Briefcase, description: 'Customer support, sales, or services' },
@@ -65,7 +99,7 @@ function OptionButton({
   );
 }
 
-function ProfileSummary({ data, onEdit }: { data: ProfileData; onEdit: () => void }) {
+function ProfileSummary({ data, schedule, onEdit }: { data: ProfileData; schedule: ScheduleData; onEdit: () => void }) {
   const items: { label: string; value: string }[] = [];
 
   if (data.use_case) {
@@ -101,6 +135,18 @@ function ProfileSummary({ data, onEdit }: { data: ProfileData; onEdit: () => voi
   if (data.greeting_message) {
     items.push({ label: 'Greeting', value: data.greeting_message });
   }
+  if (schedule.default_language) {
+    const lang = LANGUAGES.find((l) => l.value === schedule.default_language);
+    items.push({ label: 'Default Language', value: lang?.label || schedule.default_language });
+  }
+  {
+    const enabledDays = Object.entries(schedule.business_hours)
+      .filter(([, s]) => s.enabled)
+      .map(([day]) => day.charAt(0).toUpperCase() + day.slice(1, 3));
+    if (enabledDays.length > 0) {
+      items.push({ label: 'Business Hours', value: enabledDays.join(', ') });
+    }
+  }
 
   if (items.length === 0) {
     return (
@@ -134,11 +180,28 @@ function ProfileSummary({ data, onEdit }: { data: ProfileData; onEdit: () => voi
   );
 }
 
-export default function AIProfileWizard({ profile, onSave }: Props) {
-  const [editing, setEditing] = useState(!profile.profile_data?.use_case);
-  const [step, setStep] = useState(0);
+export default function AIProfileWizard({ profile, onSave, schedule, onSaveSchedule }: Props) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stepParam = parseInt(searchParams.get('step') || '0', 10);
+  const step = stepParam >= 1 && stepParam <= TOTAL_STEPS ? stepParam - 1 : 0;
+  const hasStepParam = searchParams.has('step');
+
+  const [editing, setEditing] = useState(!profile.profile_data?.use_case || hasStepParam);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<ProfileData>({ ...profile.profile_data });
+  const [draftSchedule, setDraftSchedule] = useState<ScheduleData>({ ...schedule });
+
+  const setStep = useCallback((newStep: number) => {
+    setSearchParams({ step: String(newStep + 1) }, { replace: true });
+  }, [setSearchParams]);
+
+  const clearStepParam = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('step');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   const updateDraft = (updates: Partial<ProfileData>) => {
     setDraft((prev) => ({ ...prev, ...updates }));
@@ -147,9 +210,13 @@ export default function AIProfileWizard({ profile, onSave }: Props) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave({ profile_data: draft });
+      await Promise.all([
+        onSave({ profile_data: draft }),
+        onSaveSchedule(draftSchedule),
+      ]);
       toast.success('AI profile saved');
       setEditing(false);
+      clearStepParam();
     } catch {
       toast.error('Failed to save AI profile');
     } finally {
@@ -159,12 +226,24 @@ export default function AIProfileWizard({ profile, onSave }: Props) {
 
   const handleEdit = () => {
     setDraft({ ...profile.profile_data });
+    setDraftSchedule({ ...schedule });
     setStep(0);
     setEditing(true);
   };
 
+  const canProceed = (() => {
+    switch (step) {
+      case 0: return !!draft.use_case;
+      case 1: return !!draft.target_audience?.trim();
+      case 2: return !!draft.tone && !!draft.response_length && !!draft.language_preference;
+      case 3: return true; // rules & greeting are optional
+      case 4: return !!draftSchedule.default_language;
+      default: return true;
+    }
+  })();
+
   if (!editing) {
-    return <ProfileSummary data={profile.profile_data} onEdit={handleEdit} />;
+    return <ProfileSummary data={profile.profile_data} schedule={schedule} onEdit={handleEdit} />;
   }
 
   return (
@@ -402,6 +481,59 @@ export default function AIProfileWizard({ profile, onSave }: Props) {
         </Card>
       )}
 
+      {/* Step 5: Schedule */}
+      {step === 4 && (
+        <Card>
+          <CardContent className="space-y-6 pt-5">
+            <div>
+              <p className="text-sm font-medium">Schedule &amp; Language</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Set the default language and business hours for this workspace.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5 text-xs">
+                <Languages className="h-3.5 w-3.5" />
+                Default Language
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                The primary language the AI agent will use when responding.
+              </p>
+              <Select
+                value={draftSchedule.default_language}
+                onValueChange={(val) => setDraftSchedule((s) => ({ ...s, default_language: val }))}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGES.map((lang) => (
+                    <SelectItem key={lang.value} value={lang.value}>
+                      {lang.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5 text-xs">
+                <Clock className="h-3.5 w-3.5" />
+                Business Hours
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Set when your team is available. The AI can adjust its responses outside business hours.
+              </p>
+              <BusinessHoursEditor
+                value={draftSchedule.business_hours}
+                onChange={(hours) => setDraftSchedule((s) => ({ ...s, business_hours: hours }))}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Navigation */}
       <div className="flex items-center justify-between">
         <div>
@@ -412,7 +544,7 @@ export default function AIProfileWizard({ profile, onSave }: Props) {
             </Button>
           ) : (
             profile.profile_data?.use_case && (
-              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              <Button variant="ghost" size="sm" onClick={() => { setEditing(false); clearStepParam(); }}>
                 Cancel
               </Button>
             )
@@ -423,7 +555,7 @@ export default function AIProfileWizard({ profile, onSave }: Props) {
             <Button
               size="sm"
               onClick={() => setStep(step + 1)}
-              disabled={step === 0 && !draft.use_case}
+              disabled={!canProceed}
             >
               Next
               <ChevronRight className="ml-1 h-3.5 w-3.5" />

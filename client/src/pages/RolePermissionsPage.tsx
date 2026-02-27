@@ -3,12 +3,15 @@ import api from '@/lib/api';
 import { useSession } from '@/contexts/SessionContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  RotateCcw, Save, Shield, Loader2, Lock,
-  Crown, UserCog, Users, User, Eye,
+  RotateCcw, Save, Loader2, Lock,
+  Crown, Shield, UserCog, Users, User, Eye,
+  MessageSquare, Mail, BookUser, StickyNote, Smartphone,
+  Bot, Library, Tag, UsersRound, Building2, KeyRound,
+  FolderOpen, MessageCircle, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -42,10 +45,13 @@ const RESOURCE_ACTIONS: Record<string, string[]> = {
   messages: ['view', 'create'],
   contacts: ['view', 'create', 'edit', 'delete'],
   contact_notes: ['view', 'create', 'edit', 'delete'],
+  conversation_notes: ['view', 'create', 'edit', 'delete'],
+  canned_responses: ['view', 'create', 'edit', 'delete'],
   channels: ['view', 'create', 'edit', 'delete'],
   ai_settings: ['view', 'edit'],
   knowledge_base: ['view', 'create', 'edit', 'delete'],
   labels: ['view', 'create', 'edit', 'delete'],
+  workspaces: ['view', 'create', 'edit', 'delete'],
   team: ['view', 'invite', 'edit_role', 'remove'],
   company_settings: ['view', 'edit'],
   role_permissions: ['view', 'edit'],
@@ -53,20 +59,28 @@ const RESOURCE_ACTIONS: Record<string, string[]> = {
 
 interface ResourceGroup {
   label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
   resources: string[];
 }
 
 const RESOURCE_GROUPS: ResourceGroup[] = [
   {
     label: 'Data',
-    resources: ['conversations', 'messages', 'contacts', 'contact_notes'],
+    description: 'Conversations, messages, contacts, and notes',
+    icon: MessageSquare,
+    resources: ['conversations', 'messages', 'contacts', 'contact_notes', 'conversation_notes', 'canned_responses'],
   },
   {
     label: 'Content',
-    resources: ['channels', 'ai_settings', 'knowledge_base', 'labels'],
+    description: 'Channels, AI, knowledge base, and labels',
+    icon: Zap,
+    resources: ['channels', 'ai_settings', 'knowledge_base', 'labels', 'workspaces'],
   },
   {
     label: 'Administration',
+    description: 'Team, company settings, and permissions',
+    icon: Building2,
     resources: ['team', 'company_settings', 'role_permissions'],
   },
 ];
@@ -76,13 +90,33 @@ const RESOURCE_LABELS: Record<string, string> = {
   messages: 'Messages',
   contacts: 'Contacts',
   contact_notes: 'Contact Notes',
+  conversation_notes: 'Conversation Notes',
+  canned_responses: 'Canned Responses',
   channels: 'Channels',
   ai_settings: 'AI Settings',
   knowledge_base: 'Knowledge Base',
   labels: 'Labels',
+  workspaces: 'Workspaces',
   team: 'Team',
   company_settings: 'Company Settings',
   role_permissions: 'Role Permissions',
+};
+
+const RESOURCE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  conversations: MessageSquare,
+  messages: Mail,
+  contacts: BookUser,
+  contact_notes: StickyNote,
+  conversation_notes: MessageCircle,
+  canned_responses: Zap,
+  channels: Smartphone,
+  ai_settings: Bot,
+  knowledge_base: Library,
+  labels: Tag,
+  workspaces: FolderOpen,
+  team: UsersRound,
+  company_settings: Building2,
+  role_permissions: KeyRound,
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -185,6 +219,37 @@ export default function RolePermissionsPage() {
       return role.hierarchy_level < currentUserHierarchy;
     },
     [currentUserHierarchy, hasPermission],
+  );
+
+  /** Count enabled permissions for a resource under the selected role */
+  const getResourceCount = useCallback(
+    (resource: string): { enabled: number; total: number } => {
+      const actions = RESOURCE_ACTIONS[resource] || [];
+      if (!selectedRole) return { enabled: 0, total: actions.length };
+
+      const isOwnerRole = selectedRole.name === 'owner';
+      const enabled = actions.filter((action) =>
+        isOwnerRole ? true : hasRolePermission(selectedRole.id, selectedRole.name, resource, action),
+      ).length;
+
+      return { enabled, total: actions.length };
+    },
+    [selectedRole, hasRolePermission],
+  );
+
+  /** Count enabled permissions for a group under the selected role */
+  const getGroupCount = useCallback(
+    (group: ResourceGroup): { enabled: number; total: number } => {
+      let enabled = 0;
+      let total = 0;
+      for (const resource of group.resources) {
+        const c = getResourceCount(resource);
+        enabled += c.enabled;
+        total += c.total;
+      }
+      return { enabled, total };
+    },
+    [getResourceCount],
   );
 
   // ─── Toggle handler ──────────────────────────────
@@ -388,21 +453,55 @@ export default function RolePermissionsPage() {
           </div>
 
           {/* Permission groups */}
-          {RESOURCE_GROUPS.map((group) => (
-            <div key={group.label} className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {group.label}
-              </h3>
-              <div className="space-y-3">
-                {group.resources.map((resource) => {
-                  const actions = RESOURCE_ACTIONS[resource] || [];
-                  return (
-                    <Card key={resource}>
-                      <CardContent className="px-5 py-4">
-                        <p className="mb-3 text-sm font-medium">
-                          {RESOURCE_LABELS[resource] || resource}
-                        </p>
-                        <div className="space-y-2.5">
+          {RESOURCE_GROUPS.map((group) => {
+            const GroupIcon = group.icon;
+            const groupCount = getGroupCount(group);
+
+            return (
+              <div key={group.label} className="space-y-4">
+                {/* Group header */}
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                    <GroupIcon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{group.label}</h3>
+                      <Badge variant="secondary" className="text-[10px] font-medium px-1.5 py-0">
+                        {groupCount.enabled}/{groupCount.total}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{group.description}</p>
+                  </div>
+                </div>
+
+                {/* Resource cards — 2 column grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {group.resources.map((resource) => {
+                    const actions = RESOURCE_ACTIONS[resource] || [];
+                    const ResIcon = RESOURCE_ICONS[resource] || Shield;
+                    const resCount = getResourceCount(resource);
+
+                    return (
+                      <div
+                        key={resource}
+                        className="rounded-xl border bg-card p-4"
+                      >
+                        {/* Resource header */}
+                        <div className="mb-3 flex items-center gap-2.5">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
+                            <ResIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                          </div>
+                          <span className="flex-1 text-sm font-medium">
+                            {RESOURCE_LABELS[resource] || resource}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {resCount.enabled}/{resCount.total}
+                          </span>
+                        </div>
+
+                        {/* Action toggles */}
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                           {actions.map((action) => {
                             const checked = isOwner
                               ? true
@@ -414,7 +513,7 @@ export default function RolePermissionsPage() {
                                 key={action}
                                 className="flex items-center justify-between"
                               >
-                                <span className="text-sm text-muted-foreground">
+                                <span className="text-[13px] text-muted-foreground">
                                   {ACTION_LABELS[action] || action}
                                 </span>
                                 <Switch
@@ -428,13 +527,13 @@ export default function RolePermissionsPage() {
                             );
                           })}
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
 
