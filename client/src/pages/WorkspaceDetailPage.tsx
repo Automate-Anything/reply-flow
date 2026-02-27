@@ -4,23 +4,17 @@ import api from '@/lib/api';
 import { useWorkspaceAI } from '@/hooks/useWorkspaceAI';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog';
-import {
-  ArrowLeft, Bot, Pencil, Trash2, Loader2, Plus, Smartphone, X,
+  ArrowLeft, Bot, Pencil, Trash2, Loader2, Smartphone,
   CheckCircle2, WifiOff, QrCode,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AIProfileWizard from '@/components/settings/AIProfileWizard';
-import KnowledgeBase from '@/components/settings/KnowledgeBase';
+import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
+import ChannelDetailView from '@/components/settings/ChannelDetailView';
 import type { ChannelInfo } from '@/components/settings/channelHelpers';
 
 interface WorkspaceDetail {
@@ -57,22 +51,13 @@ export default function WorkspaceDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [toggling, setToggling] = useState(false);
 
-  // For adding channels
-  const [unassignedChannels, setUnassignedChannels] = useState<ChannelInfo[]>([]);
-  const [showAddChannel, setShowAddChannel] = useState(false);
-  const [selectedChannelToAdd, setSelectedChannelToAdd] = useState<string>('');
-  const [addingChannel, setAddingChannel] = useState(false);
+  // Channel detail dialog
+  const [selectedChannel, setSelectedChannel] = useState<ChannelInfo | null>(null);
 
   const {
     profile,
-    kbEntries,
     loadingProfile,
-    loadingKB,
     updateProfile,
-    addKBEntry,
-    uploadKBFile,
-    updateKBEntry,
-    deleteKBEntry,
   } = useWorkspaceAI(workspaceId);
 
   const fetchWorkspace = useCallback(async () => {
@@ -83,22 +68,11 @@ export default function WorkspaceDetailPage() {
       setChannels(data.channels || []);
     } catch {
       toast.error('Failed to load workspace');
-      navigate('/workspaces');
+      navigate('/settings?tab=workspaces');
     } finally {
       setLoading(false);
     }
   }, [workspaceId, navigate]);
-
-  const fetchUnassigned = useCallback(async () => {
-    try {
-      const { data } = await api.get('/whatsapp/channels');
-      const all: ChannelInfo[] = data.channels || [];
-      const assigned = new Set(channels.map((c) => c.id));
-      setUnassignedChannels(all.filter((c) => !assigned.has(c.id) && !c.workspace_id));
-    } catch {
-      // ignore
-    }
-  }, [channels]);
 
   useEffect(() => {
     fetchWorkspace();
@@ -129,38 +103,12 @@ export default function WorkspaceDetailPage() {
     try {
       await api.delete(`/workspaces/${workspaceId}`);
       toast.success('Workspace deleted');
-      navigate('/workspaces');
-    } catch {
-      toast.error('Failed to delete workspace');
+      navigate('/settings?tab=workspaces');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to delete workspace';
+      toast.error(msg);
     } finally {
       setDeleting(false);
-    }
-  };
-
-  const handleAddChannel = async () => {
-    if (!workspaceId || !selectedChannelToAdd) return;
-    setAddingChannel(true);
-    try {
-      await api.post(`/workspaces/${workspaceId}/channels`, { channelId: Number(selectedChannelToAdd) });
-      toast.success('Channel added to workspace');
-      setShowAddChannel(false);
-      setSelectedChannelToAdd('');
-      fetchWorkspace();
-    } catch {
-      toast.error('Failed to add channel');
-    } finally {
-      setAddingChannel(false);
-    }
-  };
-
-  const handleRemoveChannel = async (channelId: number) => {
-    if (!workspaceId) return;
-    try {
-      await api.delete(`/workspaces/${workspaceId}/channels/${channelId}`);
-      toast.success('Channel removed from workspace');
-      fetchWorkspace();
-    } catch {
-      toast.error('Failed to remove channel');
     }
   };
 
@@ -192,7 +140,7 @@ export default function WorkspaceDetailPage() {
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/workspaces')} className="mt-0.5">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/settings?tab=workspaces')} className="mt-0.5">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
@@ -300,42 +248,22 @@ export default function WorkspaceDetailPage() {
           <TabsTrigger value="ai-profile" className="flex-1">
             AI Profile
           </TabsTrigger>
-          <TabsTrigger value="knowledge-base" className="flex-1">
-            Knowledge Base ({kbEntries.length})
-          </TabsTrigger>
         </TabsList>
 
         {/* Channels Tab */}
         <TabsContent value="channels" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Channels assigned to this workspace will use its AI profile and knowledge base.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => {
-                fetchUnassigned();
-                setShowAddChannel(true);
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Channel
-            </Button>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Channels in this workspace use its AI profile. Click a channel to configure it.
+          </p>
 
-          {channels.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
-                <Smartphone className="h-8 w-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No channels assigned yet</p>
-                <p className="text-xs text-muted-foreground">Add a channel to start using AI on it.</p>
-              </CardContent>
-            </Card>
-          ) : (
+          {channels.length > 0 && (
             <div className="space-y-2">
               {channels.map((ch) => (
-                <Card key={ch.id}>
+                <Card
+                  key={ch.id}
+                  className="cursor-pointer transition-colors hover:bg-accent/50"
+                  onClick={() => setSelectedChannel(ch)}
+                >
                   <CardContent className="flex items-center gap-3 py-3 px-4">
                     {getChannelStatusIcon(ch.channel_status)}
                     <div className="min-w-0 flex-1">
@@ -344,18 +272,25 @@ export default function WorkspaceDetailPage() {
                       </p>
                       <p className="text-xs text-muted-foreground capitalize">{ch.channel_status}</p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleRemoveChannel(ch.id)}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
                   </CardContent>
                 </Card>
               ))}
             </div>
+          )}
+
+          {channels.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
+                <Smartphone className="h-8 w-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No channels yet</p>
+                <p className="text-xs text-muted-foreground">Create a new WhatsApp channel below.</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Inline channel creation */}
+          {workspaceId && (
+            <WhatsAppConnection workspaceId={workspaceId} onCreated={fetchWorkspace} />
           )}
         </TabsContent>
 
@@ -370,61 +305,17 @@ export default function WorkspaceDetailPage() {
             <AIProfileWizard profile={profile} onSave={updateProfile} />
           )}
         </TabsContent>
-
-        {/* Knowledge Base Tab */}
-        <TabsContent value="knowledge-base">
-          <KnowledgeBase
-            entries={kbEntries}
-            onAdd={addKBEntry}
-            onUpload={uploadKBFile}
-            onUpdate={updateKBEntry}
-            onDelete={deleteKBEntry}
-            loading={loadingKB}
-          />
-        </TabsContent>
       </Tabs>
 
-      {/* Add channel dialog */}
-      <Dialog open={showAddChannel} onOpenChange={setShowAddChannel}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add Channel</DialogTitle>
-            <DialogDescription>
-              Select a channel to assign to this workspace.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {unassignedChannels.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                No unassigned channels available. Create a new channel first or remove one from another workspace.
-              </p>
-            ) : (
-              <Select value={selectedChannelToAdd} onValueChange={setSelectedChannelToAdd}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a channel" />
-                </SelectTrigger>
-                <SelectContent>
-                  {unassignedChannels.map((ch) => (
-                    <SelectItem key={ch.id} value={String(ch.id)}>
-                      {ch.phone_number || ch.channel_name} ({ch.channel_status})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowAddChannel(false)}>Cancel</Button>
-              <Button
-                onClick={handleAddChannel}
-                disabled={!selectedChannelToAdd || addingChannel}
-              >
-                {addingChannel && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Add
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Channel Detail Dialog */}
+      {selectedChannel && (
+        <ChannelDetailView
+          channel={selectedChannel}
+          open={!!selectedChannel}
+          onOpenChange={(open) => { if (!open) setSelectedChannel(null); }}
+          onUpdate={fetchWorkspace}
+        />
+      )}
     </div>
   );
 }

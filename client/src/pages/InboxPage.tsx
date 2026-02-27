@@ -5,6 +5,7 @@ import api from '@/lib/api';
 import { useConversations, type Conversation } from '@/hooks/useConversations';
 import { useMessages, type Message } from '@/hooks/useMessages';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationHeader from '@/components/inbox/ConversationHeader';
 import MessageThread from '@/components/inbox/MessageThread';
@@ -12,7 +13,8 @@ import MessageThread from '@/components/inbox/MessageThread';
 export default function InboxPage() {
   const [search, setSearch] = useState('');
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
-  const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } = useConversations(search);
+  const { activeWorkspaceId } = useWorkspace();
+  const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } = useConversations(search, activeWorkspaceId);
   const { messages, setMessages, loading: msgsLoading, sendMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );

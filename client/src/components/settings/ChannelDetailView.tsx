@@ -8,9 +8,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, WifiOff, QrCode, Bot, ExternalLink,
@@ -18,10 +15,9 @@ import {
 import { toast } from 'sonner';
 import ChannelAgentSettings from './ChannelAgentSettings';
 import KBAssignmentList from './KBAssignmentList';
-import { useWorkspaceAI } from '@/hooks/useWorkspaceAI';
+import { useCompanyKB } from '@/hooks/useCompanyKB';
 import type { ChannelInfo } from './channelHelpers';
 import { formatChannelName, getStatusConfig, timeAgo } from './channelHelpers';
-import type { Workspace } from '@/hooks/useWorkspaces';
 
 interface Props {
   channel: ChannelInfo;
@@ -54,29 +50,15 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
   const [confirmDelete, setConfirmDelete] = useState(false);
   const cancelledRef = useRef(false);
 
-  // Workspace assignment state
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(channel.workspace_id || null);
-  const [assigningWorkspace, setAssigningWorkspace] = useState(false);
-
-  // Workspace AI data for KB assignment list
-  const { kbEntries, loadingKB } = useWorkspaceAI(currentWorkspaceId || undefined);
+  // Company KB data for KB assignment list
+  const { kbEntries, loading: loadingKB } = useCompanyKB();
 
   // Sync state when channel prop changes
   useEffect(() => {
     setEffectiveStatus(channel.channel_status);
-    setCurrentWorkspaceId(channel.workspace_id || null);
     setQrData(null);
     setConfirmDelete(false);
-  }, [channel.id, channel.channel_status, channel.workspace_id]);
-
-  // Fetch available workspaces
-  useEffect(() => {
-    if (!open) return;
-    api.get('/workspaces').then(({ data }) => {
-      setWorkspaces(data.workspaces || []);
-    }).catch(() => {});
-  }, [open]);
+  }, [channel.id, channel.channel_status]);
 
   // Poll health-check when pending
   useEffect(() => {
@@ -214,37 +196,12 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
     }
   };
 
-  const handleWorkspaceChange = async (value: string) => {
-    const newWorkspaceId = value === 'none' ? null : value;
-    setAssigningWorkspace(true);
-
-    try {
-      if (currentWorkspaceId) {
-        // Remove from current workspace
-        await api.delete(`/workspaces/${currentWorkspaceId}/channels/${channel.id}`);
-      }
-      if (newWorkspaceId) {
-        // Add to new workspace
-        await api.post(`/workspaces/${newWorkspaceId}/channels`, { channelId: channel.id });
-      }
-      setCurrentWorkspaceId(newWorkspaceId);
-      toast.success(newWorkspaceId ? 'Channel assigned to workspace' : 'Channel removed from workspace');
-      onUpdate();
-    } catch {
-      toast.error('Failed to change workspace');
-    } finally {
-      setAssigningWorkspace(false);
-    }
-  };
-
   const isConnected = effectiveStatus === 'connected';
   const isProvisioning = effectiveStatus === 'pending';
   const isAwaitingScan = effectiveStatus === 'awaiting_scan';
   const isDisconnected = effectiveStatus === 'disconnected';
   const statusConfig = getStatusConfig(effectiveStatus);
   const displayName = formatChannelName(channel);
-  const hasWorkspace = !!currentWorkspaceId;
-  const currentWorkspace = workspaces.find((ws) => ws.id === currentWorkspaceId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -368,69 +325,48 @@ export default function ChannelDetailView({ channel, open, onOpenChange, onUpdat
             )}
           </div>
 
-          {/* Workspace Assignment */}
+          {/* Agent Settings + KB Assignments */}
           <div className="border-t pt-5">
             <div className="flex items-center gap-3 mb-4">
               <Bot className="h-5 w-5 text-primary" />
               <div className="flex-1">
-                <p className="text-sm font-medium">AI Workspace</p>
+                <p className="text-sm font-medium">AI Configuration</p>
                 <p className="text-xs text-muted-foreground">
-                  Assign this channel to a workspace for AI and knowledge base access.
+                  Configure agent settings and knowledge base assignments for this channel.
                 </p>
               </div>
-              {currentWorkspace && (
+              {channel.workspace_id && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="gap-1 text-xs"
                   onClick={() => {
                     onOpenChange(false);
-                    navigate(`/workspaces/${currentWorkspaceId}`);
+                    navigate(`/workspaces/${channel.workspace_id}`);
                   }}
                 >
-                  Open <ExternalLink className="h-3 w-3" />
+                  Workspace <ExternalLink className="h-3 w-3" />
                 </Button>
               )}
             </div>
 
-            <Select
-              value={currentWorkspaceId || 'none'}
-              onValueChange={handleWorkspaceChange}
-              disabled={assigningWorkspace}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a workspace" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No workspace</SelectItem>
-                {workspaces.map((ws) => (
-                  <SelectItem key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Agent Settings + KB Assignments */}
-            {hasWorkspace && (
-              <Tabs defaultValue="agent-settings" className="mt-4">
-                <TabsList className="w-full">
-                  <TabsTrigger value="agent-settings" className="flex-1">Agent Settings</TabsTrigger>
-                  <TabsTrigger value="kb-assignments" className="flex-1">KB Assignments</TabsTrigger>
-                </TabsList>
-                <TabsContent value="agent-settings">
-                  <ChannelAgentSettings channelId={channel.id} hasWorkspace={hasWorkspace} />
-                </TabsContent>
-                <TabsContent value="kb-assignments">
-                  <KBAssignmentList
-                    channelId={channel.id}
-                    hasWorkspace={hasWorkspace}
-                    workspaceKBEntries={kbEntries}
-                    loadingKB={loadingKB}
-                  />
-                </TabsContent>
-              </Tabs>
-            )}
+            <Tabs defaultValue="agent-settings">
+              <TabsList className="w-full">
+                <TabsTrigger value="agent-settings" className="flex-1">Agent Settings</TabsTrigger>
+                <TabsTrigger value="kb-assignments" className="flex-1">KB Assignments</TabsTrigger>
+              </TabsList>
+              <TabsContent value="agent-settings">
+                <ChannelAgentSettings channelId={channel.id} hasWorkspace={true} />
+              </TabsContent>
+              <TabsContent value="kb-assignments">
+                <KBAssignmentList
+                  channelId={channel.id}
+                  hasWorkspace={true}
+                  workspaceKBEntries={kbEntries}
+                  loadingKB={loadingKB}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </DialogContent>

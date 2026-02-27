@@ -14,8 +14,27 @@ router.use(requireAuth);
 // Provisioning continues in the background — the client polls /health-check.
 router.post('/create-channel', requirePermission('channels', 'create'), async (req, res) => {
   const companyId = req.companyId!;
+  const { workspaceId } = req.body;
+
+  if (!workspaceId) {
+    res.status(400).json({ error: 'workspaceId is required' });
+    return;
+  }
 
   try {
+    // Verify workspace belongs to company
+    const { data: workspace } = await supabaseAdmin
+      .from('workspaces')
+      .select('id')
+      .eq('id', workspaceId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (!workspace) {
+      res.status(404).json({ error: 'Workspace not found' });
+      return;
+    }
+
     // 1. Create channel on WhAPI
     const channel = await whapi.createChannel(`reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`);
 
@@ -33,6 +52,7 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
       .from('whatsapp_channels')
       .insert({
         company_id: companyId,
+        workspace_id: workspaceId,
         created_by: req.userId,
         channel_id: channel.id,
         channel_token: channel.token,

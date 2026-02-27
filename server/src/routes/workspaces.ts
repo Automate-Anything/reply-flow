@@ -117,17 +117,10 @@ router.get('/:workspaceId', requirePermission('workspaces', 'view'), async (req,
       .eq('workspace_id', workspaceId)
       .single();
 
-    // Fetch KB entry count
-    const { count: kbCount } = await supabaseAdmin
-      .from('knowledge_base_entries')
-      .select('id', { count: 'exact', head: true })
-      .eq('workspace_id', workspaceId);
-
     res.json({
       workspace,
       channels: channels || [],
       profile: profile || { is_enabled: false, profile_data: {}, max_tokens: 500 },
-      kb_entry_count: kbCount || 0,
     });
   } catch (err) {
     next(err);
@@ -169,11 +162,23 @@ router.put('/:workspaceId', requirePermission('workspaces', 'edit'), async (req,
   }
 });
 
-// Delete workspace
+// Delete workspace (blocked if channels still exist)
 router.delete('/:workspaceId', requirePermission('workspaces', 'delete'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
     const { workspaceId } = req.params;
+
+    // Check for existing channels — can't delete workspace with channels
+    const { count } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('company_id', companyId);
+
+    if (count && count > 0) {
+      res.status(409).json({ error: 'Cannot delete workspace with existing channels. Remove all channels first.' });
+      return;
+    }
 
     const { error } = await supabaseAdmin
       .from('workspaces')
@@ -234,40 +239,6 @@ router.post('/:workspaceId/channels', requirePermission('workspaces', 'edit'), a
       .eq('company_id', companyId);
 
     if (error) throw error;
-
-    res.json({ success: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Remove a channel from a workspace
-router.delete('/:workspaceId/channels/:channelId', requirePermission('workspaces', 'edit'), async (req, res, next) => {
-  try {
-    const companyId = req.companyId!;
-    const { workspaceId, channelId } = req.params;
-
-    // Set workspace_id to null
-    const { error } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .update({ workspace_id: null })
-      .eq('id', Number(channelId))
-      .eq('workspace_id', workspaceId)
-      .eq('company_id', companyId);
-
-    if (error) throw error;
-
-    // Also clean up any KB assignments for this channel
-    await supabaseAdmin
-      .from('channel_kb_assignments')
-      .delete()
-      .eq('channel_id', Number(channelId));
-
-    // Clean up channel agent settings
-    await supabaseAdmin
-      .from('channel_agent_settings')
-      .delete()
-      .eq('channel_id', Number(channelId));
 
     res.json({ success: true });
   } catch (err) {

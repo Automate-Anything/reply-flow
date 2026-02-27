@@ -16,10 +16,11 @@ const PROVISIONING_STEPS = [
 ] as const;
 
 interface Props {
+  workspaceId: string;
   onCreated: () => void;
 }
 
-export default function WhatsAppConnection({ onCreated }: Props) {
+export default function WhatsAppConnection({ workspaceId, onCreated }: Props) {
   const [state, setState] = useState<ConnectionState>('idle');
   const [qrData, setQrData] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +124,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     setState('provisioning');
     setError(null);
     try {
-      const { data } = await api.post('/whatsapp/create-channel');
+      const { data } = await api.post('/whatsapp/create-channel', { workspaceId });
       setDbChannelId(data.dbChannelId);
       startHealthPolling(data.dbChannelId);
     } catch {

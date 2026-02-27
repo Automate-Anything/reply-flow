@@ -351,26 +351,19 @@ export default function TeamPage() {
   // -----------------------------------------------------------------------
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage your team members, roles, and invitations.
-          </p>
-        </div>
-
-        {canViewPermissions && (
+    <div className="space-y-8">
+      {/* Header actions */}
+      {canViewPermissions && (
+        <div className="flex justify-end">
           <Button variant="outline" size="sm" asChild>
-            <Link to="/team/permissions">
+            <Link to="/settings/team/permissions">
               <Shield className="size-4" />
               Role Permissions
               <ExternalLink className="size-3 opacity-50" />
             </Link>
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ----------------------------------------------------------------- */}
       {/* Members table                                                      */}

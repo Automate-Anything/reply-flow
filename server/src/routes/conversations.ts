@@ -10,7 +10,7 @@ router.use(requireAuth);
 router.get('/', requirePermission('conversations', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { search, status, archived, channelId, limit = '50', offset = '0' } = req.query;
+    const { search, status, archived, channelId, workspaceId, limit = '50', offset = '0' } = req.query;
 
     let query = supabaseAdmin
       .from('chat_sessions')
@@ -19,6 +19,21 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       .is('deleted_at', null)
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+    // Workspace filtering: only show conversations from channels in this workspace
+    if (workspaceId) {
+      const { data: wsChannels } = await supabaseAdmin
+        .from('whatsapp_channels')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('company_id', companyId);
+      const wsChannelIds = (wsChannels || []).map((c) => c.id);
+      if (wsChannelIds.length === 0) {
+        res.json({ sessions: [], count: 0 });
+        return;
+      }
+      query = query.in('channel_id', wsChannelIds);
+    }
 
     if (archived === 'true') {
       query = query.eq('is_archived', true);

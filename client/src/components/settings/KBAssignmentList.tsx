@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, FileText, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChannelAgent } from '@/hooks/useChannelAgent';
-import type { KBEntry } from '@/hooks/useWorkspaceAI';
+import type { KBEntry } from '@/hooks/useCompanyKB';
 
 interface Props {
   channelId: number;
@@ -58,10 +58,10 @@ export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBE
       <div className="flex flex-col items-center gap-2 py-6 text-center">
         <FileText className="h-6 w-6 text-muted-foreground/40" />
         <p className="text-sm text-muted-foreground">
-          No knowledge base entries in this workspace yet.
+          No knowledge base entries yet.
         </p>
         <p className="text-xs text-muted-foreground">
-          Add entries in the workspace's Knowledge Base tab first.
+          Add entries on the Knowledge Base page first.
         </p>
       </div>
     );
@@ -103,7 +103,7 @@ export default function KBAssignmentList({ channelId, hasWorkspace, workspaceKBE
           <p className="text-sm font-medium">Knowledge Base Assignments</p>
           <p className="text-xs text-muted-foreground">
             {noneSelected
-              ? 'No entries assigned — AI will use all workspace entries.'
+              ? 'No entries assigned — AI will use all company entries.'
               : `${localAssigned.size} of ${workspaceKBEntries.length} entries assigned`}
           </p>
         </div>

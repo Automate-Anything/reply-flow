@@ -39,14 +39,8 @@ export default function WorkspacesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Workspaces</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage AI profiles and knowledge bases for your channels.
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div className="flex justify-end">
         <Button onClick={() => setShowCreate(true)} className="gap-2">
           <Plus className="h-4 w-4" /> New Workspace
         </Button>

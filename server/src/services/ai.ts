@@ -92,11 +92,11 @@ export async function shouldAIRespond(
       .in('id', entryIds);
     kbData = (kbEntries || []) as KBEntry[];
   } else {
-    // No specific assignments — use all workspace KB entries
+    // No specific assignments — use all company KB entries
     const { data: kbEntries } = await supabaseAdmin
       .from('knowledge_base_entries')
       .select('title, content')
-      .eq('workspace_id', channel.workspace_id);
+      .eq('company_id', companyId);
     kbData = (kbEntries || []) as KBEntry[];
   }
 

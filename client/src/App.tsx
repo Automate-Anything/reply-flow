@@ -10,14 +10,12 @@ import AuthCallback from '@/pages/AuthCallback';
 import DashboardPage from '@/pages/DashboardPage';
 import InboxPage from '@/pages/InboxPage';
 import ContactsPage from '@/pages/ContactsPage';
-import SettingsPage from '@/pages/SettingsPage';
-import TeamPage from '@/pages/TeamPage';
+import KnowledgeBasePage from '@/pages/KnowledgeBasePage';
 import RolePermissionsPage from '@/pages/RolePermissionsPage';
-import CompanySettingsPage from '@/pages/CompanySettingsPage';
 import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import AcceptInvitePage from '@/pages/AcceptInvitePage';
 import OnboardingPage from '@/pages/OnboardingPage';
-import WorkspacesPage from '@/pages/WorkspacesPage';
+import SettingsPage from '@/pages/SettingsPage';
 import WorkspaceDetailPage from '@/pages/WorkspaceDetailPage';
 
 function App() {
@@ -36,13 +34,11 @@ function App() {
                   <Route index element={<DashboardPage />} />
                   <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />
-                  <Route path="channels" element={<SettingsPage />} />
-                  <Route path="workspaces" element={<WorkspacesPage />} />
-                  <Route path="workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
-                  <Route path="team" element={<TeamPage />} />
-                  <Route path="team/permissions" element={<RolePermissionsPage />} />
-                  <Route path="settings/company" element={<CompanySettingsPage />} />
+                  <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+                  <Route path="settings" element={<SettingsPage />} />
+                  <Route path="settings/team/permissions" element={<RolePermissionsPage />} />
                   <Route path="settings/profile" element={<ProfileSettingsPage />} />
+                  <Route path="workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
                 </Route>
               </Route>
             </Routes>

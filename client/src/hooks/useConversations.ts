@@ -26,7 +26,7 @@ export interface Conversation {
   created_at: string;
 }
 
-export function useConversations(search?: string) {
+export function useConversations(search?: string, workspaceId?: string | null) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +34,7 @@ export function useConversations(search?: string) {
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
+      if (workspaceId) params.set('workspaceId', workspaceId);
       const { data } = await api.get(`/conversations?${params}`);
       setConversations(data.sessions || []);
     } catch (err) {
@@ -41,7 +42,7 @@ export function useConversations(search?: string) {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, workspaceId]);
 
   useEffect(() => {
     fetchConversations();

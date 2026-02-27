@@ -67,13 +67,6 @@ export function useWorkspaces() {
     []
   );
 
-  const removeChannel = useCallback(
-    async (workspaceId: string, channelId: number) => {
-      await api.delete(`/workspaces/${workspaceId}/channels/${channelId}`);
-    },
-    []
-  );
-
   return {
     workspaces,
     loading,
@@ -82,6 +75,5 @@ export function useWorkspaces() {
     updateWorkspace,
     deleteWorkspace,
     assignChannel,
-    removeChannel,
   };
 }

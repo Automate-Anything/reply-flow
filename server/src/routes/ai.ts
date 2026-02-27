@@ -119,16 +119,14 @@ router.put('/profile/:workspaceId', requirePermission('ai_settings', 'edit'), as
 // KNOWLEDGE BASE ROUTES (per-workspace)
 // ────────────────────────────────────────────────
 
-// List KB entries for a workspace
-router.get('/kb/:workspaceId', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
+// List KB entries for the company
+router.get('/kb', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { workspaceId } = req.params;
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
       .select('*')
-      .eq('workspace_id', workspaceId)
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
@@ -139,11 +137,10 @@ router.get('/kb/:workspaceId', requirePermission('knowledge_base', 'view'), asyn
   }
 });
 
-// Add text KB entry to a workspace
-router.post('/kb/:workspaceId', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
+// Add text KB entry to the company
+router.post('/kb', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { workspaceId } = req.params;
     const { title, content } = req.body;
 
     if (!title || !content) {
@@ -151,23 +148,9 @@ router.post('/kb/:workspaceId', requirePermission('knowledge_base', 'create'), a
       return;
     }
 
-    // Verify workspace ownership
-    const { data: workspace } = await supabaseAdmin
-      .from('workspaces')
-      .select('id')
-      .eq('id', workspaceId)
-      .eq('company_id', companyId)
-      .single();
-
-    if (!workspace) {
-      res.status(404).json({ error: 'Workspace not found' });
-      return;
-    }
-
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
       .insert({
-        workspace_id: workspaceId,
         company_id: companyId,
         created_by: req.userId,
         title,
@@ -184,28 +167,14 @@ router.post('/kb/:workspaceId', requirePermission('knowledge_base', 'create'), a
   }
 });
 
-// Upload file KB entry to a workspace
-router.post('/kb/:workspaceId/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
+// Upload file KB entry to the company
+router.post('/kb/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { workspaceId } = req.params;
     const file = req.file;
 
     if (!file) {
       res.status(400).json({ error: 'No file uploaded' });
-      return;
-    }
-
-    // Verify workspace ownership
-    const { data: workspace } = await supabaseAdmin
-      .from('workspaces')
-      .select('id')
-      .eq('id', workspaceId)
-      .eq('company_id', companyId)
-      .single();
-
-    if (!workspace) {
-      res.status(404).json({ error: 'Workspace not found' });
       return;
     }
 
@@ -236,7 +205,7 @@ router.post('/kb/:workspaceId/upload', requirePermission('knowledge_base', 'crea
     }
 
     // Upload file to Supabase Storage
-    const storagePath = `${companyId}/${workspaceId}/${Date.now()}_${file.originalname}`;
+    const storagePath = `${companyId}/kb/${Date.now()}_${file.originalname}`;
     const { error: storageError } = await supabaseAdmin.storage
       .from('knowledge-base')
       .upload(storagePath, file.buffer, {
@@ -254,7 +223,6 @@ router.post('/kb/:workspaceId/upload', requirePermission('knowledge_base', 'crea
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
       .insert({
-        workspace_id: workspaceId,
         company_id: companyId,
         created_by: req.userId,
         title,

@@ -61,7 +61,7 @@ export default function CompanySettingsPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6 p-6">
+      <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-40 rounded-xl" />
       </div>
@@ -69,14 +69,7 @@ export default function CompanySettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Company Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage your company information.
-        </p>
-      </div>
-
+    <div className="space-y-6">
       <Card>
         <CardContent className="space-y-4 pt-6">
           <div className="flex items-center gap-4">
@@ -107,7 +100,6 @@ export default function CompanySettingsPage() {
           )}
         </CardContent>
       </Card>
-
     </div>
   );
 }
