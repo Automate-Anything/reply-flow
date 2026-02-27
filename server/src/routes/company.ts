@@ -119,12 +119,13 @@ router.get('/', requirePermission('company_settings', 'view'), async (req, res, 
 router.put('/', requirePermission('company_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { name, slug, logo_url } = req.body;
+    const { name, slug, logo_url, timezone } = req.body;
 
     const updates: Record<string, unknown> = {};
     if (name !== undefined) updates.name = name;
     if (slug !== undefined) updates.slug = slug;
     if (logo_url !== undefined) updates.logo_url = logo_url;
+    if (timezone !== undefined) updates.timezone = timezone;
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: 'No fields to update' });

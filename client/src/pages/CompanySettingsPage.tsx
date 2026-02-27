@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '@/lib/api';
 import { useSession } from '@/contexts/SessionContext';
 import { toast } from 'sonner';
@@ -6,14 +6,30 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, Building2 } from 'lucide-react';
+import { Loader2, Building2, Globe } from 'lucide-react';
 
 interface Company {
   id: string;
   name: string;
   slug: string | null;
   logo_url: string | null;
+  timezone: string;
 }
+
+const TIMEZONES = (() => {
+  try {
+    return Intl.supportedValuesOf('timeZone');
+  } catch {
+    // Fallback for older browsers
+    return [
+      'UTC',
+      'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+      'America/Sao_Paulo', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+      'Europe/Moscow', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Shanghai',
+      'Asia/Tokyo', 'Asia/Jerusalem', 'Australia/Sydney', 'Pacific/Auckland',
+    ];
+  }
+})();
 
 export default function CompanySettingsPage() {
   const { hasPermission } = useSession();
@@ -23,12 +39,16 @@ export default function CompanySettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
+  const [timezone, setTimezone] = useState('UTC');
+  const [tzInput, setTzInput] = useState('UTC');
 
   const fetchCompany = useCallback(async () => {
     try {
       const { data } = await api.get('/company');
       setCompany(data.company);
       setName(data.company.name);
+      setTimezone(data.company.timezone || 'UTC');
+      setTzInput(data.company.timezone || 'UTC');
     } catch {
       toast.error('Failed to load company settings');
     } finally {
@@ -40,6 +60,21 @@ export default function CompanySettingsPage() {
     fetchCompany();
   }, [fetchCompany]);
 
+  const handleTzBlur = () => {
+    // Validate the timezone input on blur
+    if (TIMEZONES.includes(tzInput)) {
+      setTimezone(tzInput);
+    } else {
+      // Reset to current valid value
+      setTzInput(timezone);
+    }
+  };
+
+  const hasChanges = useMemo(() => {
+    if (!company) return false;
+    return name.trim() !== company.name || timezone !== (company.timezone || 'UTC');
+  }, [company, name, timezone]);
+
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error('Company name is required');
@@ -47,7 +82,10 @@ export default function CompanySettingsPage() {
     }
     setSaving(true);
     try {
-      const { data } = await api.put('/company', { name: name.trim() });
+      const { data } = await api.put('/company', {
+        name: name.trim(),
+        timezone,
+      });
       setCompany(data.company);
       toast.success('Company settings updated');
     } catch {
@@ -56,8 +94,6 @@ export default function CompanySettingsPage() {
       setSaving(false);
     }
   };
-
-  const hasChanges = company && name.trim() !== company.name;
 
   if (loading) {
     return (
@@ -89,17 +125,54 @@ export default function CompanySettingsPage() {
               />
             </div>
           </div>
-
-          {canEdit && (
-            <div className="flex justify-end">
-              <Button onClick={handleSave} disabled={saving || !hasChanges}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <Globe className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <label htmlFor="company-timezone" className="text-sm font-medium">
+                Timezone
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Used for business hours and scheduling across the platform.
+              </p>
+              <Input
+                id="company-timezone"
+                list="tz-list"
+                value={tzInput}
+                onChange={(e) => {
+                  setTzInput(e.target.value);
+                  if (TIMEZONES.includes(e.target.value)) {
+                    setTimezone(e.target.value);
+                  }
+                }}
+                onBlur={handleTzBlur}
+                disabled={!canEdit}
+                placeholder="e.g., America/New_York"
+              />
+              <datalist id="tz-list">
+                {TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {canEdit && (
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving || !hasChanges}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save Changes
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

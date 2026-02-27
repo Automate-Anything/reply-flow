@@ -1,13 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Users,
   UserPlus,
   Trash2,
   Copy,
   Clock,
-  Shield,
-  ExternalLink,
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -333,8 +330,6 @@ export default function TeamPage() {
   const canInvite = hasPermission('team', 'invite');
   const canEditRole = hasPermission('team', 'edit_role');
   const canRemove = hasPermission('team', 'remove');
-  const canViewPermissions = hasPermission('role_permissions', 'view');
-
   const isOwnerRow = (member: Member) =>
     member.roles.name.toLowerCase() === 'owner';
 
@@ -352,19 +347,6 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header actions */}
-      {canViewPermissions && (
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/settings/team/permissions">
-              <Shield className="size-4" />
-              Role Permissions
-              <ExternalLink className="size-3 opacity-50" />
-            </Link>
-          </Button>
-        </div>
-      )}
-
       {/* ----------------------------------------------------------------- */}
       {/* Members table                                                      */}
       {/* ----------------------------------------------------------------- */}

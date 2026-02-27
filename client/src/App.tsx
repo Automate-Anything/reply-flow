@@ -11,7 +11,6 @@ import DashboardPage from '@/pages/DashboardPage';
 import InboxPage from '@/pages/InboxPage';
 import ContactsPage from '@/pages/ContactsPage';
 import KnowledgeBasePage from '@/pages/KnowledgeBasePage';
-import RolePermissionsPage from '@/pages/RolePermissionsPage';
 import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import AcceptInvitePage from '@/pages/AcceptInvitePage';
 import OnboardingPage from '@/pages/OnboardingPage';
@@ -36,7 +35,6 @@ function App() {
                   <Route path="contacts" element={<ContactsPage />} />
                   <Route path="knowledge-base" element={<KnowledgeBasePage />} />
                   <Route path="settings" element={<SettingsPage />} />
-                  <Route path="settings/team/permissions" element={<RolePermissionsPage />} />
                   <Route path="settings/profile" element={<ProfileSettingsPage />} />
                   <Route path="workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
                 </Route>

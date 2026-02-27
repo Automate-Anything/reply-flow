@@ -132,13 +132,15 @@ router.put('/:workspaceId', requirePermission('workspaces', 'edit'), async (req,
   try {
     const companyId = req.companyId!;
     const { workspaceId } = req.params;
-    const { name, description } = req.body;
+    const { name, description, default_language, business_hours } = req.body;
 
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
     if (name !== undefined) updates.name = name.trim();
     if (description !== undefined) updates.description = description?.trim() || null;
+    if (default_language !== undefined) updates.default_language = default_language;
+    if (business_hours !== undefined) updates.business_hours = business_hours;
 
     const { data, error } = await supabaseAdmin
       .from('workspaces')

@@ -306,11 +306,7 @@ export default function RolePermissionsPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-7xl space-y-6 p-6">
-        <div className="space-y-1">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-96" />
-        </div>
+      <div className="space-y-6">
         <Skeleton className="h-[600px] rounded-xl" />
       </div>
     );
@@ -319,20 +315,7 @@ export default function RolePermissionsPage() {
   const pendingCount = pendingChanges.size;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Shield className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Role Permissions</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure what each role can access and modify across the platform.
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-6 pb-24">
       {/* Matrix Table */}
       <Card>
         <CardContent className="p-0">

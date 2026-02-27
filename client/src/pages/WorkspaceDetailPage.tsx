@@ -9,18 +9,46 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowLeft, Bot, Pencil, Trash2, Loader2, Smartphone,
-  CheckCircle2, WifiOff, QrCode,
+  CheckCircle2, WifiOff, QrCode, Clock, Languages,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AIProfileWizard from '@/components/settings/AIProfileWizard';
 import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
 import ChannelDetailView from '@/components/settings/ChannelDetailView';
+import BusinessHoursEditor, { getDefaultBusinessHours } from '@/components/settings/BusinessHoursEditor';
+import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
 import type { ChannelInfo } from '@/components/settings/channelHelpers';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'he', label: 'Hebrew' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+  { value: 'pt', label: 'Portuguese' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'it', label: 'Italian' },
+  { value: 'tr', label: 'Turkish' },
+];
 
 interface WorkspaceDetail {
   id: string;
   name: string;
   description: string | null;
+  default_language: string;
+  business_hours: BusinessHours | null;
   created_at: string;
 }
 
@@ -54,6 +82,12 @@ export default function WorkspaceDetailPage() {
   // Channel detail dialog
   const [selectedChannel, setSelectedChannel] = useState<ChannelInfo | null>(null);
 
+  // Schedule state
+  const [language, setLanguage] = useState('en');
+  const [businessHours, setBusinessHours] = useState<BusinessHours>(getDefaultBusinessHours());
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleInitialized, setScheduleInitialized] = useState(false);
+
   const {
     profile,
     loadingProfile,
@@ -66,6 +100,9 @@ export default function WorkspaceDetailPage() {
       const { data } = await api.get(`/workspaces/${workspaceId}`);
       setWorkspace(data.workspace);
       setChannels(data.channels || []);
+      setLanguage(data.workspace.default_language || 'en');
+      setBusinessHours(data.workspace.business_hours || getDefaultBusinessHours());
+      setScheduleInitialized(true);
     } catch {
       toast.error('Failed to load workspace');
       navigate('/settings?tab=workspaces');
@@ -121,6 +158,28 @@ export default function WorkspaceDetailPage() {
       toast.error('Failed to toggle AI');
     } finally {
       setToggling(false);
+    }
+  };
+
+  const scheduleChanged = scheduleInitialized && workspace && (
+    language !== (workspace.default_language || 'en') ||
+    JSON.stringify(businessHours) !== JSON.stringify(workspace.business_hours || getDefaultBusinessHours())
+  );
+
+  const handleSaveSchedule = async () => {
+    if (!workspaceId) return;
+    setSavingSchedule(true);
+    try {
+      const { data } = await api.put(`/workspaces/${workspaceId}`, {
+        default_language: language,
+        business_hours: businessHours,
+      });
+      setWorkspace(data.workspace);
+      toast.success('Schedule settings updated');
+    } catch {
+      toast.error('Failed to update schedule settings');
+    } finally {
+      setSavingSchedule(false);
     }
   };
 
@@ -248,6 +307,9 @@ export default function WorkspaceDetailPage() {
           <TabsTrigger value="ai-profile" className="flex-1">
             AI Profile
           </TabsTrigger>
+          <TabsTrigger value="schedule" className="flex-1">
+            Schedule
+          </TabsTrigger>
         </TabsList>
 
         {/* Channels Tab */}
@@ -303,6 +365,58 @@ export default function WorkspaceDetailPage() {
             </div>
           ) : (
             <AIProfileWizard profile={profile} onSave={updateProfile} />
+          )}
+        </TabsContent>
+
+        {/* Schedule Tab */}
+        <TabsContent value="schedule" className="space-y-6">
+          {/* Default Language */}
+          <Card>
+            <CardContent className="space-y-3 pt-6">
+              <div className="flex items-center gap-2">
+                <Languages className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Default Language</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The primary language the AI agent will use when responding to customers.
+              </p>
+              <Select value={language} onValueChange={setLanguage}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGES.map((lang) => (
+                    <SelectItem key={lang.value} value={lang.value}>
+                      {lang.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
+          {/* Business Hours */}
+          <Card>
+            <CardContent className="space-y-3 pt-6">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Business Hours</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Set when your team is available. The AI can adjust its responses outside business hours.
+              </p>
+              <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
+            </CardContent>
+          </Card>
+
+          {/* Save button */}
+          {scheduleChanged && (
+            <div className="flex justify-end">
+              <Button onClick={handleSaveSchedule} disabled={savingSchedule}>
+                {savingSchedule && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Schedule
+              </Button>
+            </div>
           )}
         </TabsContent>
       </Tabs>
