@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Camera, User, DoorOpen } from 'lucide-react';
+import { Loader2, Camera, User, DoorOpen, Trash2 } from 'lucide-react';
 
 interface Profile {
   id: string;
@@ -51,14 +51,19 @@ export default function ProfileSettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
-  // Leave company
+  // Leave / delete company
   const [leaving, setLeaving] = useState(false);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
 
   const fetchProfile = useCallback(async () => {
     try {
-      const { data } = await api.get('/me');
-      setProfile(data.profile);
-      setName(data.profile.full_name || '');
+      const [profileRes, membersRes] = await Promise.all([
+        api.get('/me'),
+        api.get('/team/members').catch(() => ({ data: { members: [] } })),
+      ]);
+      setProfile(profileRes.data.profile);
+      setName(profileRes.data.profile.full_name || '');
+      setMemberCount(membersRes.data.members.length);
     } catch {
       toast.error('Failed to load profile');
     } finally {
@@ -280,31 +285,40 @@ export default function ProfileSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Leave Company */}
-      {!isOwner && (
+      {/* Leave / Delete Company */}
+      {(!isOwner || memberCount === 1) && (
         <Card className="border-destructive/30">
           <CardContent className="flex items-center justify-between pt-6">
             <div>
-              <p className="text-sm font-medium">Leave Company</p>
+              <p className="text-sm font-medium">
+                {isOwner ? 'Delete Company' : 'Leave Company'}
+              </p>
               <p className="text-xs text-muted-foreground">
-                You will lose access to all company data. This cannot be undone.
+                {isOwner
+                  ? 'You are the only member. This will permanently delete the company and all its data.'
+                  : 'You will lose access to all company data. This cannot be undone.'}
               </p>
             </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm">
-                  <DoorOpen className="mr-1.5 h-3.5 w-3.5" />
-                  Leave
+                  {isOwner ? (
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  ) : (
+                    <DoorOpen className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {isOwner ? 'Delete' : 'Leave'}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    Leave {companyName || 'this company'}?
+                    {isOwner ? 'Delete' : 'Leave'} {companyName || 'this company'}?
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    You will be removed from the company and lose access to all its data.
-                    You'll need a new invitation to rejoin.
+                    {isOwner
+                      ? 'This will permanently delete the company, all channels, conversations, contacts, and other data. This cannot be undone.'
+                      : 'You will be removed from the company and lose access to all its data. You\'ll need a new invitation to rejoin.'}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -315,7 +329,7 @@ export default function ProfileSettingsPage() {
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     {leaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Leave Company
+                    {isOwner ? 'Delete Company' : 'Leave Company'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
