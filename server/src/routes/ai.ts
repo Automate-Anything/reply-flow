@@ -265,11 +265,9 @@ router.post('/kb/upload', requirePermission('knowledge_base', 'create'), upload.
     if (file.mimetype === 'text/plain' || ext === 'txt') {
       extractedText = file.buffer.toString('utf-8');
     } else if (file.mimetype === 'application/pdf' || ext === 'pdf') {
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ data: new Uint8Array(file.buffer) });
-      const result = await parser.getText();
+      const pdfParse = (await import('pdf-parse')).default;
+      const result = await pdfParse(file.buffer);
       extractedText = result.text;
-      await parser.destroy();
     } else if (
       file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       ext === 'docx'
@@ -501,11 +499,16 @@ router.get('/kb-assignments/:channelId', requirePermission('knowledge_base', 'vi
 
     const { data, error } = await supabaseAdmin
       .from('channel_kb_assignments')
-      .select('entry_id')
+      .select('entry_id, instructions')
       .eq('channel_id', channelId);
 
     if (error) throw error;
-    res.json({ assigned_entry_ids: (data || []).map((r) => r.entry_id) });
+    res.json({
+      assignments: (data || []).map((r) => ({
+        kb_id: r.entry_id,
+        instructions: r.instructions ?? undefined,
+      })),
+    });
   } catch (err) {
     next(err);
   }
@@ -516,7 +519,7 @@ router.put('/kb-assignments/:channelId', requirePermission('knowledge_base', 'ed
   try {
     const companyId = req.companyId!;
     const channelId = Number(req.params.channelId);
-    const { entryIds } = req.body as { entryIds: string[] };
+    const { assignments } = req.body as { assignments: Array<{ kb_id: string; instructions?: string }> };
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
@@ -537,10 +540,11 @@ router.put('/kb-assignments/:channelId', requirePermission('knowledge_base', 'ed
       .eq('channel_id', channelId);
 
     // Insert new assignments
-    if (entryIds && entryIds.length > 0) {
-      const rows = entryIds.map((entryId) => ({
+    if (assignments && assignments.length > 0) {
+      const rows = assignments.map((a) => ({
         channel_id: channelId,
-        entry_id: entryId,
+        entry_id: a.kb_id,
+        instructions: a.instructions ?? null,
       }));
 
       const { error } = await supabaseAdmin
@@ -550,7 +554,12 @@ router.put('/kb-assignments/:channelId', requirePermission('knowledge_base', 'ed
       if (error) throw error;
     }
 
-    res.json({ assigned_entry_ids: entryIds || [] });
+    res.json({
+      assignments: (assignments || []).map((a) => ({
+        kb_id: a.kb_id,
+        instructions: a.instructions,
+      })),
+    });
   } catch (err) {
     next(err);
   }

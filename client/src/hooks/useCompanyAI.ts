@@ -22,6 +22,9 @@ export interface ScenarioKBAttachment {
   instructions?: string;
 }
 
+/** Unified KB attachment type used by KBPicker */
+export type KBAttachment = ScenarioKBAttachment;
+
 export interface Scenario {
   id: string;
   label: string;

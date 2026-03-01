@@ -21,6 +21,7 @@ interface DaySchedule {
   enabled: boolean;
   open: string;  // "HH:MM"
   close: string; // "HH:MM"
+  slots?: Array<{ open: string; close: string }>;
 }
 
 interface BusinessHours {
@@ -70,10 +71,18 @@ function isWithinSchedule(schedule: BusinessHours, timezone: string): boolean {
   const minute = parseInt(parts.find((p) => p.type === 'minute')!.value, 10);
   const currentMinutes = hour * 60 + minute;
 
-  const [openH, openM] = day.open.split(':').map(Number);
-  const [closeH, closeM] = day.close.split(':').map(Number);
+  // Check against all time slots (backwards compatible with single open/close)
+  const slots = day.slots && day.slots.length > 0
+    ? day.slots
+    : [{ open: day.open, close: day.close }];
 
-  return currentMinutes >= openH * 60 + openM && currentMinutes < closeH * 60 + closeM;
+  for (const slot of slots) {
+    const [openH, openM] = slot.open.split(':').map(Number);
+    const [closeH, closeM] = slot.close.split(':').map(Number);
+    if (currentMinutes >= openH * 60 + openM && currentMinutes < closeH * 60 + closeM) return true;
+  }
+
+  return false;
 }
 
 // ── Main AI decision function ──────────────────────

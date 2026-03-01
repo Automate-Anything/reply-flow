@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Smartphone, Loader2, XCircle, RefreshCw, Trash2, Check } from 'lucide-react';
@@ -21,6 +22,7 @@ interface Props {
 
 export default function WhatsAppConnection({ onCreated }: Props) {
   const [state, setState] = useState<ConnectionState>('idle');
+  const [channelName, setChannelName] = useState('');
   const [qrData, setQrData] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshingQR, setRefreshingQR] = useState(false);
@@ -123,7 +125,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     setState('provisioning');
     setError(null);
     try {
-      const { data } = await api.post('/whatsapp/create-channel', {});
+      const { data } = await api.post('/whatsapp/create-channel', { name: channelName.trim() || undefined });
       setDbChannelId(data.dbChannelId);
       startHealthPolling(data.dbChannelId);
     } catch {
@@ -177,9 +179,20 @@ export default function WhatsAppConnection({ onCreated }: Props) {
               Link a WhatsApp number by scanning a QR code
             </p>
           </div>
-          <Button size="sm" onClick={handleCreateChannel}>
-            Add Channel
-          </Button>
+          <div className="flex items-center gap-2">
+            <Input
+              value={channelName}
+              onChange={(e) => setChannelName(e.target.value)}
+              placeholder="e.g. Support, Sales"
+              className="h-8 w-40 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && channelName.trim()) handleCreateChannel();
+              }}
+            />
+            <Button size="sm" onClick={handleCreateChannel} disabled={!channelName.trim()}>
+              Add Channel
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );

@@ -4,10 +4,10 @@ import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, Smartphone, CheckCircle2, WifiOff, QrCode, ChevronRight } from 'lucide-react';
+import { Loader2, Smartphone, CheckCircle2, CircleX, QrCode, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
-import { formatChannelName, getStatusConfig, type ChannelInfo } from '@/components/settings/channelHelpers';
+import { formatChannelName, getStatusConfig, getCardBorder, type ChannelInfo } from '@/components/settings/channelHelpers';
 
 function getStatusIcon(status: string) {
   switch (status) {
@@ -18,7 +18,7 @@ function getStatusIcon(status: string) {
     case 'awaiting_scan':
       return <QrCode className="h-3 w-3 text-blue-500" />;
     default:
-      return <WifiOff className="h-3 w-3 text-muted-foreground" />;
+      return <CircleX className="h-3 w-3 text-destructive" />;
   }
 }
 
@@ -60,7 +60,7 @@ export default function ChannelsPage() {
       <div>
         <h2 className="text-lg font-semibold">Channels</h2>
         <p className="text-sm text-muted-foreground">
-          Manage your WhatsApp channels and AI profiles.
+          Connect and manage your WhatsApp lines.
         </p>
       </div>
 
@@ -72,21 +72,18 @@ export default function ChannelsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Click a channel to configure it.
-          </p>
-
           {channels.length > 0 && (
             <div className="space-y-2">
               {channels.map((ch) => {
                 const status = getStatusConfig(ch.channel_status);
+                const borderClass = getCardBorder(ch.channel_status);
                 return (
                   <Card
                     key={ch.id}
-                    className="cursor-pointer transition-all hover:bg-accent/50 hover:border-primary/30 group"
+                    className={`cursor-pointer transition-all hover:bg-accent/50 hover:border-primary/30 group py-0 gap-0 ${borderClass || ''}`}
                     onClick={() => navigate(`/channels/${ch.id}`)}
                   >
-                    <CardContent className="flex items-center gap-3 py-3 px-4">
+                    <CardContent className="flex items-center gap-3 py-4 px-4">
                       <div className="relative">
                         <Avatar>
                           {ch.profile_picture_url ? (
@@ -104,7 +101,7 @@ export default function ChannelsPage() {
                         <p className="truncate text-sm font-medium">
                           {ch.phone_number ? formatPhone(ch.phone_number) : formatChannelName(ch)}
                         </p>
-                        <p className="text-xs text-muted-foreground">{status.label}</p>
+                        <p className={`text-xs ${ch.channel_status === 'disconnected' ? 'text-destructive' : 'text-muted-foreground'}`}>{status.label}</p>
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
                     </CardContent>

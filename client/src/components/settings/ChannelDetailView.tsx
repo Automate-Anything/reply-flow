@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -15,14 +15,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, WifiOff, QrCode,
-  Bot, ArrowLeft, Plus,
+  Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
+  Bot, ArrowLeft, Plus, AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChannelAgent } from '@/hooks/useChannelAgent';
-import { useCompanyKB } from '@/hooks/useCompanyKB';
 import { useAgents } from '@/hooks/useAgents';
-import KBAssignmentList from './KBAssignmentList';
 import ScheduleSection from './sections/ScheduleSection';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
 import type { BusinessHours } from './BusinessHoursEditor';
@@ -38,14 +36,20 @@ function getStatusIcon(status: string) {
     case 'awaiting_scan':
       return <QrCode className="h-5 w-5 text-blue-500" />;
     default:
-      return <WifiOff className="h-5 w-5 text-muted-foreground" />;
+      return <CircleX className="h-5 w-5 text-destructive" />;
   }
 }
 
 export default function ChannelDetailPage() {
   const { channelId } = useParams<{ channelId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const numericChannelId = Number(channelId);
+
+  const activeTab = searchParams.get('tab') || 'connection';
+  const handleTabChange = (value: string) => {
+    setSearchParams({ tab: value }, { replace: true });
+  };
 
   // Channel data
   const [channel, setChannel] = useState<ChannelInfo | null>(null);
@@ -68,9 +72,6 @@ export default function ChannelDetailPage() {
 
   // Agents list for assignment dropdown
   const { agents, loading: loadingAgents } = useAgents();
-
-  // Company KB data
-  const { kbEntries, loading: loadingKB } = useCompanyKB();
 
   // Company timezone (still company-level)
   const [companyTimezone, setCompanyTimezone] = useState('UTC');
@@ -333,35 +334,38 @@ export default function ChannelDetailPage() {
               {statusConfig.label}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">Created {timeAgo(channel.created_at)}</p>
+          <p className="text-sm text-muted-foreground">
+            {channel.phone_number && <>{channel.phone_number} · </>}
+            Created {timeAgo(channel.created_at)}
+          </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="ai-agent">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full">
           <TabsTrigger value="connection" className="flex-1">Connection</TabsTrigger>
           <TabsTrigger value="ai-agent" className="flex-1">AI Agent</TabsTrigger>
-          <TabsTrigger value="knowledge-base" className="flex-1">Knowledge Base</TabsTrigger>
         </TabsList>
 
         {/* Connection Tab */}
         <TabsContent value="connection" className="space-y-5">
-          {/* Channel details */}
-          <div className="grid gap-3 rounded-lg border p-4 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Phone Number</span>
-              <span className="font-medium">{channel.phone_number || 'Not connected'}</span>
+          {/* Disconnected banner */}
+          {isDisconnected && (
+            <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Channel disconnected</p>
+                <p className="text-xs text-muted-foreground">
+                  This WhatsApp channel is no longer connected. Reconnect to resume messaging.
+                </p>
+              </div>
+              <Button size="sm" onClick={handleReconnect}>
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Reconnect
+              </Button>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Channel Name</span>
-              <span className="font-medium truncate ml-4">{channel.channel_name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Webhook</span>
-              <span className="font-medium">{channel.webhook_registered ? 'Registered' : 'Not registered'}</span>
-            </div>
-          </div>
+          )}
 
           {/* Provisioning state */}
           {isProvisioning && (
@@ -396,31 +400,33 @@ export default function ChannelDetailPage() {
           )}
 
           {/* Action buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            {isConnected && (
-              <Button variant="outline" size="sm" onClick={handleLogout} disabled={disconnecting || deleting}>
-                {disconnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-2 h-3.5 w-3.5" />}
-                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
-              </Button>
-            )}
-            {isDisconnected && (
-              <Button variant="outline" size="sm" onClick={handleReconnect}>
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                Reconnect
-              </Button>
-            )}
-            {isAwaitingScan && (
-              <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
-                <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshingQR ? 'animate-spin' : ''}`} />
-                {refreshingQR ? 'Refreshing...' : 'Refresh QR'}
-              </Button>
-            )}
+          {(isConnected || isAwaitingScan) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {isConnected && (
+                <Button variant="outline" size="sm" onClick={handleLogout} disabled={disconnecting || deleting}>
+                  {disconnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-2 h-3.5 w-3.5" />}
+                  {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                </Button>
+              )}
+              {isAwaitingScan && (
+                <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
+                  <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshingQR ? 'animate-spin' : ''}`} />
+                  {refreshingQR ? 'Refreshing...' : 'Refresh QR'}
+                </Button>
+              )}
+            </div>
+          )}
 
-            {!isProvisioning && (
-              <div className="ml-auto">
+          {/* Danger zone — Delete */}
+          {!isProvisioning && (
+            <div className="rounded-lg border border-dashed border-destructive/30 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Delete channel</p>
+                  <p className="text-xs text-muted-foreground">Permanently remove this channel and all its data.</p>
+                </div>
                 {confirmDelete ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Delete?</span>
                     <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
                       {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
                       {deleting ? 'Deleting...' : 'Confirm'}
@@ -431,9 +437,9 @@ export default function ChannelDetailPage() {
                   </div>
                 ) : (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="text-muted-foreground hover:text-destructive"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setConfirmDelete(true)}
                     disabled={deleting || disconnecting}
                   >
@@ -442,12 +448,12 @@ export default function ChannelDetailPage() {
                   </Button>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </TabsContent>
 
         {/* AI Agent Tab */}
-        <TabsContent value="ai-agent" className="space-y-5">
+        <TabsContent value="ai-agent" className="mt-2 space-y-5">
           {/* AI Toggle */}
           <div className="flex items-center gap-3">
             <Bot className="h-5 w-5 text-primary" />
@@ -507,7 +513,7 @@ export default function ChannelDetailPage() {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <Button size="sm" variant="ghost" className="h-8 text-xs" asChild>
-                          <Link to={`/ai-agents/${assignedAgent.id}`}>Edit</Link>
+                          <Link to={`/ai-agents/${assignedAgent.id}?from=channel&channelId=${numericChannelId}`}>Edit</Link>
                         </Button>
                         <Select
                           value={assignedAgent.id}
@@ -516,7 +522,7 @@ export default function ChannelDetailPage() {
                           <SelectTrigger className="h-8 w-auto gap-1 border-0 bg-transparent px-2 text-xs text-muted-foreground hover:text-foreground">
                             <SelectValue>Change</SelectValue>
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent position="popper" side="bottom" sideOffset={4}>
                             <SelectItem value="__none__">
                               <span className="text-muted-foreground">No agent</span>
                             </SelectItem>
@@ -548,7 +554,7 @@ export default function ChannelDetailPage() {
                         <SelectTrigger size="sm" className="h-8 w-auto shrink-0">
                           <SelectValue>Assign Agent</SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" side="bottom" sideOffset={4}>
                           {agents.map((agent) => (
                             <SelectItem key={agent.id} value={agent.id}>
                               {agent.name}
@@ -580,14 +586,6 @@ export default function ChannelDetailPage() {
           )}
         </TabsContent>
 
-        {/* Knowledge Base Tab */}
-        <TabsContent value="knowledge-base">
-          <KBAssignmentList
-            channelId={numericChannelId}
-            kbEntries={kbEntries}
-            loadingKB={loadingKB}
-          />
-        </TabsContent>
       </Tabs>
     </div>
   );

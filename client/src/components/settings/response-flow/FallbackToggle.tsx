@@ -58,6 +58,10 @@ export default function FallbackToggle({
       {mode === 'respond_basics' && (
         <div className="ml-3 border-l-2 border-primary/20 pl-4 space-y-0">
           <div className="py-4">
+            <p className="text-xs font-medium mb-3">Default Communication Style</p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Applied to all messages that don't match a specific scenario.
+            </p>
             <StyleFields style={style} onChange={onStyleChange} compact />
           </div>
 

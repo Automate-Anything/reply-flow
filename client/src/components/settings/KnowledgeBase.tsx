@@ -17,6 +17,7 @@ interface Props {
   onUpdate: (entryId: string, updates: { title?: string; content?: string }) => Promise<unknown>;
   onDelete: (entryId: string) => Promise<unknown>;
   loading: boolean;
+  initialOpen?: boolean;
 }
 
 const ACCEPTED_TYPES = '.pdf,.docx,.txt';
@@ -148,8 +149,8 @@ function EntryCard({
   );
 }
 
-export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, loading }: Props) {
-  const [showAddForm, setShowAddForm] = useState(false);
+export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, loading, initialOpen }: Props) {
+  const [showAddForm, setShowAddForm] = useState(!!initialOpen);
   const [addMode, setAddMode] = useState<'text' | 'file'>('text');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');

@@ -17,7 +17,8 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
 
   try {
     // 1. Create channel on WhAPI
-    const channel = await whapi.createChannel(`reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`);
+    const channelName = req.body.name?.trim() || `reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`;
+    const channel = await whapi.createChannel(channelName);
 
     // 2. Fund the channel with 1 day so it becomes active
     try {
@@ -273,7 +274,22 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
       return;
     }
 
-    const health = await whapi.checkHealth(channel.channel_token);
+    let health;
+    try {
+      health = await whapi.checkHealth(channel.channel_token);
+    } catch {
+      // Provider API failed — if DB says connected, mark as disconnected
+      if (channel.channel_status === 'connected') {
+        await supabaseAdmin
+          .from('whatsapp_channels')
+          .update({ channel_status: 'disconnected', updated_at: new Date().toISOString() })
+          .eq('id', Number(channelId));
+        res.json({ status: 'disconnected', phone: null });
+        return;
+      }
+      res.json({ status: channel.channel_status, phone: null });
+      return;
+    }
 
     // WhAPI status text: INIT, AUTH (connected), STOP, SYNC_ERROR
     const statusText = health.status?.text?.toUpperCase() || '';
@@ -296,7 +312,6 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         })
         .eq('id', Number(channelId));
 
-      // Register webhook
       const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
       await whapi.registerWebhook(channel.channel_token, webhookUrl);
       await supabaseAdmin
@@ -304,13 +319,9 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         .update({ webhook_registered: true })
         .eq('id', Number(channelId));
     } else if (!isConnected && channel.channel_status === 'connected') {
-      // Channel was connected but is now stopped/disconnected — sync DB
       await supabaseAdmin
         .from('whatsapp_channels')
-        .update({
-          channel_status: 'disconnected',
-          updated_at: new Date().toISOString(),
-        })
+        .update({ channel_status: 'disconnected', updated_at: new Date().toISOString() })
         .eq('id', Number(channelId));
     }
 

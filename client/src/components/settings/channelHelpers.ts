@@ -19,12 +19,14 @@ export type StatusConfig = {
 export function formatChannelName(channel: ChannelInfo): string {
   if (channel.phone_number) return channel.phone_number;
   const name = channel.channel_name;
+  // Auto-generated names follow the pattern reply-flow-<userId>-<timestamp>
   if (name.startsWith('reply-flow-')) {
     const rest = name.slice('reply-flow-'.length);
     const dashIdx = rest.indexOf('-');
     if (dashIdx > 0) return `Channel ${rest.slice(0, dashIdx).slice(0, 8)}`;
   }
-  return name.length > 24 ? name.slice(0, 24) + '...' : name;
+  // User-chosen names pass through as-is
+  return name;
 }
 
 export function timeAgo(dateStr: string): string {
@@ -64,9 +66,9 @@ export function getStatusConfig(status: string): StatusConfig {
     default:
       return {
         label: 'Disconnected',
-        badgeClass: 'bg-muted text-muted-foreground border-border',
-        dotClass: 'bg-muted-foreground/50',
-        iconBg: 'bg-muted',
+        badgeClass: 'bg-destructive/10 text-destructive border-destructive/20',
+        dotClass: 'bg-destructive',
+        iconBg: 'bg-destructive/10',
       };
   }
 }
@@ -87,6 +89,6 @@ export function getCardBorder(status: string): string | undefined {
     case 'pending': return 'border-amber-500/30';
     case 'awaiting_scan': return 'border-blue-500/30';
     case 'connected': return 'border-green-500/20';
-    default: return undefined;
+    default: return 'border-destructive/20';
   }
 }

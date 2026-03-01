@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
-import type { ProfileData, ScheduleMode } from '@/hooks/useCompanyAI';
+import type { ProfileData, ScheduleMode, KBAttachment } from '@/hooks/useCompanyAI';
 import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
 
 export interface ChannelAgentSettings {
@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS: ChannelAgentSettings = {
 
 export function useChannelAgent(channelId: number | undefined) {
   const [settings, setSettings] = useState<ChannelAgentSettings>(DEFAULT_SETTINGS);
-  const [assignedEntryIds, setAssignedEntryIds] = useState<string[]>([]);
+  const [assignments, setAssignments] = useState<KBAttachment[]>([]);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [loadingAssignments, setLoadingAssignments] = useState(true);
 
@@ -51,7 +51,7 @@ export function useChannelAgent(channelId: number | undefined) {
     if (!channelId) return;
     try {
       const { data } = await api.get(`/ai/kb-assignments/${channelId}`);
-      setAssignedEntryIds(data.assigned_entry_ids || []);
+      setAssignments(data.assignments || []);
     } catch (err) {
       console.error('Failed to fetch KB assignments:', err);
     } finally {
@@ -62,7 +62,7 @@ export function useChannelAgent(channelId: number | undefined) {
   useEffect(() => {
     if (!channelId) {
       setSettings(DEFAULT_SETTINGS);
-      setAssignedEntryIds([]);
+      setAssignments([]);
       setLoadingSettings(false);
       setLoadingAssignments(false);
       return;
@@ -84,17 +84,17 @@ export function useChannelAgent(channelId: number | undefined) {
   );
 
   const updateAssignments = useCallback(
-    async (entryIds: string[]) => {
+    async (next: KBAttachment[]) => {
       if (!channelId) return;
-      const { data } = await api.put(`/ai/kb-assignments/${channelId}`, { entryIds });
-      setAssignedEntryIds(data.assigned_entry_ids || []);
+      const { data } = await api.put(`/ai/kb-assignments/${channelId}`, { assignments: next });
+      setAssignments(data.assignments || []);
     },
     [channelId]
   );
 
   return {
     settings,
-    assignedEntryIds,
+    assignments,
     loadingSettings,
     loadingAssignments,
     updateSettings,

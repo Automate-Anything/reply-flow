@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,6 +13,9 @@ import api from '@/lib/api';
 export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromChannelId = searchParams.get('from') === 'channel' ? searchParams.get('channelId') : null;
+  const backPath = fromChannelId ? `/channels/${fromChannelId}?tab=ai-agent` : '/ai-agents';
   const { agent, loading, updateAgent } = useAgent(agentId);
 
   const [editingName, setEditingName] = useState(false);
@@ -44,7 +47,7 @@ export default function AgentDetailPage() {
     try {
       await api.delete(`/agents/${agentId}`);
       toast.success('Agent deleted');
-      navigate('/ai-agents');
+      navigate(backPath);
     } catch {
       toast.error('Failed to delete agent');
     } finally {
@@ -66,7 +69,7 @@ export default function AgentDetailPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-6 p-6">
         <p className="text-sm text-muted-foreground">Agent not found.</p>
-        <Button variant="outline" size="sm" onClick={() => navigate('/ai-agents')}>
+        <Button variant="outline" size="sm" onClick={() => navigate(backPath)}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Agents
         </Button>
@@ -78,7 +81,7 @@ export default function AgentDetailPage() {
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate('/ai-agents')}>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(backPath)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">

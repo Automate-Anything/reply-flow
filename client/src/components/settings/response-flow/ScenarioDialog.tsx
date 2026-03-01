@@ -10,12 +10,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ChevronDown, X, BookOpen, FileText } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { Scenario, CommunicationStyle, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
 import type { KBEntry } from '@/hooks/useCompanyKB';
 import { cn } from '@/lib/utils';
 import StyleFields from './StyleFields';
 import { getPlaceholders } from './scenarioPlaceholders';
+import KBPicker from '../KBPicker';
 
 interface Props {
   open: boolean;
@@ -128,7 +129,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[960px] max-h-[85vh] overflow-y-auto sm:left-[58.5%]">
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Edit Scenario' : 'Add Scenario'}</DialogTitle>
           <DialogDescription>
@@ -213,72 +214,12 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
           {kbEntries.length > 0 && (
             <div className="space-y-2">
               <Label className="text-xs">Knowledge Base</Label>
-
-              {/* Attached KB entries */}
-              {kbAttachments.length > 0 && (
-                <div className="space-y-2">
-                  {kbAttachments.map((att) => {
-                    const entry = kbEntries.find((e) => e.id === att.kb_id);
-                    if (!entry) return null;
-                    return (
-                      <div key={att.kb_id} className="rounded-md border bg-muted/30 p-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          {entry.source_type === 'file'
-                            ? <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            : <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                          <span className="text-xs font-medium flex-1 truncate">{entry.title}</span>
-                          <button
-                            type="button"
-                            onClick={() => setKbAttachments((prev) => prev.filter((a) => a.kb_id !== att.kb_id))}
-                            className="text-muted-foreground hover:text-foreground"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <textarea
-                          value={att.instructions || ''}
-                          onChange={(e) =>
-                            setKbAttachments((prev) =>
-                              prev.map((a) =>
-                                a.kb_id === att.kb_id ? { ...a, instructions: e.target.value } : a
-                              )
-                            )
-                          }
-                          rows={2}
-                          placeholder="How should the AI use this? Any additional context..."
-                          className="w-full resize-none rounded-md border bg-background px-3 py-1.5 text-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Add KB dropdown */}
-              {(() => {
-                const attachedIds = new Set(kbAttachments.map((a) => a.kb_id));
-                const available = kbEntries.filter((e) => !attachedIds.has(e.id));
-                if (available.length === 0) return null;
-                return (
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      setKbAttachments((prev) => [...prev, { kb_id: e.target.value }]);
-                    }}
-                    className="h-8 w-full rounded-md border bg-background px-2 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="">Attach a knowledge base...</option>
-                    {available.map((entry) => (
-                      <option key={entry.id} value={entry.id}>{entry.title}</option>
-                    ))}
-                  </select>
-                );
-              })()}
-
-              <p className="text-xs text-muted-foreground">
-                Attach knowledge bases for the AI to reference. Add instructions for how to use each one.
-              </p>
+              <KBPicker
+                value={kbAttachments}
+                onChange={setKbAttachments}
+                kbEntries={kbEntries}
+                description="Attach knowledge bases for the AI to reference. Add instructions for how to use each one."
+              />
             </div>
           )}
 
