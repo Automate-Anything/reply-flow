@@ -55,7 +55,7 @@ export default function StyleFields({ style, onChange, compact }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <Label className="text-xs">Tone</Label>
+        <Label className="text-xs font-medium">Tone</Label>
         <div className={cn('mt-1.5 grid gap-2', compact ? 'grid-cols-2' : 'grid-cols-2')}>
           {TONE_OPTIONS.map((opt) => (
             <OptionButton
@@ -72,8 +72,8 @@ export default function StyleFields({ style, onChange, compact }: Props) {
         </div>
       </div>
 
-      <div>
-        <Label className="text-xs">Response Length</Label>
+      <div className="border-t pt-4">
+        <Label className="text-xs font-medium">Response Length</Label>
         <div className="mt-1.5 grid grid-cols-3 gap-2">
           {LENGTH_OPTIONS.map((opt) => (
             <OptionButton
@@ -90,8 +90,8 @@ export default function StyleFields({ style, onChange, compact }: Props) {
         </div>
       </div>
 
-      <div>
-        <Label className="text-xs">Emoji Usage</Label>
+      <div className="border-t pt-4">
+        <Label className="text-xs font-medium">Emoji Usage</Label>
         <div className="mt-1.5 grid grid-cols-3 gap-2">
           {EMOJI_OPTIONS.map((opt) => (
             <OptionButton

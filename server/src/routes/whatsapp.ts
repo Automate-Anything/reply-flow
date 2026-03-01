@@ -154,10 +154,29 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
         (err as { response?: { status?: number } })?.response?.status === 409;
 
       if (is409) {
+        // Get phone number from health check
+        let phone: string | null = null;
+        try {
+          const health = await whapi.checkHealth(channel.channel_token);
+          phone = health.phone || null;
+        } catch { /* best effort */ }
+
+        // Fetch profile picture
+        let profilePictureUrl: string | null = null;
+        if (phone) {
+          const profile = await whapi.getContactProfile(channel.channel_token, phone);
+          profilePictureUrl = profile?.icon_full || profile?.icon || null;
+        }
+
         // Update DB status to connected
         await supabaseAdmin
           .from('whatsapp_channels')
-          .update({ channel_status: 'connected', updated_at: new Date().toISOString() })
+          .update({
+            channel_status: 'connected',
+            ...(phone ? { phone_number: phone } : {}),
+            profile_picture_url: profilePictureUrl,
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', Number(channelId))
           .eq('company_id', companyId);
 
@@ -221,11 +240,18 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         const isConnected = statusText === 'AUTH';
         const newStatus = isConnected ? 'connected' : 'awaiting_scan';
 
+        let profilePictureUrl: string | null = null;
+        if (isConnected && health.phone) {
+          const profile = await whapi.getContactProfile(channel.channel_token, health.phone);
+          profilePictureUrl = profile?.icon_full || profile?.icon || null;
+        }
+
         await supabaseAdmin
           .from('whatsapp_channels')
           .update({
             channel_status: newStatus,
             ...(isConnected ? { phone_number: health.phone || null } : {}),
+            ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
             updated_at: new Date().toISOString(),
           })
           .eq('id', Number(channelId));
@@ -254,11 +280,18 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
     const isConnected = statusText === 'AUTH';
 
     if (isConnected && channel.channel_status !== 'connected') {
+      let profilePictureUrl: string | null = null;
+      if (health.phone) {
+        const profile = await whapi.getContactProfile(channel.channel_token, health.phone);
+        profilePictureUrl = profile?.icon_full || profile?.icon || null;
+      }
+
       await supabaseAdmin
         .from('whatsapp_channels')
         .update({
           channel_status: 'connected',
           phone_number: health.phone || null,
+          ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', Number(channelId));
@@ -288,7 +321,7 @@ router.get('/channels', requirePermission('channels', 'view'), async (req, res, 
 
     const { data: channels, error } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at')
       .eq('company_id', companyId)
       .order('created_at', { ascending: true });
 
@@ -308,7 +341,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();

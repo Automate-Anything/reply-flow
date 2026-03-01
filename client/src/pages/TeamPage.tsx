@@ -131,7 +131,7 @@ function recipientStatusConfig(status: Invitation['recipient_status']) {
 // ---------------------------------------------------------------------------
 
 export default function TeamPage() {
-  const { userId, role: currentRole, hasPermission } = useSession();
+  const { userId, hasPermission } = useSession();
 
   // Data state
   const [members, setMembers] = useState<Member[]>([]);
@@ -256,9 +256,10 @@ export default function TeamPage() {
       const message =
         err &&
         typeof err === 'object' &&
-        'response' in err &&
-        (err as { response?: { data?: { error?: string } } }).response?.data
-          ?.error;
+        'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data
+              ?.error
+          : undefined;
       toast.error(message || 'Failed to send invitation');
     } finally {
       setInviting(false);

@@ -527,10 +527,8 @@ export default function ChannelDetailPage() {
                         value="__none__"
                         onValueChange={handleAgentChange}
                       >
-                        <SelectTrigger asChild>
-                          <Button size="sm" variant="outline" className="h-8 shrink-0">
-                            Assign Agent
-                          </Button>
+                        <SelectTrigger size="sm" className="h-8 w-auto shrink-0">
+                          <SelectValue>Assign Agent</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {agents.map((agent) => (

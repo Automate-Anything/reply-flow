@@ -20,6 +20,11 @@ export interface WhapiHealthResponse {
   channel_id?: string;
 }
 
+export interface WhapiContactProfile {
+  icon: string;
+  icon_full: string;
+}
+
 export interface WhapiWebhookSettings {
   webhooks: Array<{
     url: string;

@@ -17,6 +17,11 @@ export interface CommunicationStyle {
   emoji_usage?: 'none' | 'minimal' | 'moderate';
 }
 
+export interface ScenarioKBAttachment {
+  kb_id: string;
+  instructions?: string;
+}
+
 export interface Scenario {
   id: string;
   label: string;
@@ -26,6 +31,9 @@ export interface Scenario {
   goal?: string;
   instructions?: string;
   context?: string;
+
+  // Knowledge base attachments
+  kb_attachments?: ScenarioKBAttachment[];
 
   // Guardrails
   rules?: string;

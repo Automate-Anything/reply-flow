@@ -1,11 +1,10 @@
-import type React from 'react';
-
 export interface ChannelInfo {
   id: number;
   channel_id: string;
   channel_name: string;
   channel_status: string;
   phone_number: string | null;
+  profile_picture_url: string | null;
   webhook_registered: boolean;
   created_at: string;
 }

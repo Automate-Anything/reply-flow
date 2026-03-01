@@ -27,13 +27,6 @@ export default function FallbackToggle({
 }: Props) {
   return (
     <div className="space-y-3">
-      <div>
-        <Label className="text-xs font-medium">Unmatched Messages</Label>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          What should happen when a message doesn't match any scenario?
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 gap-2">
         <OptionButton
           selected={mode === 'respond_basics'}
@@ -63,11 +56,13 @@ export default function FallbackToggle({
 
       {/* Default style settings — shown when AI responds */}
       {mode === 'respond_basics' && (
-        <div className="rounded-lg border bg-muted/30 p-4 space-y-5">
-          <StyleFields style={style} onChange={onStyleChange} compact />
+        <div className="ml-3 border-l-2 border-primary/20 pl-4 space-y-0">
+          <div className="py-4">
+            <StyleFields style={style} onChange={onStyleChange} compact />
+          </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Greeting Message (optional)</Label>
+          <div className="border-t py-4 space-y-1.5">
+            <Label className="text-xs font-medium">Greeting Message (optional)</Label>
             <textarea
               value={greetingMessage || ''}
               onChange={(e) => onGreetingChange(e.target.value)}
@@ -80,8 +75,8 @@ export default function FallbackToggle({
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">General Response Rules (optional)</Label>
+          <div className="border-t py-4 space-y-1.5">
+            <Label className="text-xs font-medium">General Response Rules (optional)</Label>
             <textarea
               value={responseRules || ''}
               onChange={(e) => onRulesChange(e.target.value)}
@@ -91,8 +86,8 @@ export default function FallbackToggle({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Topics to Avoid (optional)</Label>
+          <div className="border-t py-4 space-y-1.5">
+            <Label className="text-xs font-medium">Topics to Avoid (optional)</Label>
             <textarea
               value={topicsToAvoid || ''}
               onChange={(e) => onTopicsChange(e.target.value)}

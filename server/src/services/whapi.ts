@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { env } from '../config/env.js';
-import type { WhapiChannel, WhapiHealthResponse } from '../types/whapi.js';
+import type { WhapiChannel, WhapiHealthResponse, WhapiContactProfile } from '../types/whapi.js';
 
 const MANAGER_URL = 'https://manager.whapi.cloud';
 const GATE_URL = 'https://gate.whapi.cloud';
@@ -155,6 +155,19 @@ export async function registerWebhook(
       },
     ],
   });
+}
+
+export async function getContactProfile(
+  channelToken: string,
+  phone: string
+): Promise<WhapiContactProfile | null> {
+  const gate = gateApi(channelToken);
+  try {
+    const { data } = await gate.get(`/contacts/${phone}/profile`);
+    return { icon: data.icon || '', icon_full: data.icon_full || '' };
+  } catch {
+    return null;
+  }
 }
 
 export async function logoutChannel(channelToken: string): Promise<void> {
