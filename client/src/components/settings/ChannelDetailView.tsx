@@ -108,6 +108,24 @@ export default function ChannelDetailPage() {
     fetchChannel();
   }, [fetchChannel]);
 
+  // Verify status with provider when channel appears connected
+  useEffect(() => {
+    if (effectiveStatus !== 'connected') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
+        if (!cancelled && data.status !== 'connected') {
+          setEffectiveStatus(data.status);
+          fetchChannel();
+        }
+      } catch {
+        // ignore — keep showing DB status
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [numericChannelId, effectiveStatus, fetchChannel]);
+
   // Poll health-check when pending
   useEffect(() => {
     if (effectiveStatus !== 'pending') return;

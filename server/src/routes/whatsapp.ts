@@ -303,10 +303,20 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         .from('whatsapp_channels')
         .update({ webhook_registered: true })
         .eq('id', Number(channelId));
+    } else if (!isConnected && channel.channel_status === 'connected') {
+      // Channel was connected but is now stopped/disconnected — sync DB
+      await supabaseAdmin
+        .from('whatsapp_channels')
+        .update({
+          channel_status: 'disconnected',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', Number(channelId));
     }
 
+    const resolvedStatus = isConnected ? 'connected' : (channel.channel_status === 'connected' ? 'disconnected' : channel.channel_status);
     res.json({
-      status: isConnected ? 'connected' : channel.channel_status,
+      status: resolvedStatus,
       phone: health.phone || null,
     });
   } catch (err) {
