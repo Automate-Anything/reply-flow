@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
+import Anthropic from '@anthropic-ai/sdk';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { env } from '../config/env.js';
+import { buildSystemPrompt } from '../services/promptBuilder.js';
+import type { ProfileData, KBEntry } from '../services/promptBuilder.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -87,6 +91,105 @@ router.put('/profile', requirePermission('ai_settings', 'edit'), async (req, res
 
     if (error) throw error;
     res.json({ profile: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// TEST REPLY (dry-run AI classification + response)
+// ────────────────────────────────────────────────
+
+router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { profile_data, message, channelId, agentId } = req.body as {
+      profile_data?: ProfileData;
+      message: string;
+      channelId?: number;
+      agentId?: string;
+    };
+
+    if (!message?.trim()) {
+      res.status(400).json({ error: 'Message is required' });
+      return;
+    }
+
+    if (!env.ANTHROPIC_API_KEY) {
+      res.status(503).json({ error: 'AI not configured' });
+      return;
+    }
+
+    // Resolve profile_data: prefer agentId lookup, then client-sent profile_data
+    let resolvedProfileData: ProfileData = profile_data || {};
+    if (agentId) {
+      const { data: agent } = await supabaseAdmin
+        .from('ai_agents')
+        .select('profile_data')
+        .eq('id', agentId)
+        .eq('company_id', companyId)
+        .single();
+      if (agent) {
+        resolvedProfileData = (agent.profile_data || {}) as ProfileData;
+      }
+    }
+
+    // Load KB entries for the channel (if provided)
+    const { data: assignedKB } = channelId
+      ? await supabaseAdmin
+          .from('channel_kb_assignments')
+          .select('entry_id')
+          .eq('channel_id', channelId)
+      : { data: null };
+
+    let kbData: KBEntry[] = [];
+    if (assignedKB && assignedKB.length > 0) {
+      const entryIds = assignedKB.map((a) => a.entry_id);
+      const { data: kbEntries } = await supabaseAdmin
+        .from('knowledge_base_entries')
+        .select('title, content')
+        .in('id', entryIds);
+      kbData = (kbEntries || []) as KBEntry[];
+    } else {
+      const { data: kbEntries } = await supabaseAdmin
+        .from('knowledge_base_entries')
+        .select('title, content')
+        .eq('company_id', companyId);
+      kbData = (kbEntries || []) as KBEntry[];
+    }
+
+    // Build system prompt with classification instruction
+    const basePrompt = buildSystemPrompt(resolvedProfileData, kbData);
+    const classificationInstruction = resolvedProfileData.response_flow?.scenarios?.length
+      ? '\n\nIMPORTANT: Before your response, output on its own line which scenario you matched using the format [SCENARIO: Name] or [SCENARIO: none] if no scenario matched. Then provide your normal response on the next line.'
+      : '';
+    const systemPrompt = basePrompt + classificationInstruction;
+
+    const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 500,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: message.trim() }],
+    });
+
+    const fullReply = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n');
+
+    // Parse [SCENARIO: ...] prefix
+    let matched_scenario: string | null = null;
+    let responseText = fullReply;
+
+    const scenarioMatch = fullReply.match(/^\[SCENARIO:\s*(.+?)\]\s*\n?/);
+    if (scenarioMatch) {
+      const scenarioName = scenarioMatch[1].trim();
+      matched_scenario = scenarioName.toLowerCase() === 'none' ? null : scenarioName;
+      responseText = fullReply.slice(scenarioMatch[0].length).trim();
+    }
+
+    res.json({ matched_scenario, response: responseText });
   } catch (err) {
     next(err);
   }
@@ -330,7 +433,7 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     const {
       is_enabled, custom_instructions,
       profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message,
-      default_language, business_hours,
+      default_language, business_hours, agent_id,
     } = req.body;
 
     const { data: channel } = await supabaseAdmin
@@ -359,6 +462,7 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     if (outside_hours_message !== undefined) updates.outside_hours_message = outside_hours_message;
     if (default_language !== undefined) updates.default_language = default_language;
     if (business_hours !== undefined) updates.business_hours = business_hours;
+    if (agent_id !== undefined) updates.agent_id = agent_id;
 
     const { data, error } = await supabaseAdmin
       .from('channel_agent_settings')

@@ -5,11 +5,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Loader2, Smartphone,
-  CheckCircle2, WifiOff, QrCode,
+  CheckCircle2, WifiOff, QrCode, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
-import type { ChannelInfo } from '@/components/settings/channelHelpers';
+import { formatChannelName, type ChannelInfo } from '@/components/settings/channelHelpers';
 
 function getChannelStatusIcon(status: string) {
   switch (status) {
@@ -71,17 +71,18 @@ export default function ChannelsPage() {
               {channels.map((ch) => (
                 <Card
                   key={ch.id}
-                  className="cursor-pointer transition-colors hover:bg-accent/50"
+                  className="cursor-pointer transition-all hover:bg-accent/50 hover:border-primary/30 group"
                   onClick={() => navigate(`/channels/${ch.id}`)}
                 >
                   <CardContent className="flex items-center gap-3 py-3 px-4">
                     {getChannelStatusIcon(ch.channel_status)}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
-                        {ch.phone_number || ch.channel_name}
+                        {formatChannelName(ch)}
                       </p>
                       <p className="text-xs text-muted-foreground capitalize">{ch.channel_status}</p>
                     </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
                   </CardContent>
                 </Card>
               ))}

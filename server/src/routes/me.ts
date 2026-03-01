@@ -37,11 +37,63 @@ router.get('/', async (req, res, next) => {
     }
 
     // Get company membership with role
-    const { data: membership } = await supabaseAdmin
+    let { data: membership } = await supabaseAdmin
       .from('company_members')
       .select('company_id, role_id, roles(id, name, hierarchy_level), companies(id, name, slug, logo_url)')
       .eq('user_id', userId)
       .single();
+
+    // If no company, check for pending invitations before auto-creating
+    if (!membership) {
+      const { data: invitations } = await supabaseAdmin
+        .from('invitations')
+        .select('id')
+        .eq('email', profile.email)
+        .is('accepted_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .limit(1);
+
+      // No pending invitations — auto-create a company for this user
+      if (!invitations || invitations.length === 0) {
+        const companyName = profile.full_name
+          ? `${profile.full_name}'s Company`
+          : `${profile.email}'s Company`;
+
+        const { data: ownerRole } = await supabaseAdmin
+          .from('roles')
+          .select('id')
+          .eq('name', 'owner')
+          .single();
+
+        if (ownerRole) {
+          const { data: company } = await supabaseAdmin
+            .from('companies')
+            .insert({ name: companyName })
+            .select()
+            .single();
+
+          if (company) {
+            await supabaseAdmin
+              .from('company_members')
+              .insert({ company_id: company.id, user_id: userId, role_id: ownerRole.id });
+
+            await supabaseAdmin
+              .from('users')
+              .update({ company_id: company.id })
+              .eq('id', userId);
+
+            await supabaseAdmin.rpc('seed_default_permissions', { p_company_id: company.id });
+
+            // Re-fetch membership so the response includes the new company
+            ({ data: membership } = await supabaseAdmin
+              .from('company_members')
+              .select('company_id, role_id, roles(id, name, hierarchy_level), companies(id, name, slug, logo_url)')
+              .eq('user_id', userId)
+              .single());
+          }
+        }
+      }
+    }
 
     // Get permissions for the user's role in their company
     let permissions: string[] = [];

@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   Settings,
   Smartphone,
+  Bot,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/inbox', icon: MessageSquare, label: 'Inbox' },
   { to: '/contacts', icon: Users, label: 'Contacts' },
   { to: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', permission: { resource: 'knowledge_base', action: 'view' } },
+  { to: '/ai-agents', icon: Bot, label: 'AI Agents', permission: { resource: 'ai_settings', action: 'view' } },
   { to: '/channels', icon: Smartphone, label: 'Channels' },
   { to: '/account', icon: Settings, label: 'Account', permission: { resource: 'company_settings', action: 'view' } },
 ];

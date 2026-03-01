@@ -17,6 +17,8 @@ import OnboardingPage from '@/pages/OnboardingPage';
 import SettingsPage from '@/pages/SettingsPage';
 import ChannelsPage from '@/pages/ChannelsPage';
 import ChannelDetailPage from '@/components/settings/ChannelDetailView';
+import AIAgentsPage from '@/pages/AIAgentsPage';
+import AgentDetailPage from '@/pages/AgentDetailPage';
 
 
 function App() {
@@ -36,6 +38,8 @@ function App() {
                   <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />
                   <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+                  <Route path="ai-agents" element={<AIAgentsPage />} />
+                  <Route path="ai-agents/:agentId" element={<AgentDetailPage />} />
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="channels/:channelId" element={<ChannelDetailPage />} />
 

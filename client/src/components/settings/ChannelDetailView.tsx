@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -8,16 +8,24 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, WifiOff, QrCode,
-  Bot, ArrowLeft,
+  Bot, ArrowLeft, Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChannelAgent } from '@/hooks/useChannelAgent';
-import { useCompanyAI } from '@/hooks/useCompanyAI';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
+import { useAgents } from '@/hooks/useAgents';
 import KBAssignmentList from './KBAssignmentList';
-import AIProfileSections from './AIProfileWizard';
-import type { AIProfileShape } from './AIProfileWizard';
+import ScheduleSection from './sections/ScheduleSection';
+import type { ScheduleMode } from '@/hooks/useCompanyAI';
+import type { BusinessHours } from './BusinessHoursEditor';
 import type { ChannelInfo } from './channelHelpers';
 import { formatChannelName, getStatusConfig, timeAgo } from './channelHelpers';
 
@@ -58,8 +66,8 @@ export default function ChannelDetailPage() {
     updateSettings,
   } = useChannelAgent(numericChannelId);
 
-  // Company AI template (for "save as default")
-  const { updateProfile: updateTemplate } = useCompanyAI();
+  // Agents list for assignment dropdown
+  const { agents, loading: loadingAgents } = useAgents();
 
   // Company KB data
   const { kbEntries, loading: loadingKB } = useCompanyKB();
@@ -247,18 +255,27 @@ export default function ChannelDetailPage() {
     }
   };
 
-  const handleSaveProfile = async (updates: Partial<AIProfileShape>) => {
-    await updateSettings(updates);
+  const handleAgentChange = async (agentId: string) => {
+    try {
+      await updateSettings({ agent_id: agentId === '__none__' ? null : agentId });
+      toast.success(agentId === '__none__' ? 'Agent unassigned' : 'Agent assigned');
+    } catch {
+      toast.error('Failed to update agent assignment');
+    }
   };
 
-  const handleSaveAsDefault = async (updates: Partial<AIProfileShape>) => {
-    await updateTemplate({
-      profile_data: updates.profile_data,
-      schedule_mode: updates.schedule_mode,
-      ai_schedule: updates.ai_schedule,
-      outside_hours_message: updates.outside_hours_message,
-    });
+  const handleSaveSchedule = async (updates: {
+    business_hours: BusinessHours;
+    schedule_mode: ScheduleMode;
+    ai_schedule: BusinessHours | null;
+    outside_hours_message: string | null;
+  }) => {
+    await updateSettings(updates);
+    toast.success('Schedule saved');
   };
+
+  // Schedule section toggle
+  const [scheduleExpanded, setScheduleExpanded] = useState(false);
 
   if (loadingChannel) {
     return (
@@ -278,6 +295,7 @@ export default function ChannelDetailPage() {
   const isDisconnected = effectiveStatus === 'disconnected';
   const statusConfig = getStatusConfig(effectiveStatus);
   const displayName = formatChannelName(channel);
+  const assignedAgent = agents.find((a) => a.id === settings.agent_id);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -302,10 +320,10 @@ export default function ChannelDetailPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="ai-profile">
+      <Tabs defaultValue="ai-agent">
         <TabsList className="w-full">
           <TabsTrigger value="connection" className="flex-1">Connection</TabsTrigger>
-          <TabsTrigger value="ai-profile" className="flex-1">AI Profile</TabsTrigger>
+          <TabsTrigger value="ai-agent" className="flex-1">AI Agent</TabsTrigger>
           <TabsTrigger value="knowledge-base" className="flex-1">Knowledge Base</TabsTrigger>
         </TabsList>
 
@@ -410,8 +428,8 @@ export default function ChannelDetailPage() {
           </div>
         </TabsContent>
 
-        {/* AI Profile Tab */}
-        <TabsContent value="ai-profile" className="space-y-5">
+        {/* AI Agent Tab */}
+        <TabsContent value="ai-agent" className="space-y-5">
           {/* AI Toggle */}
           <div className="flex items-center gap-3">
             <Bot className="h-5 w-5 text-primary" />
@@ -438,35 +456,111 @@ export default function ChannelDetailPage() {
             </button>
           </div>
 
-          {/* Custom Instructions */}
           {settings.is_enabled && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Channel-Specific Instructions</Label>
-              <textarea
-                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                placeholder="Additional instructions specific to this channel (optional)"
-                value={settings.custom_instructions || ''}
-                onChange={(e) => updateSettings({ custom_instructions: e.target.value || null })}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                These instructions are appended to the channel's AI profile.
-              </p>
-            </div>
-          )}
+            <div className="space-y-5">
+              {/* Agent Assignment */}
+              <div className="space-y-2">
+                <Label className="text-xs">Assigned Agent</Label>
+                {loadingAgents ? (
+                  <Skeleton className="h-20 w-full rounded-lg" />
+                ) : agents.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-center">
+                    <Bot className="mx-auto h-6 w-6 text-muted-foreground/40" />
+                    <p className="mt-1 text-xs text-muted-foreground">No agents created yet.</p>
+                    <Button size="sm" variant="outline" className="mt-2" asChild>
+                      <Link to="/ai-agents">
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        Create an Agent
+                      </Link>
+                    </Button>
+                  </div>
+                ) : assignedAgent ? (
+                  /* Assigned agent card */
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <Bot className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {assignedAgent.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Handles all AI replies on this channel</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" asChild>
+                          <Link to={`/ai-agents/${assignedAgent.id}`}>Edit</Link>
+                        </Button>
+                        <Select
+                          value={assignedAgent.id}
+                          onValueChange={handleAgentChange}
+                        >
+                          <SelectTrigger className="h-8 w-auto gap-1 border-0 bg-transparent px-2 text-xs text-muted-foreground hover:text-foreground">
+                            <SelectValue>Change</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">
+                              <span className="text-muted-foreground">No agent</span>
+                            </SelectItem>
+                            {agents.map((agent) => (
+                              <SelectItem key={agent.id} value={agent.id}>
+                                {agent.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* No agent assigned — prompt to pick one */
+                  <div className="rounded-lg border border-dashed p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <Bot className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-muted-foreground">No agent assigned</p>
+                        <p className="text-xs text-muted-foreground">AI is enabled but has no personality configured</p>
+                      </div>
+                      <Select
+                        value="__none__"
+                        onValueChange={handleAgentChange}
+                      >
+                        <SelectTrigger asChild>
+                          <Button size="sm" variant="outline" className="h-8 shrink-0">
+                            Assign Agent
+                          </Button>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {agents.map((agent) => (
+                            <SelectItem key={agent.id} value={agent.id}>
+                              {agent.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-          {/* AI Profile Wizard */}
-          {loadingSettings ? (
-            <div className="space-y-3">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-40 w-full" />
+              {/* Schedule */}
+              {loadingSettings ? (
+                <Skeleton className="h-16 w-full" />
+              ) : (
+                <ScheduleSection
+                  businessHours={settings.business_hours}
+                  scheduleMode={settings.schedule_mode}
+                  aiSchedule={settings.ai_schedule}
+                  outsideHoursMessage={settings.outside_hours_message}
+                  companyTimezone={companyTimezone}
+                  isExpanded={scheduleExpanded}
+                  onToggle={() => setScheduleExpanded((prev) => !prev)}
+                  onSave={handleSaveSchedule}
+                />
+              )}
             </div>
-          ) : (
-            <AIProfileSections
-              profile={settings}
-              onSave={handleSaveProfile}
-              companyTimezone={companyTimezone}
-              onSaveAsDefault={handleSaveAsDefault}
-            />
           )}
         </TabsContent>
 

@@ -32,7 +32,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
     if (path === '/contacts') return 'Contacts';
     if (path === '/knowledge-base') return 'Knowledge Base';
     if (path === '/channels') return 'Channels';
-    if (path === '/ai-profile') return 'AI Profile';
+    if (path.startsWith('/ai-agents')) return 'AI Agents';
     if (path === '/schedule') return 'Schedule';
     if (path === '/account') return 'Account Settings';
     if (path === '/profile') return 'Profile';

@@ -13,6 +13,7 @@ export interface ChannelAgentSettings {
   outside_hours_message: string | null;
   default_language: string;
   business_hours: BusinessHours | null;
+  agent_id: string | null;
 }
 
 const DEFAULT_SETTINGS: ChannelAgentSettings = {
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: ChannelAgentSettings = {
   outside_hours_message: null,
   default_language: 'en',
   business_hours: null,
+  agent_id: null,
 };
 
 export function useChannelAgent(channelId: number | undefined) {

@@ -55,6 +55,7 @@ export default function ScheduleSection({
   const [draftAiSchedule, setDraftAiSchedule] = useState<BusinessHours>(aiSchedule || getDefaultBusinessHours());
   const [draftOutsideMsg, setDraftOutsideMsg] = useState(outsideHoursMessage || '');
   const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState(0);
 
   const handleSave = async () => {
     setSaving(true);
@@ -75,6 +76,7 @@ export default function ScheduleSection({
     setDraftMode(scheduleMode);
     setDraftAiSchedule(aiSchedule || getDefaultBusinessHours());
     setDraftOutsideMsg(outsideHoursMessage || '');
+    setStep(0);
     onToggle();
   };
 
@@ -106,12 +108,15 @@ export default function ScheduleSection({
       saving={saving}
       onSave={handleSave}
       onCancel={handleToggle}
+      step={step}
+      totalSteps={2}
+      onNext={() => setStep(1)}
+      onBack={() => setStep(0)}
       showSaveAsDefault={showSaveAsDefault}
       saveAsDefault={saveAsDefault}
       onSaveAsDefaultChange={onSaveAsDefaultChange}
     >
-      <div className="space-y-4">
-        {/* Business Hours */}
+      {step === 0 && (
         <div className="space-y-2">
           <Label className="text-xs">Business Hours</Label>
           <p className="text-xs text-muted-foreground">
@@ -122,9 +127,10 @@ export default function ScheduleSection({
             onChange={setDraftHours}
           />
         </div>
+      )}
 
-        {/* AI Activity Schedule */}
-        <div className="space-y-3 border-t pt-4">
+      {step === 1 && (
+        <div className="space-y-3">
           <div>
             <Label className="text-xs">AI Activity Schedule</Label>
             <p className="text-xs text-muted-foreground mt-1">
@@ -189,7 +195,7 @@ export default function ScheduleSection({
             </div>
           )}
         </div>
-      </div>
+      )}
     </SectionCard>
   );
 }

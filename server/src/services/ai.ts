@@ -80,7 +80,7 @@ function isWithinSchedule(schedule: BusinessHours, timezone: string): boolean {
 
 /**
  * Checks whether AI should respond to an incoming message for a given session.
- * Resolution path: session → company_ai_profiles + channel_agent_settings
+ * Resolution path: session → ai_agents + channel_agent_settings
  */
 export async function shouldAIRespond(
   companyId: string,
@@ -97,10 +97,10 @@ export async function shouldAIRespond(
 
   if (!session || !session.channel_id) return { action: 'skip' };
 
-  // 2. Check per-channel AI settings (profile is now per-channel)
+  // 2. Check per-channel AI settings
   const { data: channelSettings } = await supabaseAdmin
     .from('channel_agent_settings')
-    .select('is_enabled, custom_instructions, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message, default_language, business_hours')
+    .select('is_enabled, custom_instructions, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message, default_language, business_hours, agent_id')
     .eq('channel_id', session.channel_id)
     .single();
 
@@ -176,8 +176,19 @@ export async function shouldAIRespond(
     kbData = (kbEntries || []) as KBEntry[];
   }
 
-  // 8. Build system prompt from channel profile + KB
-  const profileData = (channelSettings.profile_data || {}) as ProfileData;
+  // 8. Resolve profile_data — prefer agent's profile if assigned
+  let profileData = (channelSettings.profile_data || {}) as ProfileData;
+
+  if (channelSettings.agent_id) {
+    const { data: agent } = await supabaseAdmin
+      .from('ai_agents')
+      .select('profile_data')
+      .eq('id', channelSettings.agent_id)
+      .single();
+    if (agent) {
+      profileData = (agent.profile_data || {}) as ProfileData;
+    }
+  }
   const channelOverrides = channelSettings.custom_instructions
     ? { custom_instructions: channelSettings.custom_instructions }
     : undefined;
