@@ -12,7 +12,6 @@ export interface ChannelAgentSettings {
   ai_schedule: BusinessHours | null;
   outside_hours_message: string | null;
   default_language: string;
-  business_hours: BusinessHours | null;
   agent_id: string | null;
 }
 
@@ -25,7 +24,6 @@ const DEFAULT_SETTINGS: ChannelAgentSettings = {
   ai_schedule: null,
   outside_hours_message: null,
   default_language: 'en',
-  business_hours: null,
   agent_id: null,
 };
 

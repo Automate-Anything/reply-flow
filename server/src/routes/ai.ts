@@ -431,7 +431,7 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     const {
       is_enabled, custom_instructions,
       profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message,
-      default_language, business_hours, agent_id,
+      default_language, agent_id,
     } = req.body;
 
     const { data: channel } = await supabaseAdmin
@@ -459,7 +459,6 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     if (ai_schedule !== undefined) updates.ai_schedule = ai_schedule;
     if (outside_hours_message !== undefined) updates.outside_hours_message = outside_hours_message;
     if (default_language !== undefined) updates.default_language = default_language;
-    if (business_hours !== undefined) updates.business_hours = business_hours;
     if (agent_id !== undefined) updates.agent_id = agent_id;
 
     const { data, error } = await supabaseAdmin

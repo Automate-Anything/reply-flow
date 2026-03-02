@@ -109,7 +109,7 @@ export async function shouldAIRespond(
   // 2. Check per-channel AI settings
   const { data: channelSettings } = await supabaseAdmin
     .from('channel_agent_settings')
-    .select('is_enabled, custom_instructions, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message, default_language, business_hours, agent_id')
+    .select('is_enabled, custom_instructions, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message, default_language, agent_id')
     .eq('channel_id', session.channel_id)
     .single();
 
@@ -131,10 +131,10 @@ export async function shouldAIRespond(
   const scheduleMode = (channelSettings.schedule_mode || 'always_on') as ScheduleMode;
 
   if (scheduleMode !== 'always_on') {
-    // Fetch company timezone (still company-level)
+    // Fetch company timezone and business hours (both company-level)
     const { data: company } = await supabaseAdmin
       .from('companies')
-      .select('timezone')
+      .select('timezone, business_hours')
       .eq('id', companyId)
       .single();
     const timezone = company?.timezone || 'UTC';
@@ -142,7 +142,7 @@ export async function shouldAIRespond(
     let schedule: BusinessHours | null = null;
 
     if (scheduleMode === 'business_hours') {
-      schedule = channelSettings.business_hours as BusinessHours | null;
+      schedule = company?.business_hours as BusinessHours | null;
     } else if (scheduleMode === 'custom') {
       schedule = channelSettings.ai_schedule as BusinessHours | null;
     }
