@@ -19,11 +19,10 @@ import {
   Bot, ArrowLeft, Plus, AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useChannelAgent } from '@/hooks/useChannelAgent';
+import { useChannelAgent, type ChannelAgentSettings } from '@/hooks/useChannelAgent';
 import { useAgents } from '@/hooks/useAgents';
 import ScheduleSection from './sections/ScheduleSection';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
-import type { BusinessHours } from './BusinessHoursEditor';
 import type { ChannelInfo } from './channelHelpers';
 import { formatChannelName, getStatusConfig, timeAgo } from './channelHelpers';
 
@@ -284,9 +283,8 @@ export default function ChannelDetailPage() {
   };
 
   const handleSaveSchedule = async (updates: {
-    business_hours: BusinessHours;
     schedule_mode: ScheduleMode;
-    ai_schedule: BusinessHours | null;
+    ai_schedule: ChannelAgentSettings['ai_schedule'];
     outside_hours_message: string | null;
   }) => {
     await updateSettings(updates);
@@ -572,7 +570,6 @@ export default function ChannelDetailPage() {
                 <Skeleton className="h-16 w-full" />
               ) : (
                 <ScheduleSection
-                  businessHours={settings.business_hours}
                   scheduleMode={settings.schedule_mode}
                   aiSchedule={settings.ai_schedule}
                   outsideHoursMessage={settings.outside_hours_message}
