@@ -80,7 +80,8 @@ export default function BusinessHoursSettings() {
       <CardContent className="space-y-4">
         <BusinessHoursEditor
           value={draft}
-          onChange={canEdit ? setDraft : undefined}
+          onChange={setDraft}
+          disabled={!canEdit}
         />
 
         {canEdit && (
