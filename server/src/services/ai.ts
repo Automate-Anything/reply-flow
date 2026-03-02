@@ -174,13 +174,13 @@ export async function shouldAIRespond(
     const entryIds = assignedKB.map((a) => a.entry_id);
     const { data: kbEntries } = await supabaseAdmin
       .from('knowledge_base_entries')
-      .select('title, content')
+      .select('id, title, content')
       .in('id', entryIds);
     kbData = (kbEntries || []) as KBEntry[];
   } else {
     const { data: kbEntries } = await supabaseAdmin
       .from('knowledge_base_entries')
-      .select('title, content')
+      .select('id, title, content')
       .eq('company_id', companyId);
     kbData = (kbEntries || []) as KBEntry[];
   }

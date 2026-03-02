@@ -5,8 +5,9 @@ import CompanySettingsPage from './CompanySettingsPage';
 import TeamPage from './TeamPage';
 import RolePermissionsPage from './RolePermissionsPage';
 import CannedResponsesManager from '@/components/settings/CannedResponsesManager';
+import LabelsManager from '@/components/settings/LabelsManager';
 
-const TABS = ['company', 'team', 'quick-replies', 'permissions'] as const;
+const TABS = ['company', 'team', 'quick-replies', 'labels', 'permissions'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function SettingsPage() {
@@ -25,7 +26,7 @@ export default function SettingsPage() {
           <Settings className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Account Settings</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Manage your company and team.
           </p>
@@ -37,6 +38,7 @@ export default function SettingsPage() {
           <TabsTrigger value="company" className="flex-1">Company</TabsTrigger>
           <TabsTrigger value="team" className="flex-1">Team</TabsTrigger>
           <TabsTrigger value="quick-replies" className="flex-1">Quick Replies</TabsTrigger>
+          <TabsTrigger value="labels" className="flex-1">Labels</TabsTrigger>
           <TabsTrigger value="permissions" className="flex-1">Permissions</TabsTrigger>
         </TabsList>
 
@@ -50,6 +52,10 @@ export default function SettingsPage() {
 
         <TabsContent value="quick-replies" className="mt-6">
           <CannedResponsesManager />
+        </TabsContent>
+
+        <TabsContent value="labels" className="mt-6">
+          <LabelsManager />
         </TabsContent>
 
         <TabsContent value="permissions" className="mt-6">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Archive,
   ArrowLeft,
@@ -20,6 +21,7 @@ import {
   Flag,
   Loader2,
   MoreHorizontal,
+  Plus,
   Star,
   StickyNote,
   Tag,
@@ -44,6 +46,7 @@ interface ConversationHeaderProps {
   onToggleNotes?: () => void;
   teamMembers?: TeamMember[];
   notesPanelOpen?: boolean;
+  onLabelsCreated?: () => void;
 }
 
 interface LabelOption {
@@ -105,17 +108,42 @@ export default function ConversationHeader({
   onToggleNotes,
   teamMembers = [],
   notesPanelOpen,
+  onLabelsCreated,
 }: ConversationHeaderProps) {
   const [allLabels, setAllLabels] = useState<LabelOption[]>([]);
   const [labelLoading, setLabelLoading] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [patchLoading, setPatchLoading] = useState(false);
+  const [newLabelName, setNewLabelName] = useState('');
+  const [creatingLabel, setCreatingLabel] = useState(false);
+  const newLabelInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchLabels = () => {
+    api.get('/labels').then(({ data }) => setAllLabels(data.labels || []));
+  };
 
   useEffect(() => {
-    api.get('/labels').then(({ data }) => setAllLabels(data.labels || []));
+    fetchLabels();
   }, []);
 
   const assignedIds = new Set(conversation.labels.map((l) => l.id));
+
+  const handleCreateLabel = async () => {
+    const name = newLabelName.trim();
+    if (!name || creatingLabel) return;
+    setCreatingLabel(true);
+    try {
+      const { data } = await api.post('/labels', { name });
+      setAllLabels((prev) => [...prev, data.label]);
+      setNewLabelName('');
+      onLabelsCreated?.();
+      toast.success('Label created');
+    } catch {
+      toast.error('Failed to create label');
+    } finally {
+      setCreatingLabel(false);
+    }
+  };
 
   const handleToggleLabel = async (label: LabelOption) => {
     setLabelLoading(label.id);
@@ -287,32 +315,53 @@ export default function ConversationHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {allLabels.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                No labels created yet
-              </div>
-            ) : (
-              allLabels.map((label) => (
-                <DropdownMenuItem
-                  key={label.id}
-                  onClick={() => handleToggleLabel(label)}
-                  disabled={labelLoading === label.id}
-                >
-                  {labelLoading === label.id ? (
-                    <Loader2 className="mr-2 h-2 w-2 animate-spin" />
-                  ) : (
-                    <span
-                      className="mr-2 h-2 w-2 rounded-full"
-                      style={{ backgroundColor: label.color }}
-                    />
-                  )}
-                  {label.name}
-                  {assignedIds.has(label.id) && (
-                    <X className="ml-auto h-3 w-3 text-muted-foreground" />
-                  )}
-                </DropdownMenuItem>
-              ))
-            )}
+            {allLabels.map((label) => (
+              <DropdownMenuItem
+                key={label.id}
+                onClick={() => handleToggleLabel(label)}
+                disabled={labelLoading === label.id}
+              >
+                {labelLoading === label.id ? (
+                  <Loader2 className="mr-2 h-2 w-2 animate-spin" />
+                ) : (
+                  <span
+                    className="mr-2 h-2 w-2 rounded-full"
+                    style={{ backgroundColor: label.color }}
+                  />
+                )}
+                {label.name}
+                {assignedIds.has(label.id) && (
+                  <X className="ml-auto h-3 w-3 text-muted-foreground" />
+                )}
+              </DropdownMenuItem>
+            ))}
+            {allLabels.length > 0 && <DropdownMenuSeparator />}
+            <div className="flex items-center gap-1 px-1 py-1" onKeyDown={(e) => e.stopPropagation()}>
+              <Input
+                ref={newLabelInputRef}
+                value={newLabelName}
+                onChange={(e) => setNewLabelName(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') handleCreateLabel();
+                }}
+                placeholder="New label..."
+                className="h-7 text-xs"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                disabled={!newLabelName.trim() || creatingLabel}
+                onClick={handleCreateLabel}
+              >
+                {creatingLabel ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Plus className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
 

@@ -20,6 +20,8 @@ import meRouter from './routes/me.js';
 
 import conversationNotesRouter from './routes/conversationNotes.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
+import seedRouter from './routes/seed.js';
+import { startScheduler } from './services/scheduler.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -58,11 +60,13 @@ app.use('/api/me', meRouter);
 
 app.use('/api/conversation-notes', conversationNotesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
+app.use('/api/seed', seedRouter);
 
 app.use(errorHandler);
 
 app.listen(env.PORT, () => {
   console.log(`Server running on port ${env.PORT}`);
+  startScheduler();
 });
 
 export default app;

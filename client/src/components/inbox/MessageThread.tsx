@@ -8,12 +8,16 @@ interface MessageThreadProps {
   messages: Message[];
   loading: boolean;
   onSend: (body: string) => Promise<void>;
+  onSchedule: (body: string, scheduledFor: string) => Promise<void>;
+  onCancelScheduled: (messageId: string) => Promise<void>;
 }
 
 export default function MessageThread({
   messages,
   loading,
   onSend,
+  onSchedule,
+  onCancelScheduled,
 }: MessageThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -42,14 +46,18 @@ export default function MessageThread({
         ) : (
           <div className="space-y-2">
             {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
+              />
             ))}
             <div ref={bottomRef} />
           </div>
         )}
       </div>
 
-      <MessageInput onSend={onSend} />
+      <MessageInput onSend={onSend} onSchedule={onSchedule} />
     </div>
   );
 }

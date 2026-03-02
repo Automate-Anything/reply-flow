@@ -37,7 +37,34 @@ router.post('/', requirePermission('labels', 'create'), async (req, res, next) =
 
     const { data, error } = await supabaseAdmin
       .from('labels')
-      .insert({ company_id: companyId, created_by: req.userId, name, color: color || '#6B7280' })
+      .insert({ user_id: req.userId, company_id: companyId, created_by: req.userId, name, color: color || '#6B7280' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ label: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update a label
+router.put('/:labelId', requirePermission('labels', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { labelId } = req.params;
+    const { name, color } = req.body;
+
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('labels')
+      .update({ name, color })
+      .eq('id', labelId)
+      .eq('company_id', companyId)
       .select()
       .single();
 

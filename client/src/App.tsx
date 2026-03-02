@@ -43,7 +43,7 @@ function App() {
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="channels/:channelId" element={<ChannelDetailPage />} />
 
-                  <Route path="account" element={<SettingsPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
                   <Route path="profile" element={<ProfileSettingsPage />} />
                 </Route>
               </Route>

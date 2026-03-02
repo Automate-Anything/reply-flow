@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,7 +9,9 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Archive, Flag, Loader2, Star, Tag, UserPlus, CircleDot, X } from 'lucide-react';
+import { Archive, Flag, Loader2, Plus, Star, Tag, UserPlus, CircleDot, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { TeamMember } from '@/hooks/useTeamMembers';
@@ -26,6 +28,7 @@ interface BulkActionBarProps {
   onActionComplete: () => void;
   teamMembers: TeamMember[];
   labels: LabelOption[];
+  onLabelsCreated?: () => void;
 }
 
 const STATUS_OPTIONS = [
@@ -49,8 +52,28 @@ export default function BulkActionBar({
   onActionComplete,
   teamMembers,
   labels,
+  onLabelsCreated,
 }: BulkActionBarProps) {
   const [loading, setLoading] = useState(false);
+  const [newLabelName, setNewLabelName] = useState('');
+  const [creatingLabel, setCreatingLabel] = useState(false);
+  const newLabelInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCreateLabel = async () => {
+    const name = newLabelName.trim();
+    if (!name || creatingLabel) return;
+    setCreatingLabel(true);
+    try {
+      await api.post('/labels', { name });
+      setNewLabelName('');
+      onLabelsCreated?.();
+      toast.success('Label created');
+    } catch {
+      toast.error('Failed to create label');
+    } finally {
+      setCreatingLabel(false);
+    }
+  };
 
   const executeBulk = async (action: string, value: unknown) => {
     setLoading(true);
@@ -144,9 +167,33 @@ export default function BulkActionBar({
                   {l.name}
                 </DropdownMenuItem>
               ))}
-              {labels.length === 0 && (
-                <div className="px-3 py-2 text-xs text-muted-foreground">No labels</div>
-              )}
+              {labels.length > 0 && <DropdownMenuSeparator />}
+              <div className="flex items-center gap-1 px-1 py-1" onKeyDown={(e) => e.stopPropagation()}>
+                <Input
+                  ref={newLabelInputRef}
+                  value={newLabelName}
+                  onChange={(e) => setNewLabelName(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') handleCreateLabel();
+                  }}
+                  placeholder="New label..."
+                  className="h-7 text-xs"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  disabled={!newLabelName.trim() || creatingLabel}
+                  onClick={handleCreateLabel}
+                >
+                  {creatingLabel ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Plus className="h-3 w-3" />
+                  )}
+                </Button>
+              </div>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>

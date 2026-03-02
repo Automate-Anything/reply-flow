@@ -274,6 +274,12 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
       return;
     }
 
+    // Skip provider health check for demo channels
+    if (channel.channel_token === 'demo-token') {
+      res.json({ status: channel.channel_status, phone: null });
+      return;
+    }
+
     let health;
     try {
       health = await whapi.checkHealth(channel.channel_token);

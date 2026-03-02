@@ -1,9 +1,8 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { FallbackMode, CommunicationStyle } from '@/hooks/useCompanyAI';
-import { OptionButton } from './StyleFields';
 import StyleFields from './StyleFields';
-import { MessageCircle, UserCheck, Phone } from 'lucide-react';
+import { Phone } from 'lucide-react';
 
 interface Props {
   mode: FallbackMode;
@@ -28,99 +27,120 @@ export default function FallbackToggle({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-2">
-        <OptionButton
-          selected={mode === 'respond_basics'}
-          onClick={() => onChange('respond_basics')}
-        >
-          <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <div>
-            <p className="text-xs font-medium">AI responds with default style</p>
-            <p className="text-xs text-muted-foreground">
-              Uses the communication style below along with your knowledge base.
-            </p>
-          </div>
-        </OptionButton>
-        <OptionButton
-          selected={mode === 'human_handle'}
-          onClick={() => onChange('human_handle')}
-        >
-          <UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <div>
-            <p className="text-xs font-medium">Let a human handle it</p>
-            <p className="text-xs text-muted-foreground">
-              AI directs the customer to a team member.
-            </p>
-          </div>
-        </OptionButton>
+        {/* Option 1: AI responds */}
+        <div className={`rounded-lg border overflow-hidden transition-colors ${
+          mode === 'respond_basics'
+            ? 'border-primary'
+            : 'border-border hover:border-muted-foreground/30'
+        }`}>
+          <button
+            type="button"
+            onClick={() => onChange('respond_basics')}
+            className={`flex w-full items-center gap-3 p-3 text-left cursor-pointer transition-colors ${
+              mode === 'respond_basics' ? 'bg-primary/5' : ''
+            }`}
+          >
+            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+              mode === 'respond_basics' ? 'border-primary' : 'border-muted-foreground/40'
+            }`}>
+              {mode === 'respond_basics' && <span className="h-2 w-2 rounded-full bg-primary" />}
+            </span>
+            <div>
+              <p className="text-xs font-medium">AI responds with default style</p>
+              <p className="text-xs text-muted-foreground">
+                Uses the communication style and knowledge base to handle the conversation.
+              </p>
+            </div>
+          </button>
+
+          {mode === 'respond_basics' && (
+            <div className="border-t border-primary/20 bg-muted/30 p-4 space-y-4">
+              <StyleFields style={style} onChange={onStyleChange} compact />
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Greeting Message (optional)</Label>
+                <textarea
+                  value={greetingMessage || ''}
+                  onChange={(e) => onGreetingChange(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Hi! Welcome to Acme Corp. How can I help you today?"
+                  className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Sent as the first response to new contacts.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">General Response Rules (optional)</Label>
+                <textarea
+                  value={responseRules || ''}
+                  onChange={(e) => onRulesChange(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Always mention our business hours (9am-5pm). Never discuss competitor products."
+                  className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Topics to Avoid (optional)</Label>
+                <textarea
+                  value={topicsToAvoid || ''}
+                  onChange={(e) => onTopicsChange(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Internal pricing strategies, competitor comparisons..."
+                  className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Option 2: Human handle */}
+        <div className={`rounded-lg border overflow-hidden transition-colors ${
+          mode === 'human_handle'
+            ? 'border-primary'
+            : 'border-border hover:border-muted-foreground/30'
+        }`}>
+          <button
+            type="button"
+            onClick={() => onChange('human_handle')}
+            className={`flex w-full items-center gap-3 p-3 text-left cursor-pointer transition-colors ${
+              mode === 'human_handle' ? 'bg-primary/5' : ''
+            }`}
+          >
+            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+              mode === 'human_handle' ? 'border-primary' : 'border-muted-foreground/40'
+            }`}>
+              {mode === 'human_handle' && <span className="h-2 w-2 rounded-full bg-primary" />}
+            </span>
+            <div>
+              <p className="text-xs font-medium">Let a human handle it</p>
+              <p className="text-xs text-muted-foreground">
+                AI directs the customer to a team member.
+              </p>
+            </div>
+          </button>
+
+          {mode === 'human_handle' && (
+            <div className="border-t border-primary/20 bg-muted/30 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                <Label className="text-xs">Handoff Phone Number</Label>
+              </div>
+              <Input
+                value={humanPhone || ''}
+                onChange={(e) => onPhoneChange(e.target.value)}
+                placeholder="e.g. +1 (555) 123-4567"
+                className="h-9"
+              />
+              <p className="text-xs text-muted-foreground">
+                The AI will direct customers to contact this number for help.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Default style settings — shown when AI responds */}
-      {mode === 'respond_basics' && (
-        <div className="ml-3 border-l-2 border-primary/20 pl-4 space-y-0">
-          <div className="py-4">
-            <p className="text-xs font-medium mb-3">Default Communication Style</p>
-            <p className="text-xs text-muted-foreground mb-4">
-              Applied to all messages that don't match a specific scenario.
-            </p>
-            <StyleFields style={style} onChange={onStyleChange} compact />
-          </div>
-
-          <div className="border-t py-4 space-y-1.5">
-            <Label className="text-xs font-medium">Greeting Message (optional)</Label>
-            <textarea
-              value={greetingMessage || ''}
-              onChange={(e) => onGreetingChange(e.target.value)}
-              rows={2}
-              placeholder="e.g. Hi! Welcome to Acme Corp. How can I help you today?"
-              className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            <p className="text-xs text-muted-foreground">
-              Sent as the first response to new contacts.
-            </p>
-          </div>
-
-          <div className="border-t py-4 space-y-1.5">
-            <Label className="text-xs font-medium">General Response Rules (optional)</Label>
-            <textarea
-              value={responseRules || ''}
-              onChange={(e) => onRulesChange(e.target.value)}
-              rows={3}
-              placeholder="e.g. Always mention our business hours (9am-5pm). Never discuss competitor products."
-              className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-
-          <div className="border-t py-4 space-y-1.5">
-            <Label className="text-xs font-medium">Topics to Avoid (optional)</Label>
-            <textarea
-              value={topicsToAvoid || ''}
-              onChange={(e) => onTopicsChange(e.target.value)}
-              rows={2}
-              placeholder="e.g. Internal pricing strategies, competitor comparisons..."
-              className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Human handoff settings */}
-      {mode === 'human_handle' && (
-        <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-          <div className="flex items-center gap-2">
-            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-            <Label className="text-xs">Handoff Phone Number</Label>
-          </div>
-          <Input
-            value={humanPhone || ''}
-            onChange={(e) => onPhoneChange(e.target.value)}
-            placeholder="e.g. +1 (555) 123-4567"
-            className="h-9"
-          />
-          <p className="text-xs text-muted-foreground">
-            The AI will direct customers to contact this number for help.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

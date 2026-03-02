@@ -21,6 +21,9 @@ export interface Scenario {
   instructions?: string;
   context?: string;
 
+  // Knowledge base attachments
+  kb_attachments?: { kb_id: string; instructions?: string }[];
+
   // Guardrails
   rules?: string;
   example_response?: string;
@@ -76,6 +79,7 @@ export interface ProfileData {
 }
 
 export interface KBEntry {
+  id?: string;
   title: string;
   content: string;
 }
@@ -194,8 +198,10 @@ function resolveScenarioStyle(scenario: Scenario, defaults: CommunicationStyle):
   };
 }
 
-function buildScenariosSection(flow: ResponseFlow): string | null {
+function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = []): string | null {
   if (flow.scenarios.length === 0) return null;
+
+  const kbById = new Map(kbEntries.filter((e) => e.id).map((e) => [e.id!, e]));
 
   const scenarioBlocks = flow.scenarios.map((sc) => {
     const resolved = resolveScenarioStyle(sc, flow.default_style);
@@ -205,7 +211,20 @@ function buildScenariosSection(flow: ResponseFlow): string | null {
     if (sc.goal) lines.push(`**Goal**: ${sc.goal}`);
     lines.push(`**Style**: ${formatStyleBrief(resolved)}`);
     if (sc.instructions) lines.push(`**Instructions**:\n${sc.instructions}`);
-    if (sc.context) lines.push(`**Key Information**:\n${sc.context}`);
+    // Inline context and KB attachments as unified context
+    const contextParts: string[] = [];
+    if (sc.context) contextParts.push(sc.context);
+    if (sc.kb_attachments && sc.kb_attachments.length > 0) {
+      for (const att of sc.kb_attachments) {
+        const entry = kbById.get(att.kb_id);
+        if (!entry) continue;
+        const header = att.instructions
+          ? `[${entry.title}] (${att.instructions})`
+          : `[${entry.title}]`;
+        contextParts.push(`${header}\n${entry.content}`);
+      }
+    }
+    if (contextParts.length > 0) lines.push(`**Context**:\n${contextParts.join('\n\n')}`);
     // Support both new and legacy field names
     if (sc.rules) lines.push(`**Rules**:\n${sc.rules}`);
     else if (sc.response_rules) lines.push(`**Rules**: ${sc.response_rules}`);
@@ -264,12 +283,16 @@ function buildResponseFlowPrompt(
     parts.push(`## Topics to Avoid\nNever discuss or share information about the following:\n${flow.topics_to_avoid}`);
   }
 
-  // Scenarios
-  const scenarios = buildScenariosSection(flow);
+  // Scenarios (pass KB entries so per-scenario attachments are inlined)
+  const scenarios = buildScenariosSection(flow, kbEntries);
   if (scenarios) parts.push(scenarios);
 
-  // Knowledge base
-  const kb = buildKBSection(kbEntries);
+  // Global knowledge base (exclude entries already inlined into scenarios)
+  const scenarioKBIds = new Set(
+    flow.scenarios.flatMap((sc) => (sc.kb_attachments || []).map((a) => a.kb_id))
+  );
+  const globalKB = kbEntries.filter((e) => !e.id || !scenarioKBIds.has(e.id));
+  const kb = buildKBSection(globalKB);
   if (kb) parts.push(kb);
 
   // Channel-specific instructions

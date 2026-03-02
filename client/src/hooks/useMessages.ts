@@ -11,6 +11,7 @@ export interface Message {
   status: string;
   read: boolean;
   message_ts: string | null;
+  scheduled_for: string | null;
   created_at: string;
   metadata: Record<string, unknown> | null;
 }
@@ -49,10 +50,28 @@ export function useMessages(sessionId: string | null) {
     [sessionId]
   );
 
+  const scheduleMessage = useCallback(
+    async (body: string, scheduledFor: string) => {
+      if (!sessionId) return;
+      const { data } = await api.post('/messages/schedule', { sessionId, body, scheduledFor });
+      setMessages((prev) => [...prev, data.message]);
+      return data.message;
+    },
+    [sessionId]
+  );
+
+  const cancelScheduledMessage = useCallback(
+    async (messageId: string) => {
+      await api.delete(`/messages/scheduled/${messageId}`);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    },
+    []
+  );
+
   const markRead = useCallback(async () => {
     if (!sessionId) return;
     await api.post(`/conversations/${sessionId}/read`);
   }, [sessionId]);
 
-  return { messages, setMessages, loading, sendMessage, markRead, refetch: fetchMessages };
+  return { messages, setMessages, loading, sendMessage, scheduleMessage, cancelScheduledMessage, markRead, refetch: fetchMessages };
 }

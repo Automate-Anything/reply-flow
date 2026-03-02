@@ -24,15 +24,19 @@ export default function InboxPage() {
 
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
     useConversations(search, filters);
-  const { messages, setMessages, loading: msgsLoading, sendMessage, markRead } = useMessages(
+  const { messages, setMessages, loading: msgsLoading, sendMessage, scheduleMessage, cancelScheduledMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );
   const { members: teamMembers } = useTeamMembers();
 
   // Fetch labels for bulk actions
-  useEffect(() => {
+  const refreshLabels = useCallback(() => {
     api.get('/labels').then(({ data }) => setAllLabels(data.labels || []));
   }, []);
+
+  useEffect(() => {
+    refreshLabels();
+  }, [refreshLabels]);
 
   // Realtime updates
   useRealtimeMessages({
@@ -75,6 +79,24 @@ export default function InboxPage() {
       refetchConvs();
     } catch {
       toast.error('Failed to send message');
+    }
+  };
+
+  const handleSchedule = async (body: string, scheduledFor: string) => {
+    try {
+      await scheduleMessage(body, scheduledFor);
+      toast.success('Message scheduled');
+    } catch {
+      toast.error('Failed to schedule message');
+    }
+  };
+
+  const handleCancelScheduled = async (messageId: string) => {
+    try {
+      await cancelScheduledMessage(messageId);
+      toast.success('Scheduled message cancelled');
+    } catch {
+      toast.error('Failed to cancel scheduled message');
     }
   };
 
@@ -146,6 +168,7 @@ export default function InboxPage() {
           onBulkActionComplete={handleBulkActionComplete}
           teamMembers={teamMembers}
           labels={allLabels}
+          onLabelsCreated={refreshLabels}
         />
       </div>
 
@@ -163,11 +186,14 @@ export default function InboxPage() {
               onOpenContact={() => setContactPanelOpen(true)}
               onToggleNotes={() => setNotesPanelOpen((prev) => !prev)}
               notesPanelOpen={notesPanelOpen}
+              onLabelsCreated={refreshLabels}
             />
             <MessageThread
               messages={messages}
               loading={msgsLoading}
               onSend={handleSend}
+              onSchedule={handleSchedule}
+              onCancelScheduled={handleCancelScheduled}
             />
           </div>
 

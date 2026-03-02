@@ -33,6 +33,7 @@ interface ConversationListProps {
   onBulkActionComplete: () => void;
   teamMembers: TeamMember[];
   labels: LabelOption[];
+  onLabelsCreated?: () => void;
 }
 
 export default function ConversationList({
@@ -53,6 +54,7 @@ export default function ConversationList({
   onBulkActionComplete,
   teamMembers,
   labels,
+  onLabelsCreated,
 }: ConversationListProps) {
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
@@ -147,6 +149,7 @@ export default function ConversationList({
           onActionComplete={onBulkActionComplete}
           teamMembers={teamMembers}
           labels={labels}
+          onLabelsCreated={onLabelsCreated}
         />
       )}
     </div>

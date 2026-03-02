@@ -59,7 +59,13 @@ export function useConversations(
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      if (filters?.status && filters.status !== 'all') params.set('status', filters.status);
+      if (filters?.status && filters.status !== 'all') {
+        if (filters.status === 'snoozed') {
+          params.set('snoozed', 'true');
+        } else {
+          params.set('status', filters.status);
+        }
+      }
       if (filters?.assignee && filters.assignee !== 'all') params.set('assignee', filters.assignee);
       if (filters?.priority && filters.priority !== 'all') params.set('priority', filters.priority);
       if (filters?.starred) params.set('starred', 'true');

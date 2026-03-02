@@ -24,7 +24,7 @@ const navItems = [
   { to: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', permission: { resource: 'knowledge_base', action: 'view' } },
   { to: '/ai-agents', icon: Bot, label: 'AI Agents', permission: { resource: 'ai_settings', action: 'view' } },
   { to: '/channels', icon: Smartphone, label: 'Channels' },
-  { to: '/account', icon: Settings, label: 'Account', permission: { resource: 'company_settings', action: 'view' } },
+  { to: '/settings', icon: Settings, label: 'Settings', permission: { resource: 'company_settings', action: 'view' } },
 ];
 
 interface SidebarProps {

@@ -27,6 +27,17 @@ const STATUS_LABELS: Record<string, string> = {
   closed: 'Closed',
 };
 
+function formatSnoozeUntil(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  if (diffMs <= 0) return 'Snoozed';
+  const diffH = Math.floor(diffMs / 3_600_000);
+  if (diffH < 1) return `Snoozed · ${Math.ceil(diffMs / 60_000)}m`;
+  if (diffH < 24) return `Snoozed · ${diffH}h`;
+  return `Snoozed · ${date.toLocaleDateString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`;
+}
+
 function formatTime(dateStr: string | null): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
@@ -144,8 +155,17 @@ export default function ConversationItem({
           )}
         </div>
 
-        {(conversation.labels.length > 0 || statusLabel) && (
+        {(conversation.labels.length > 0 || statusLabel || isSnoozed) && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
+            {isSnoozed && (
+              <Badge
+                variant="secondary"
+                className="h-4 px-1.5 text-[10px] gap-0.5"
+              >
+                <Clock className="h-2.5 w-2.5" />
+                {formatSnoozeUntil(conversation.snoozed_until!)}
+              </Badge>
+            )}
             {statusLabel && (
               <Badge
                 variant="secondary"

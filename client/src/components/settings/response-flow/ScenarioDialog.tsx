@@ -52,7 +52,6 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
   const [criteria, setCriteria] = useState('');
   const [goal, setGoal] = useState('');
   const [instructions, setInstructions] = useState('');
-  const [context, setContext] = useState('');
   const [kbAttachments, setKbAttachments] = useState<ScenarioKBAttachment[]>([]);
   const [rules, setRules] = useState('');
   const [exampleResponse, setExampleResponse] = useState('');
@@ -70,7 +69,6 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         setCriteria(scenario.detection_criteria);
         setGoal(scenario.goal || '');
         setInstructions(scenario.instructions || '');
-        setContext(scenario.context || '');
         setKbAttachments(scenario.kb_attachments ?? []);
         setRules(scenario.rules || '');
         setExampleResponse(scenario.example_response || '');
@@ -89,7 +87,6 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         setCriteria('');
         setGoal('');
         setInstructions('');
-        setContext('');
         setKbAttachments([]);
         setRules('');
         setExampleResponse('');
@@ -111,7 +108,6 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
       detection_criteria: criteria.trim(),
       goal: goal.trim() || undefined,
       instructions: instructions.trim() || undefined,
-      context: context.trim() || undefined,
       kb_attachments: kbAttachments.length > 0 ? kbAttachments : undefined,
       rules: rules.trim() || undefined,
       example_response: exampleResponse.trim() || undefined,
@@ -196,32 +192,16 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Key Information & Context</Label>
-            <textarea
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              rows={4}
-              placeholder={ph.context}
-              className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          {/* ── Knowledge Base ── */}
+          <div className="space-y-2">
+            <Label className="text-xs">Knowledge Base</Label>
+            <KBPicker
+              value={kbAttachments}
+              onChange={setKbAttachments}
+              kbEntries={kbEntries}
+              description="Attach knowledge base entries the AI should reference for this scenario."
             />
-            <p className="text-xs text-muted-foreground">
-              Business data the AI needs: links, prices, hours, policies, product details.
-            </p>
           </div>
-
-          {/* Knowledge Base Attachments */}
-          {kbEntries.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-xs">Knowledge Base</Label>
-              <KBPicker
-                value={kbAttachments}
-                onChange={setKbAttachments}
-                kbEntries={kbEntries}
-                description="Attach knowledge bases for the AI to reference. Add instructions for how to use each one."
-              />
-            </div>
-          )}
 
           {/* ── Guardrails ── */}
           <SectionHeader label="Guardrails" />
