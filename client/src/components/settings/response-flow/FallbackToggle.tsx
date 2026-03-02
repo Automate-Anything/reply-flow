@@ -46,9 +46,9 @@ export default function FallbackToggle({
               {mode === 'respond_basics' && <span className="h-2 w-2 rounded-full bg-primary" />}
             </span>
             <div>
-              <p className="text-xs font-medium">AI responds with default style</p>
+              <p className="text-xs font-medium">AI responds using unmatched style</p>
               <p className="text-xs text-muted-foreground">
-                Uses the communication style and knowledge base to handle the conversation.
+                Uses the communication style below and knowledge base to handle unmatched messages.
               </p>
             </div>
           </button>

@@ -18,14 +18,18 @@ export function useTeamMembers() {
     try {
       const { data } = await api.get('/team/members');
       setMembers(
-        (data.members || []).map((m: Record<string, unknown>) => ({
-          id: m.id,
-          user_id: m.user_id,
-          full_name: m.full_name || m.email || 'Unknown',
-          email: m.email,
-          avatar_url: m.avatar_url || null,
-          role_name: m.role_name || 'staff',
-        }))
+        (data.members || []).map((m: Record<string, any>) => {
+          const user = m.users || {};
+          const role = m.roles || {};
+          return {
+            id: m.id,
+            user_id: m.user_id,
+            full_name: user.full_name || user.email || 'Unknown',
+            email: user.email,
+            avatar_url: user.avatar_url || null,
+            role_name: role.name || 'staff',
+          };
+        })
       );
     } catch (err) {
       console.error('Failed to fetch team members:', err);
