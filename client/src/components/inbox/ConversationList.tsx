@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CheckSquare, MessageSquare, Search, Settings } from 'lucide-react';
+import { MessageSquare, Search, Settings } from 'lucide-react';
 import ConversationItem from './ConversationItem';
 import ConversationFiltersPopover from './ConversationFilters';
 import BulkActionBar from './BulkActionBar';
@@ -47,7 +47,6 @@ export default function ConversationList({
   filters,
   onFiltersChange,
   selectionMode,
-  onToggleSelectionMode,
   selectedIds,
   onToggleSelect,
   onSelectAll,
@@ -72,15 +71,6 @@ export default function ConversationList({
             />
           </div>
           <ConversationFiltersPopover filters={filters} onFiltersChange={onFiltersChange} />
-          <Button
-            variant={selectionMode ? 'secondary' : 'ghost'}
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            onClick={onToggleSelectionMode}
-            title={selectionMode ? 'Exit selection' : 'Select conversations'}
-          >
-            <CheckSquare className="h-4 w-4" />
-          </Button>
           {onOpenInboxTools && (
             <Button
               variant="ghost"
