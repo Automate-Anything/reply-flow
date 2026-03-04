@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/.env*)",
+      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/.env*)",
+      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/client/.env*)"
+    ]
+  }
+}

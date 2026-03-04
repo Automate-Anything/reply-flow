@@ -10,6 +10,7 @@ import {
   Settings,
   Smartphone,
   Bot,
+  CreditCard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -25,6 +26,7 @@ const navItems = [
   { to: '/ai-agents', icon: Bot, label: 'AI Agents', permission: { resource: 'ai_settings', action: 'view' } },
   { to: '/channels', icon: Smartphone, label: 'Channels' },
   { to: '/settings', icon: Settings, label: 'Settings', permission: { resource: 'company_settings', action: 'view' } },
+  { to: '/billing', icon: CreditCard, label: 'Billing' },
 ];
 
 interface SidebarProps {
