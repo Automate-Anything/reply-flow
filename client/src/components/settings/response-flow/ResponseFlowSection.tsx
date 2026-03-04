@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, ChevronDown, FlaskConical } from 'lucide-react';
 import type { ProfileData, ResponseFlow, Scenario } from '@/hooks/useCompanyAI';
-import type { KBEntry } from '@/hooks/useCompanyKB';
+import type { KnowledgeBase } from '@/hooks/useCompanyKB';
 import { cn } from '@/lib/utils';
 import ScenarioCard from './ScenarioCard';
 import ScenarioDialog from './ScenarioDialog';
@@ -26,7 +26,7 @@ interface Props {
   channelId?: number;
   agentId?: string;
   flow: ResponseFlow;
-  kbEntries?: KBEntry[];
+  knowledgeBases?: KnowledgeBase[];
   addScenario: (label: string) => Scenario;
   updateScenario: (id: string, updates: Partial<Scenario>) => void;
   removeScenario: (id: string) => void;
@@ -34,7 +34,7 @@ interface Props {
 
 export default function ResponseFlowSection({
   profileData, channelId, agentId,
-  flow, kbEntries, addScenario, updateScenario, removeScenario,
+  flow, knowledgeBases, addScenario, updateScenario, removeScenario,
 }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
@@ -202,7 +202,7 @@ export default function ResponseFlowSection({
         }}
         scenario={editingScenario}
         defaultStyle={flow.default_style}
-        kbEntries={kbEntries}
+        knowledgeBases={knowledgeBases}
         onSave={handleDialogSave}
       />
 

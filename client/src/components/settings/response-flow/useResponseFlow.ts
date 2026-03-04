@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { ProfileData, ResponseFlow, Scenario, CommunicationStyle, FallbackMode } from '@/hooks/useCompanyAI';
+import type { ProfileData, ResponseFlow, Scenario, CommunicationStyle, FallbackMode, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
 
 const DEFAULT_STYLE: CommunicationStyle = {
   tone: 'friendly',
@@ -118,6 +118,10 @@ export function useResponseFlow(profileData: ProfileData) {
     updateFlow({ fallback_mode: mode });
   }, [updateFlow]);
 
+  const setFallbackKBAttachments = useCallback((attachments: ScenarioKBAttachment[]) => {
+    updateFlow({ fallback_kb_attachments: attachments.length > 0 ? attachments : undefined });
+  }, [updateFlow]);
+
   // ── Reset to saved state ──
   const reset = useCallback(() => {
     const raw = profileData.response_flow ?? migrateFromFlat(profileData);
@@ -134,6 +138,7 @@ export function useResponseFlow(profileData: ProfileData) {
     updateScenario,
     removeScenario,
     setFallbackMode,
+    setFallbackKBAttachments,
     reset,
   };
 }

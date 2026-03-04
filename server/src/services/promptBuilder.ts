@@ -52,6 +52,7 @@ export interface ResponseFlow {
   scenarios: Scenario[];
   fallback_mode: FallbackMode;
   human_phone?: string;
+  fallback_kb_attachments?: { kb_id: string; instructions?: string }[];
 }
 
 // ── Profile & KB types ──────────────────────────────
@@ -82,6 +83,7 @@ export interface KBEntry {
   id?: string;
   title: string;
   content: string;
+  knowledge_base_id?: string;
 }
 
 // ── Shared constants ────────────────────────────────
@@ -201,7 +203,15 @@ function resolveScenarioStyle(scenario: Scenario, defaults: CommunicationStyle):
 function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = []): string | null {
   if (flow.scenarios.length === 0) return null;
 
-  const kbById = new Map(kbEntries.filter((e) => e.id).map((e) => [e.id!, e]));
+  // Group entries by knowledge_base_id for KB-level attachments
+  const entriesByKBId = new Map<string, KBEntry[]>();
+  for (const entry of kbEntries) {
+    if (entry.knowledge_base_id) {
+      const list = entriesByKBId.get(entry.knowledge_base_id) || [];
+      list.push(entry);
+      entriesByKBId.set(entry.knowledge_base_id, list);
+    }
+  }
 
   const scenarioBlocks = flow.scenarios.map((sc) => {
     const resolved = resolveScenarioStyle(sc, flow.default_style);
@@ -216,12 +226,13 @@ function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = []): s
     if (sc.context) contextParts.push(sc.context);
     if (sc.kb_attachments && sc.kb_attachments.length > 0) {
       for (const att of sc.kb_attachments) {
-        const entry = kbById.get(att.kb_id);
-        if (!entry) continue;
-        const header = att.instructions
-          ? `[${entry.title}] (${att.instructions})`
-          : `[${entry.title}]`;
-        contextParts.push(`${header}\n${entry.content}`);
+        const entries = entriesByKBId.get(att.kb_id) || [];
+        for (const entry of entries) {
+          const header = att.instructions
+            ? `[${entry.title}] (${att.instructions})`
+            : `[${entry.title}]`;
+          contextParts.push(`${header}\n${entry.content}`);
+        }
       }
     }
     if (contextParts.length > 0) lines.push(`**Context**:\n${contextParts.join('\n\n')}`);
@@ -287,13 +298,16 @@ function buildResponseFlowPrompt(
   const scenarios = buildScenariosSection(flow, kbEntries);
   if (scenarios) parts.push(scenarios);
 
-  // Global knowledge base (exclude entries already inlined into scenarios)
-  const scenarioKBIds = new Set(
-    flow.scenarios.flatMap((sc) => (sc.kb_attachments || []).map((a) => a.kb_id))
-  );
-  const globalKB = kbEntries.filter((e) => !e.id || !scenarioKBIds.has(e.id));
-  const kb = buildKBSection(globalKB);
-  if (kb) parts.push(kb);
+  // Fallback knowledge base (from fallback_kb_attachments)
+  if (flow.fallback_kb_attachments && flow.fallback_kb_attachments.length > 0) {
+    const fallbackEntries: KBEntry[] = [];
+    for (const att of flow.fallback_kb_attachments) {
+      const entries = kbEntries.filter((e) => e.knowledge_base_id === att.kb_id);
+      fallbackEntries.push(...entries);
+    }
+    const kb = buildKBSection(fallbackEntries);
+    if (kb) parts.push(kb);
+  }
 
   // Channel-specific instructions
   if (channelOverrides?.custom_instructions) {

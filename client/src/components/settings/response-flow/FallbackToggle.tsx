@@ -1,7 +1,9 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { FallbackMode, CommunicationStyle } from '@/hooks/useCompanyAI';
+import type { FallbackMode, CommunicationStyle, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
+import type { KnowledgeBase } from '@/hooks/useCompanyKB';
 import StyleFields from './StyleFields';
+import KBPicker from '../KBPicker';
 import { Phone } from 'lucide-react';
 
 interface Props {
@@ -12,17 +14,22 @@ interface Props {
   responseRules?: string;
   topicsToAvoid?: string;
   humanPhone?: string;
+  knowledgeBases?: KnowledgeBase[];
+  fallbackKBAttachments?: ScenarioKBAttachment[];
   onStyleChange: (style: CommunicationStyle) => void;
   onGreetingChange: (value: string) => void;
   onRulesChange: (value: string) => void;
   onTopicsChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
+  onFallbackKBChange?: (attachments: ScenarioKBAttachment[]) => void;
 }
 
 export default function FallbackToggle({
   mode, onChange,
   style, greetingMessage, responseRules, topicsToAvoid, humanPhone,
+  knowledgeBases = [], fallbackKBAttachments = [],
   onStyleChange, onGreetingChange, onRulesChange, onTopicsChange, onPhoneChange,
+  onFallbackKBChange,
 }: Props) {
   return (
     <div className="space-y-3">
@@ -92,6 +99,19 @@ export default function FallbackToggle({
                   className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
               </div>
+
+              {onFallbackKBChange && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium">Knowledge Base</Label>
+                  <KBPicker
+                    value={fallbackKBAttachments}
+                    onChange={onFallbackKBChange}
+                    knowledgeBases={knowledgeBases}
+                    description="Attach knowledge bases the AI should reference when handling unmatched messages."
+                    createHref="/knowledge-base"
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

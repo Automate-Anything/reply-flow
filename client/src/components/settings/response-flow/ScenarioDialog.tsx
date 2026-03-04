@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { ChevronDown } from 'lucide-react';
 import type { Scenario, CommunicationStyle, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
-import type { KBEntry } from '@/hooks/useCompanyKB';
+import type { KnowledgeBase } from '@/hooks/useCompanyKB';
 import { cn } from '@/lib/utils';
 import StyleFields from './StyleFields';
 import { getPlaceholders } from './scenarioPlaceholders';
@@ -23,7 +23,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   scenario: Scenario | null;
   defaultStyle: CommunicationStyle;
-  kbEntries?: KBEntry[];
+  knowledgeBases?: KnowledgeBase[];
   onSave: (data: Omit<Scenario, 'id'>) => void;
 }
 
@@ -47,7 +47,7 @@ function SectionHeader({ label, onClick, expandIcon }: {
   );
 }
 
-export default function ScenarioDialog({ open, onOpenChange, scenario, defaultStyle, kbEntries = [], onSave }: Props) {
+export default function ScenarioDialog({ open, onOpenChange, scenario, defaultStyle, knowledgeBases = [], onSave }: Props) {
   const [label, setLabel] = useState('');
   const [criteria, setCriteria] = useState('');
   const [goal, setGoal] = useState('');
@@ -198,8 +198,9 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
             <KBPicker
               value={kbAttachments}
               onChange={setKbAttachments}
-              kbEntries={kbEntries}
-              description="Attach knowledge base entries the AI should reference for this scenario."
+              knowledgeBases={knowledgeBases}
+              description="Attach knowledge bases the AI should reference for this scenario."
+              createHref="/knowledge-base"
             />
           </div>
 

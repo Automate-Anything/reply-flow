@@ -3,43 +3,26 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { FileText, BookOpen, Plus, X, Check, Search } from 'lucide-react';
+import { BookOpen, Plus, X, Check, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { KBAttachment } from '@/hooks/useCompanyAI';
-import type { KBEntry } from '@/hooks/useCompanyKB';
-
-function EntryTypeBadge({ entry }: { entry: KBEntry }) {
-  const label = entry.source_type === 'file'
-    ? entry.file_name?.split('.').pop()?.toUpperCase() || 'FILE'
-    : 'TEXT';
-  return (
-    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-      {label}
-    </span>
-  );
-}
-
-function EntryIcon({ entry }: { entry: KBEntry }) {
-  return entry.source_type === 'file'
-    ? <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-    : <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />;
-}
+import type { KnowledgeBase } from '@/hooks/useCompanyKB';
 
 interface KBPickerProps {
   value: KBAttachment[];
   onChange: (next: KBAttachment[]) => void;
-  kbEntries: KBEntry[];
+  knowledgeBases: KnowledgeBase[];
   description?: string;
-  createEntryHref?: string;
+  createHref?: string;
   disabled?: boolean;
 }
 
 export default function KBPicker({
   value,
   onChange,
-  kbEntries,
+  knowledgeBases,
   description,
-  createEntryHref,
+  createHref,
   disabled,
 }: KBPickerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -48,8 +31,8 @@ export default function KBPicker({
 
   const assignedIds = new Set(value.map((a) => a.kb_id));
 
-  const filteredEntries = kbEntries.filter((e) =>
-    e.title.toLowerCase().includes(search.toLowerCase())
+  const filtered = knowledgeBases.filter((kb) =>
+    kb.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const toggleExpanded = (kbId: string) => {
@@ -61,16 +44,16 @@ export default function KBPicker({
     });
   };
 
-  const handleToggle = (entryId: string) => {
-    if (assignedIds.has(entryId)) {
-      onChange(value.filter((a) => a.kb_id !== entryId));
+  const handleToggle = (kbId: string) => {
+    if (assignedIds.has(kbId)) {
+      onChange(value.filter((a) => a.kb_id !== kbId));
       setExpandedIds((prev) => {
         const next = new Set(prev);
-        next.delete(entryId);
+        next.delete(kbId);
         return next;
       });
     } else {
-      onChange([...value, { kb_id: entryId }]);
+      onChange([...value, { kb_id: kbId }]);
     }
   };
 
@@ -97,19 +80,21 @@ export default function KBPicker({
         <p className="text-xs text-muted-foreground">{description}</p>
       )}
 
-      {/* Attached entries */}
+      {/* Attached knowledge bases */}
       {value.length > 0 && (
         <div className="space-y-2">
           {value.map((att) => {
-            const entry = kbEntries.find((e) => e.id === att.kb_id);
-            if (!entry) return null;
+            const kb = knowledgeBases.find((k) => k.id === att.kb_id);
+            if (!kb) return null;
             const isExpanded = expandedIds.has(att.kb_id) || !!att.instructions;
             return (
               <div key={att.kb_id} className="rounded-lg border bg-muted/30">
                 <div className="flex items-center gap-3 px-3 py-2">
-                  <EntryIcon entry={entry} />
-                  <span className="min-w-0 flex-1 truncate text-sm">{entry.title}</span>
-                  <EntryTypeBadge entry={entry} />
+                  <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-sm">{kb.name}</span>
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {kb.entry_count} {kb.entry_count === 1 ? 'entry' : 'entries'}
+                  </span>
                   <button
                     type="button"
                     onClick={() => handleRemove(att.kb_id)}
@@ -125,7 +110,7 @@ export default function KBPicker({
                       value={att.instructions || ''}
                       onChange={(e) => handleInstructionsChange(att.kb_id, e.target.value)}
                       rows={4}
-                      placeholder="How should the AI use this? Any additional context..."
+                      placeholder="How should the AI use this knowledge base? Any additional context..."
                       disabled={disabled}
                       className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
                     />
@@ -156,7 +141,7 @@ export default function KBPicker({
             className="flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted/50 cursor-pointer disabled:opacity-50"
           >
             <Search className="h-3.5 w-3.5" />
-            Assign knowledge base entries...
+            Assign knowledge bases...
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -174,18 +159,18 @@ export default function KBPicker({
             />
           </div>
           <div className="max-h-56 overflow-y-auto py-1">
-            {filteredEntries.length === 0 ? (
+            {filtered.length === 0 ? (
               <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-                No entries match your search
+                No knowledge bases match your search
               </p>
             ) : (
-              filteredEntries.map((entry) => {
-                const isAssigned = assignedIds.has(entry.id);
+              filtered.map((kb) => {
+                const isAssigned = assignedIds.has(kb.id);
                 return (
                   <button
-                    key={entry.id}
+                    key={kb.id}
                     type="button"
-                    onClick={() => handleToggle(entry.id)}
+                    onClick={() => handleToggle(kb.id)}
                     className="flex w-full items-center gap-2.5 px-2 py-1.5 text-left transition-colors hover:bg-accent cursor-pointer"
                   >
                     <span className={cn(
@@ -194,21 +179,24 @@ export default function KBPicker({
                     )}>
                       {isAssigned && <Check className="h-3 w-3 text-primary-foreground" />}
                     </span>
+                    <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">{entry.title}</p>
+                      <p className="truncate text-sm">{kb.name}</p>
                     </div>
-                    <EntryTypeBadge entry={entry} />
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {kb.entry_count}
+                    </span>
                   </button>
                 );
               })
             )}
           </div>
-          {createEntryHref && (
+          {createHref && (
             <div className="border-t p-1.5">
               <Button size="sm" variant="ghost" className="w-full justify-start text-xs h-7" asChild>
-                <Link to={createEntryHref}>
+                <Link to={createHref}>
                   <Plus className="mr-1.5 h-3 w-3" />
-                  Create new entry
+                  Create new knowledge base
                 </Link>
               </Button>
             </div>

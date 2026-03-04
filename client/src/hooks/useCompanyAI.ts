@@ -66,6 +66,7 @@ export interface ResponseFlow {
   scenarios: Scenario[];
   fallback_mode: FallbackMode;
   human_phone?: string;
+  fallback_kb_attachments?: ScenarioKBAttachment[];
 }
 
 // ── Profile data ────────────────────────────────────

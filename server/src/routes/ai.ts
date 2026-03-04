@@ -103,10 +103,9 @@ router.put('/profile', requirePermission('ai_settings', 'edit'), async (req, res
 router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { profile_data, message, channelId, agentId } = req.body as {
+    const { profile_data, message, agentId } = req.body as {
       profile_data?: ProfileData;
       message: string;
-      channelId?: number;
       agentId?: string;
     };
 
@@ -134,29 +133,12 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
       }
     }
 
-    // Load KB entries for the channel (if provided)
-    const { data: assignedKB } = channelId
-      ? await supabaseAdmin
-          .from('channel_kb_assignments')
-          .select('entry_id')
-          .eq('channel_id', channelId)
-      : { data: null };
-
-    let kbData: KBEntry[] = [];
-    if (assignedKB && assignedKB.length > 0) {
-      const entryIds = assignedKB.map((a) => a.entry_id);
-      const { data: kbEntries } = await supabaseAdmin
-        .from('knowledge_base_entries')
-        .select('id, title, content')
-        .in('id', entryIds);
-      kbData = (kbEntries || []) as KBEntry[];
-    } else {
-      const { data: kbEntries } = await supabaseAdmin
-        .from('knowledge_base_entries')
-        .select('id, title, content')
-        .eq('company_id', companyId);
-      kbData = (kbEntries || []) as KBEntry[];
-    }
+    // Load all KB entries for the company (prompt builder routes them to scenarios/fallback)
+    const { data: kbEntries } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('id, title, content, knowledge_base_id')
+      .eq('company_id', companyId);
+    const kbData = (kbEntries || []) as KBEntry[];
 
     // Build system prompt with classification instruction
     const basePrompt = buildSystemPrompt(resolvedProfileData, kbData);
@@ -196,10 +178,154 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
 });
 
 // ────────────────────────────────────────────────
-// KNOWLEDGE BASE ROUTES (company-level)
+// KNOWLEDGE BASE ROUTES
 // ────────────────────────────────────────────────
 
-// List KB entries for the company
+// List all knowledge bases for the company (with entry counts)
+router.get('/kbs', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+
+    const { data, error } = await supabaseAdmin
+      .from('knowledge_bases')
+      .select('*, knowledge_base_entries(count)')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const knowledgeBases = (data || []).map((kb: Record<string, unknown>) => {
+      const entries = kb.knowledge_base_entries as Array<{ count: number }> | undefined;
+      return {
+        id: kb.id,
+        name: kb.name,
+        description: kb.description,
+        entry_count: entries?.[0]?.count ?? 0,
+        created_at: kb.created_at,
+        updated_at: kb.updated_at,
+      };
+    });
+
+    res.json({ knowledge_bases: knowledgeBases });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Create a knowledge base
+router.post('/kbs', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { name, description } = req.body;
+
+    if (!name?.trim()) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('knowledge_bases')
+      .insert({
+        company_id: companyId,
+        created_by: req.userId,
+        name: name.trim(),
+        description: description?.trim() || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ knowledge_base: { ...data, entry_count: 0 } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update a knowledge base
+router.put('/kbs/:kbId', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { kbId } = req.params;
+    const { name, description } = req.body;
+
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (name !== undefined) updates.name = name.trim();
+    if (description !== undefined) updates.description = description?.trim() || null;
+
+    const { data, error } = await supabaseAdmin
+      .from('knowledge_bases')
+      .update(updates)
+      .eq('id', kbId)
+      .eq('company_id', companyId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ knowledge_base: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete a knowledge base (cascade deletes entries)
+router.delete('/kbs/:kbId', requirePermission('knowledge_base', 'delete'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { kbId } = req.params;
+
+    // Delete file storage for any file entries in this KB
+    const { data: fileEntries } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('file_url')
+      .eq('knowledge_base_id', kbId)
+      .eq('company_id', companyId)
+      .not('file_url', 'is', null);
+
+    if (fileEntries && fileEntries.length > 0) {
+      const filePaths = fileEntries.map((e) => e.file_url).filter(Boolean) as string[];
+      if (filePaths.length > 0) {
+        await supabaseAdmin.storage.from('knowledge-base').remove(filePaths);
+      }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('knowledge_bases')
+      .delete()
+      .eq('id', kbId)
+      .eq('company_id', companyId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// KB ENTRY ROUTES (scoped under a knowledge base)
+// ────────────────────────────────────────────────
+
+// List entries in a knowledge base
+router.get('/kbs/:kbId/entries', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { kbId } = req.params;
+
+    const { data, error } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('*')
+      .eq('knowledge_base_id', kbId)
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ entries: data || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// List all entries flat (for prompt builder / scenario picker)
 router.get('/kb', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
@@ -217,10 +343,11 @@ router.get('/kb', requirePermission('knowledge_base', 'view'), async (req, res, 
   }
 });
 
-// Add text KB entry to the company
-router.post('/kb', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
+// Add text entry to a knowledge base
+router.post('/kbs/:kbId/entries', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
+    const { kbId } = req.params;
     const { title, content } = req.body;
 
     if (!title || !content) {
@@ -233,6 +360,7 @@ router.post('/kb', requirePermission('knowledge_base', 'create'), async (req, re
       .insert({
         company_id: companyId,
         created_by: req.userId,
+        knowledge_base_id: kbId,
         title,
         content,
         source_type: 'text',
@@ -247,10 +375,11 @@ router.post('/kb', requirePermission('knowledge_base', 'create'), async (req, re
   }
 });
 
-// Upload file KB entry to the company
-router.post('/kb/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
+// Upload file entry to a knowledge base
+router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
+    const { kbId } = req.params;
     const file = req.file;
 
     if (!file) {
@@ -303,6 +432,7 @@ router.post('/kb/upload', requirePermission('knowledge_base', 'create'), upload.
       .insert({
         company_id: companyId,
         created_by: req.userId,
+        knowledge_base_id: kbId,
         title,
         content: extractedText,
         source_type: 'file',
@@ -319,11 +449,11 @@ router.post('/kb/upload', requirePermission('knowledge_base', 'create'), upload.
   }
 });
 
-// Update a KB entry
-router.put('/kb/entry/:entryId', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
+// Update an entry in a knowledge base
+router.put('/kbs/:kbId/entries/:entryId', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { entryId } = req.params;
+    const { kbId, entryId } = req.params;
     const { title, content } = req.body;
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -334,6 +464,7 @@ router.put('/kb/entry/:entryId', requirePermission('knowledge_base', 'edit'), as
       .from('knowledge_base_entries')
       .update(updates)
       .eq('id', entryId)
+      .eq('knowledge_base_id', kbId)
       .eq('company_id', companyId)
       .select()
       .single();
@@ -345,16 +476,17 @@ router.put('/kb/entry/:entryId', requirePermission('knowledge_base', 'edit'), as
   }
 });
 
-// Delete a KB entry
-router.delete('/kb/entry/:entryId', requirePermission('knowledge_base', 'delete'), async (req, res, next) => {
+// Delete an entry from a knowledge base
+router.delete('/kbs/:kbId/entries/:entryId', requirePermission('knowledge_base', 'delete'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { entryId } = req.params;
+    const { kbId, entryId } = req.params;
 
     const { data: entry } = await supabaseAdmin
       .from('knowledge_base_entries')
       .select('file_url')
       .eq('id', entryId)
+      .eq('knowledge_base_id', kbId)
       .eq('company_id', companyId)
       .single();
 
@@ -373,6 +505,7 @@ router.delete('/kb/entry/:entryId', requirePermission('knowledge_base', 'delete'
       .from('knowledge_base_entries')
       .delete()
       .eq('id', entryId)
+      .eq('knowledge_base_id', kbId)
       .eq('company_id', companyId);
 
     if (error) throw error;
@@ -469,96 +602,6 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
 
     if (error) throw error;
     res.json({ settings: data });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ────────────────────────────────────────────────
-// KB ASSIGNMENT ROUTES
-// ────────────────────────────────────────────────
-
-// Get KB assignments for a channel
-router.get('/kb-assignments/:channelId', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
-  try {
-    const companyId = req.companyId!;
-    const channelId = Number(req.params.channelId);
-
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('id')
-      .eq('id', channelId)
-      .eq('company_id', companyId)
-      .single();
-
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
-      return;
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('channel_kb_assignments')
-      .select('entry_id, instructions')
-      .eq('channel_id', channelId);
-
-    if (error) throw error;
-    res.json({
-      assignments: (data || []).map((r) => ({
-        kb_id: r.entry_id,
-        instructions: r.instructions ?? undefined,
-      })),
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Set KB assignments for a channel (replace all)
-router.put('/kb-assignments/:channelId', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
-  try {
-    const companyId = req.companyId!;
-    const channelId = Number(req.params.channelId);
-    const { assignments } = req.body as { assignments: Array<{ kb_id: string; instructions?: string }> };
-
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('id')
-      .eq('id', channelId)
-      .eq('company_id', companyId)
-      .single();
-
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
-      return;
-    }
-
-    // Delete all existing assignments
-    await supabaseAdmin
-      .from('channel_kb_assignments')
-      .delete()
-      .eq('channel_id', channelId);
-
-    // Insert new assignments
-    if (assignments && assignments.length > 0) {
-      const rows = assignments.map((a) => ({
-        channel_id: channelId,
-        entry_id: a.kb_id,
-        instructions: a.instructions ?? null,
-      }));
-
-      const { error } = await supabaseAdmin
-        .from('channel_kb_assignments')
-        .insert(rows);
-
-      if (error) throw error;
-    }
-
-    res.json({
-      assignments: (assignments || []).map((a) => ({
-        kb_id: a.kb_id,
-        instructions: a.instructions,
-      })),
-    });
   } catch (err) {
     next(err);
   }
