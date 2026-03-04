@@ -15,3 +15,4 @@
 ### Summarizing Work
 - After completing a task, provide a user-friendly summary of what was done.
 - Include important technical details alongside the summary: files changed, new dependencies, database migrations, API changes, etc.
+- If a SQL migration file was created, include a clickable link to it and remind the user to run the migration.
