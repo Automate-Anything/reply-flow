@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CheckSquare, MessageSquare, Search, Settings } from 'lucide-react';
 import ConversationItem from './ConversationItem';
-import ConversationFiltersBar from './ConversationFilters';
+import ConversationFiltersPopover from './ConversationFilters';
 import BulkActionBar from './BulkActionBar';
 import type { Conversation, ConversationFilters } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
@@ -61,7 +61,7 @@ export default function ConversationList({
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
       <div className="border-b p-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -71,6 +71,7 @@ export default function ConversationList({
               onChange={(e) => onSearchChange(e.target.value)}
             />
           </div>
+          <ConversationFiltersPopover filters={filters} onFiltersChange={onFiltersChange} />
           <Button
             variant={selectionMode ? 'secondary' : 'ghost'}
             size="icon"
@@ -93,8 +94,6 @@ export default function ConversationList({
           )}
         </div>
       </div>
-
-      <ConversationFiltersBar filters={filters} onFiltersChange={onFiltersChange} />
 
       {selectionMode && conversations.length > 0 && (
         <div className="flex items-center gap-2 border-b px-3 py-1.5">
