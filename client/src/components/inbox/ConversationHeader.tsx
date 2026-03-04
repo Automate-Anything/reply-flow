@@ -25,7 +25,6 @@ import {
   Star,
   StickyNote,
   Tag,
-  User,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -229,88 +228,10 @@ export default function ConversationHeader({
           onUpdate={onLabelsChange}
         />
 
-        {/* Assign */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              disabled={patchLoading}
-              title="Assign conversation"
-            >
-              <UserPlus className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => patchConversation({ assigned_to: null })}>
-              <X className="mr-2 h-3 w-3" />
-              Unassign
-              {!conversation.assigned_to && <Check className="ml-auto h-3 w-3" />}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {teamMembers.map((m) => (
-              <DropdownMenuItem
-                key={m.user_id}
-                onClick={() => patchConversation({ assigned_to: m.user_id })}
-              >
-                {m.full_name}
-                {conversation.assigned_to === m.user_id && (
-                  <Check className="ml-auto h-3 w-3" />
-                )}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Status */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              disabled={patchLoading}
-              title={`Status: ${currentStatus?.label}`}
-            >
-              <CircleDot className={cn('h-4 w-4', currentStatus?.color)} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {STATUS_OPTIONS.map((s) => (
-              <DropdownMenuItem
-                key={s.value}
-                onClick={() => patchConversation({ status: s.value })}
-              >
-                <CircleDot className={cn('mr-2 h-3 w-3', s.color)} />
-                {s.label}
-                {conversation.status === s.value && <Check className="ml-auto h-3 w-3" />}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Star */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          disabled={patchLoading}
-          onClick={() => patchConversation({ is_starred: !conversation.is_starred })}
-          title={conversation.is_starred ? 'Unstar' : 'Star'}
-        >
-          <Star
-            className={cn(
-              'h-4 w-4',
-              conversation.is_starred && 'fill-yellow-400 text-yellow-400'
-            )}
-          />
-        </Button>
-
         {/* Labels */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Labels">
               <Tag className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -365,6 +286,96 @@ export default function ConversationHeader({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Priority */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={patchLoading}
+              title="Priority"
+            >
+              <Flag className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {PRIORITY_OPTIONS.map((p) => (
+              <DropdownMenuItem
+                key={p.value}
+                onClick={() => patchConversation({ priority: p.value })}
+              >
+                <span className={cn('mr-2 h-2 w-2 rounded-full', p.dotColor)} />
+                {p.label}
+                {conversation.priority === p.value && (
+                  <Check className="ml-auto h-3 w-3" />
+                )}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Assign */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={patchLoading}
+              title="Assign"
+            >
+              <UserPlus className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => patchConversation({ assigned_to: null })}>
+              <X className="mr-2 h-3 w-3" />
+              Unassign
+              {!conversation.assigned_to && <Check className="ml-auto h-3 w-3" />}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {teamMembers.map((m) => (
+              <DropdownMenuItem
+                key={m.user_id}
+                onClick={() => patchConversation({ assigned_to: m.user_id })}
+              >
+                {m.full_name}
+                {conversation.assigned_to === m.user_id && (
+                  <Check className="ml-auto h-3 w-3" />
+                )}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Status */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={patchLoading}
+              title={`Status: ${currentStatus?.label}`}
+            >
+              <CircleDot className={cn('h-4 w-4', currentStatus?.color)} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {STATUS_OPTIONS.map((s) => (
+              <DropdownMenuItem
+                key={s.value}
+                onClick={() => patchConversation({ status: s.value })}
+              >
+                <CircleDot className={cn('mr-2 h-3 w-3', s.color)} />
+                {s.label}
+                {conversation.status === s.value && <Check className="ml-auto h-3 w-3" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {/* More actions */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -373,27 +384,29 @@ export default function ConversationHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {/* Priority */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Flag className="mr-2 h-3.5 w-3.5" />
-                Priority
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {PRIORITY_OPTIONS.map((p) => (
-                  <DropdownMenuItem
-                    key={p.value}
-                    onClick={() => patchConversation({ priority: p.value })}
-                  >
-                    <span className={cn('mr-2 h-2 w-2 rounded-full', p.dotColor)} />
-                    {p.label}
-                    {conversation.priority === p.value && (
-                      <Check className="ml-auto h-3 w-3" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+            {/* Star */}
+            <DropdownMenuItem
+              onClick={() => patchConversation({ is_starred: !conversation.is_starred })}
+              disabled={patchLoading}
+            >
+              <Star
+                className={cn(
+                  'mr-2 h-3.5 w-3.5',
+                  conversation.is_starred && 'fill-yellow-400 text-yellow-400'
+                )}
+              />
+              {conversation.is_starred ? 'Unstar' : 'Star'}
+            </DropdownMenuItem>
+
+            {/* Notes */}
+            {onToggleNotes && (
+              <DropdownMenuItem onClick={onToggleNotes}>
+                <StickyNote className="mr-2 h-3.5 w-3.5" />
+                {notesPanelOpen ? 'Hide notes' : 'Show notes'}
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuSeparator />
 
             {/* Snooze */}
             <DropdownMenuSub>
@@ -427,38 +440,21 @@ export default function ConversationHeader({
 
             <DropdownMenuSeparator />
 
-            {/* Notes */}
-            {onToggleNotes && (
-              <DropdownMenuItem onClick={onToggleNotes}>
-                <StickyNote className="mr-2 h-3.5 w-3.5" />
-                {notesPanelOpen ? 'Hide notes' : 'Show notes'}
-              </DropdownMenuItem>
-            )}
-
-            {/* View contact */}
-            {onOpenContact && (
-              <DropdownMenuItem onClick={onOpenContact}>
-                <User className="mr-2 h-3.5 w-3.5" />
-                View contact
-              </DropdownMenuItem>
-            )}
+            {/* Archive */}
+            <DropdownMenuItem
+              onClick={handleArchive}
+              disabled={archiving}
+              className="text-destructive focus:text-destructive"
+            >
+              {archiving ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Archive className="mr-2 h-3.5 w-3.5" />
+              )}
+              Archive
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        {/* Archive */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={handleArchive}
-          disabled={archiving}
-        >
-          {archiving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Archive className="h-4 w-4" />
-          )}
-        </Button>
       </div>
     </div>
   );
