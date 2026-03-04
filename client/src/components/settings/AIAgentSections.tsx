@@ -17,8 +17,8 @@ interface Props {
 }
 
 export default function AIAgentSections({ profileData, onSave, agentId }: Props) {
-  // Company knowledge base
-  const { kbEntries } = useCompanyKB();
+  // Company knowledge bases
+  const { knowledgeBases } = useCompanyKB();
 
   // Identity
   const [identityExpanded, setIdentityExpanded] = useState(false);
@@ -37,7 +37,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
   const {
     flow, dirty, updateFlow, updateDefaultStyle,
     addScenario, updateScenario, removeScenario,
-    setFallbackMode, reset,
+    setFallbackMode, setFallbackKBAttachments, reset,
   } = useResponseFlow(profileData);
 
   const [saving, setSaving] = useState(false);
@@ -90,7 +90,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
           profileData={profileData}
           agentId={agentId}
           flow={flow}
-          kbEntries={kbEntries}
+          knowledgeBases={knowledgeBases}
           addScenario={addScenario}
           updateScenario={updateScenario}
           removeScenario={removeScenario}
@@ -110,11 +110,14 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
           responseRules={flow.response_rules}
           topicsToAvoid={flow.topics_to_avoid}
           humanPhone={flow.human_phone}
+          knowledgeBases={knowledgeBases}
+          fallbackKBAttachments={flow.fallback_kb_attachments}
           onStyleChange={updateDefaultStyle}
           onGreetingChange={(v) => updateFlow({ greeting_message: v || undefined })}
           onRulesChange={(v) => updateFlow({ response_rules: v || undefined })}
           onTopicsChange={(v) => updateFlow({ topics_to_avoid: v || undefined })}
           onPhoneChange={(v) => updateFlow({ human_phone: v || undefined })}
+          onFallbackKBChange={setFallbackKBAttachments}
         />
         {saveFooter}
       </TabsContent>

@@ -162,28 +162,12 @@ export async function shouldAIRespond(
     }
   }
 
-  // 7. Fetch KB entries assigned to this channel (via channel_kb_assignments)
-  const { data: assignedKB } = await supabaseAdmin
-    .from('channel_kb_assignments')
-    .select('entry_id')
-    .eq('channel_id', session.channel_id);
-
-  let kbData: KBEntry[] = [];
-
-  if (assignedKB && assignedKB.length > 0) {
-    const entryIds = assignedKB.map((a) => a.entry_id);
-    const { data: kbEntries } = await supabaseAdmin
-      .from('knowledge_base_entries')
-      .select('id, title, content')
-      .in('id', entryIds);
-    kbData = (kbEntries || []) as KBEntry[];
-  } else {
-    const { data: kbEntries } = await supabaseAdmin
-      .from('knowledge_base_entries')
-      .select('id, title, content')
-      .eq('company_id', companyId);
-    kbData = (kbEntries || []) as KBEntry[];
-  }
+  // 7. Fetch all KB entries for the company (prompt builder routes them to scenarios/fallback)
+  const { data: kbEntries } = await supabaseAdmin
+    .from('knowledge_base_entries')
+    .select('id, title, content, knowledge_base_id')
+    .eq('company_id', companyId);
+  const kbData = (kbEntries || []) as KBEntry[];
 
   // 8. Resolve profile_data — prefer agent's profile if assigned
   let profileData = (channelSettings.profile_data || {}) as ProfileData;

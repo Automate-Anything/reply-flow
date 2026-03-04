@@ -20,6 +20,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Loader2, Building2, Trash2 } from 'lucide-react';
+import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
 
 interface Company {
   id: string;
@@ -193,6 +194,8 @@ export default function CompanySettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <BusinessHoursSettings />
 
       {isOwner && (
         <Card className="border-destructive/30">

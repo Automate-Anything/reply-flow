@@ -4,9 +4,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import CompanySettingsPage from './CompanySettingsPage';
 import TeamPage from './TeamPage';
 import RolePermissionsPage from './RolePermissionsPage';
-import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
 
-const TABS = ['company', 'team', 'business-hours', 'permissions'] as const;
+const TABS = ['company', 'team', 'permissions'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function SettingsPage() {
@@ -36,7 +35,6 @@ export default function SettingsPage() {
         <TabsList className="w-full">
           <TabsTrigger value="company" className="flex-1">Company</TabsTrigger>
           <TabsTrigger value="team" className="flex-1">Team</TabsTrigger>
-          <TabsTrigger value="business-hours" className="flex-1">Business Hours</TabsTrigger>
           <TabsTrigger value="permissions" className="flex-1">Permissions</TabsTrigger>
         </TabsList>
 
@@ -46,10 +44,6 @@ export default function SettingsPage() {
 
         <TabsContent value="team" className="mt-6">
           <TeamPage />
-        </TabsContent>
-
-        <TabsContent value="business-hours" className="mt-6">
-          <BusinessHoursSettings />
         </TabsContent>
 
         <TabsContent value="permissions" className="mt-6">

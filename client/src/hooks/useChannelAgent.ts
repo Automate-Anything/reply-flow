@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
-import type { ProfileData, ScheduleMode, KBAttachment } from '@/hooks/useCompanyAI';
+import type { ProfileData, ScheduleMode } from '@/hooks/useCompanyAI';
 import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
 
 export interface ChannelAgentSettings {
@@ -29,9 +29,7 @@ const DEFAULT_SETTINGS: ChannelAgentSettings = {
 
 export function useChannelAgent(channelId: number | undefined) {
   const [settings, setSettings] = useState<ChannelAgentSettings>(DEFAULT_SETTINGS);
-  const [assignments, setAssignments] = useState<KBAttachment[]>([]);
   const [loadingSettings, setLoadingSettings] = useState(true);
-  const [loadingAssignments, setLoadingAssignments] = useState(true);
 
   const fetchSettings = useCallback(async () => {
     if (!channelId) return;
@@ -45,31 +43,15 @@ export function useChannelAgent(channelId: number | undefined) {
     }
   }, [channelId]);
 
-  const fetchAssignments = useCallback(async () => {
-    if (!channelId) return;
-    try {
-      const { data } = await api.get(`/ai/kb-assignments/${channelId}`);
-      setAssignments(data.assignments || []);
-    } catch (err) {
-      console.error('Failed to fetch KB assignments:', err);
-    } finally {
-      setLoadingAssignments(false);
-    }
-  }, [channelId]);
-
   useEffect(() => {
     if (!channelId) {
       setSettings(DEFAULT_SETTINGS);
-      setAssignments([]);
       setLoadingSettings(false);
-      setLoadingAssignments(false);
       return;
     }
     setLoadingSettings(true);
-    setLoadingAssignments(true);
     fetchSettings();
-    fetchAssignments();
-  }, [fetchSettings, fetchAssignments, channelId]);
+  }, [fetchSettings, channelId]);
 
   const updateSettings = useCallback(
     async (updates: Partial<ChannelAgentSettings>) => {
@@ -81,23 +63,10 @@ export function useChannelAgent(channelId: number | undefined) {
     [channelId]
   );
 
-  const updateAssignments = useCallback(
-    async (next: KBAttachment[]) => {
-      if (!channelId) return;
-      const { data } = await api.put(`/ai/kb-assignments/${channelId}`, { assignments: next });
-      setAssignments(data.assignments || []);
-    },
-    [channelId]
-  );
-
   return {
     settings,
-    assignments,
     loadingSettings,
-    loadingAssignments,
     updateSettings,
-    updateAssignments,
     refetchSettings: fetchSettings,
-    refetchAssignments: fetchAssignments,
   };
 }
