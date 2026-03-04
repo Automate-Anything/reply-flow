@@ -20,6 +20,7 @@ import meRouter from './routes/me.js';
 
 import conversationNotesRouter from './routes/conversationNotes.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
+import billingRouter from './routes/billing.js';
 import seedRouter from './routes/seed.js';
 import { startScheduler } from './services/scheduler.js';
 
@@ -60,6 +61,7 @@ app.use('/api/me', meRouter);
 
 app.use('/api/conversation-notes', conversationNotesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
+app.use('/api/billing', billingRouter);
 app.use('/api/seed', seedRouter);
 
 app.use(errorHandler);

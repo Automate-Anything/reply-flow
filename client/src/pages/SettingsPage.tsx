@@ -4,8 +4,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import CompanySettingsPage from './CompanySettingsPage';
 import TeamPage from './TeamPage';
 import RolePermissionsPage from './RolePermissionsPage';
+import BillingTab from '@/components/settings/BillingTab';
+import UsageTab from '@/components/settings/UsageTab';
 
-const TABS = ['company', 'team', 'permissions'] as const;
+const TABS = ['company', 'team', 'permissions', 'billing', 'usage'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function SettingsPage() {
@@ -26,7 +28,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Manage your company and team.
+            Manage your company, team, and billing.
           </p>
         </div>
       </div>
@@ -36,6 +38,8 @@ export default function SettingsPage() {
           <TabsTrigger value="company" className="flex-1">Company</TabsTrigger>
           <TabsTrigger value="team" className="flex-1">Team</TabsTrigger>
           <TabsTrigger value="permissions" className="flex-1">Permissions</TabsTrigger>
+          <TabsTrigger value="billing" className="flex-1">Billing</TabsTrigger>
+          <TabsTrigger value="usage" className="flex-1">Usage</TabsTrigger>
         </TabsList>
 
         <TabsContent value="company" className="mt-6">
@@ -48,6 +52,14 @@ export default function SettingsPage() {
 
         <TabsContent value="permissions" className="mt-6">
           <RolePermissionsPage />
+        </TabsContent>
+
+        <TabsContent value="billing" className="mt-6">
+          <BillingTab />
+        </TabsContent>
+
+        <TabsContent value="usage" className="mt-6">
+          <UsageTab />
         </TabsContent>
       </Tabs>
     </div>
