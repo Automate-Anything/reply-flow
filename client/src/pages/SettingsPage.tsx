@@ -4,11 +4,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import CompanySettingsPage from './CompanySettingsPage';
 import TeamPage from './TeamPage';
 import RolePermissionsPage from './RolePermissionsPage';
-import CannedResponsesManager from '@/components/settings/CannedResponsesManager';
-import LabelsManager from '@/components/settings/LabelsManager';
 import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
 
-const TABS = ['company', 'team', 'business-hours', 'quick-replies', 'labels', 'permissions'] as const;
+const TABS = ['company', 'team', 'business-hours', 'permissions'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function SettingsPage() {
@@ -39,8 +37,6 @@ export default function SettingsPage() {
           <TabsTrigger value="company" className="flex-1">Company</TabsTrigger>
           <TabsTrigger value="team" className="flex-1">Team</TabsTrigger>
           <TabsTrigger value="business-hours" className="flex-1">Business Hours</TabsTrigger>
-          <TabsTrigger value="quick-replies" className="flex-1">Quick Replies</TabsTrigger>
-          <TabsTrigger value="labels" className="flex-1">Labels</TabsTrigger>
           <TabsTrigger value="permissions" className="flex-1">Permissions</TabsTrigger>
         </TabsList>
 
@@ -54,14 +50,6 @@ export default function SettingsPage() {
 
         <TabsContent value="business-hours" className="mt-6">
           <BusinessHoursSettings />
-        </TabsContent>
-
-        <TabsContent value="quick-replies" className="mt-6">
-          <CannedResponsesManager />
-        </TabsContent>
-
-        <TabsContent value="labels" className="mt-6">
-          <LabelsManager />
         </TabsContent>
 
         <TabsContent value="permissions" className="mt-6">

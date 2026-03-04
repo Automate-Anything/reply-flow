@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CheckSquare, MessageSquare, Search } from 'lucide-react';
+import { CheckSquare, MessageSquare, Search, Settings } from 'lucide-react';
 import ConversationItem from './ConversationItem';
 import ConversationFiltersBar from './ConversationFilters';
 import BulkActionBar from './BulkActionBar';
@@ -34,6 +34,7 @@ interface ConversationListProps {
   teamMembers: TeamMember[];
   labels: LabelOption[];
   onLabelsCreated?: () => void;
+  onOpenInboxTools?: () => void;
 }
 
 export default function ConversationList({
@@ -55,6 +56,7 @@ export default function ConversationList({
   teamMembers,
   labels,
   onLabelsCreated,
+  onOpenInboxTools,
 }: ConversationListProps) {
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
@@ -78,6 +80,17 @@ export default function ConversationList({
           >
             <CheckSquare className="h-4 w-4" />
           </Button>
+          {onOpenInboxTools && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={onOpenInboxTools}
+              title="Quick Replies & Labels"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 

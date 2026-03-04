@@ -11,6 +11,7 @@ import ConversationHeader from '@/components/inbox/ConversationHeader';
 import MessageThread from '@/components/inbox/MessageThread';
 import ConversationNotes from '@/components/inbox/ConversationNotes';
 import ContactPanel from '@/components/inbox/ContactPanel';
+import InboxToolsPanel from '@/components/inbox/InboxToolsPanel';
 
 export default function InboxPage() {
   const [search, setSearch] = useState('');
@@ -21,6 +22,7 @@ export default function InboxPage() {
   const [allLabels, setAllLabels] = useState<{ id: string; name: string; color: string }[]>([]);
   const [notesPanelOpen, setNotesPanelOpen] = useState(false);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
+  const [inboxToolsOpen, setInboxToolsOpen] = useState(false);
 
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
     useConversations(search, filters);
@@ -148,28 +150,33 @@ export default function InboxPage() {
 
   return (
     <div className="flex h-full">
-      {/* Conversation list */}
+      {/* Conversation list / Inbox tools */}
       <div className={`${activeConversation ? 'hidden md:flex' : 'flex'} h-full w-full md:w-auto`}>
-        <ConversationList
-          conversations={conversations}
-          loading={convsLoading}
-          activeId={activeConversation?.id ?? null}
-          onSelect={handleSelectConversation}
-          search={search}
-          onSearchChange={setSearch}
-          filters={filters}
-          onFiltersChange={setFilters}
-          selectionMode={selectionMode}
-          onToggleSelectionMode={handleToggleSelectionMode}
-          selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
-          onSelectAll={handleSelectAll}
-          onClearSelection={handleClearSelection}
-          onBulkActionComplete={handleBulkActionComplete}
-          teamMembers={teamMembers}
-          labels={allLabels}
-          onLabelsCreated={refreshLabels}
-        />
+        {inboxToolsOpen ? (
+          <InboxToolsPanel onClose={() => setInboxToolsOpen(false)} />
+        ) : (
+          <ConversationList
+            conversations={conversations}
+            loading={convsLoading}
+            activeId={activeConversation?.id ?? null}
+            onSelect={handleSelectConversation}
+            search={search}
+            onSearchChange={setSearch}
+            filters={filters}
+            onFiltersChange={setFilters}
+            selectionMode={selectionMode}
+            onToggleSelectionMode={handleToggleSelectionMode}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onSelectAll={handleSelectAll}
+            onClearSelection={handleClearSelection}
+            onBulkActionComplete={handleBulkActionComplete}
+            teamMembers={teamMembers}
+            labels={allLabels}
+            onLabelsCreated={refreshLabels}
+            onOpenInboxTools={() => setInboxToolsOpen(true)}
+          />
+        )}
       </div>
 
       {/* Message thread + notes panel */}
