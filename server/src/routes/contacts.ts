@@ -3,6 +3,52 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { logContactActivity, logContactActivitiesBulk } from '../services/activityLog.js';
+
+// Simple Jaro-Winkler similarity for in-app name comparison
+function jaroWinkler(s1: string, s2: string): number {
+  if (s1 === s2) return 1;
+  const len1 = s1.length;
+  const len2 = s2.length;
+  if (len1 === 0 || len2 === 0) return 0;
+
+  const matchWindow = Math.max(0, Math.floor(Math.max(len1, len2) / 2) - 1);
+  const s1Matches = new Array(len1).fill(false);
+  const s2Matches = new Array(len2).fill(false);
+
+  let matches = 0;
+  let transpositions = 0;
+
+  for (let i = 0; i < len1; i++) {
+    const start = Math.max(0, i - matchWindow);
+    const end = Math.min(i + matchWindow + 1, len2);
+    for (let j = start; j < end; j++) {
+      if (s2Matches[j] || s1[i] !== s2[j]) continue;
+      s1Matches[i] = true;
+      s2Matches[j] = true;
+      matches++;
+      break;
+    }
+  }
+
+  if (matches === 0) return 0;
+
+  let k = 0;
+  for (let i = 0; i < len1; i++) {
+    if (!s1Matches[i]) continue;
+    while (!s2Matches[k]) k++;
+    if (s1[i] !== s2[k]) transpositions++;
+    k++;
+  }
+
+  const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
+  let prefix = 0;
+  for (let i = 0; i < Math.min(4, Math.min(len1, len2)); i++) {
+    if (s1[i] === s2[i]) prefix++;
+    else break;
+  }
+  return jaro + prefix * 0.1 * (1 - jaro);
+}
 
 function validateAndFormatPhone(phone: string): { e164: string } | { error: string } {
   const parsed = parsePhoneNumberFromString(phone);
@@ -204,11 +250,271 @@ router.post('/bulk', requirePermission('contacts', 'edit'), async (req, res, nex
         return;
     }
 
+    // Log activity for bulk actions
+    if (['tag_add', 'tag_remove', 'list_add', 'list_remove'].includes(action)) {
+      const actionMap: Record<string, string> = {
+        tag_add: 'tag_added',
+        tag_remove: 'tag_removed',
+        list_add: 'list_added',
+        list_remove: 'list_removed',
+      };
+      const metadataMap: Record<string, Record<string, unknown>> = {
+        tag_add: { tag: value },
+        tag_remove: { tag: value },
+        list_add: { list_id: value },
+        list_remove: { list_id: value },
+      };
+      await logContactActivitiesBulk(
+        validIds.map((cid) => ({
+          contactId: cid,
+          companyId,
+          userId: req.userId!,
+          action: actionMap[action],
+          metadata: metadataMap[action],
+        }))
+      );
+    }
+
     res.json({ updated: validIds.length });
   } catch (err) {
     next(err);
   }
 });
+
+// ── Duplicate detection ────────────────────────────────────────────────
+
+// Company-wide duplicate scan
+router.get('/duplicates', requirePermission('contacts', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+
+    const { data, error } = await supabaseAdmin.rpc('find_duplicate_contacts', {
+      p_company_id: companyId,
+    });
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      res.json({ groups: [] });
+      return;
+    }
+
+    // Collect all unique contact IDs
+    const contactIdSet = new Set<string>();
+    for (const row of data) {
+      contactIdSet.add(row.contact_id_1);
+      contactIdSet.add(row.contact_id_2);
+    }
+
+    // Fetch contact details
+    const { data: contacts } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .in('id', Array.from(contactIdSet));
+    const contactMap = new Map((contacts || []).map((c) => [c.id, c]));
+
+    // Group pairs into groups using union-find
+    const parent = new Map<string, string>();
+    const find = (id: string): string => {
+      if (!parent.has(id)) parent.set(id, id);
+      if (parent.get(id) !== id) parent.set(id, find(parent.get(id)!));
+      return parent.get(id)!;
+    };
+    const union = (a: string, b: string) => {
+      parent.set(find(a), find(b));
+    };
+
+    // Best match info per pair
+    const pairInfo = new Map<string, { matchType: string; confidence: number }>();
+    for (const row of data) {
+      union(row.contact_id_1, row.contact_id_2);
+      const key = [row.contact_id_1, row.contact_id_2].sort().join(':');
+      const existing = pairInfo.get(key);
+      if (!existing || row.confidence > existing.confidence) {
+        pairInfo.set(key, { matchType: row.match_type, confidence: row.confidence });
+      }
+    }
+
+    // Build groups
+    const groupMap = new Map<string, Set<string>>();
+    for (const id of contactIdSet) {
+      const root = find(id);
+      if (!groupMap.has(root)) groupMap.set(root, new Set());
+      groupMap.get(root)!.add(id);
+    }
+
+    const groups = Array.from(groupMap.values())
+      .filter((s) => s.size > 1)
+      .map((ids) => {
+        const groupContacts = Array.from(ids).map((id) => contactMap.get(id)).filter(Boolean);
+        // Find best match info for this group
+        let bestConfidence = 0;
+        let bestMatchType = 'name';
+        for (const row of data) {
+          if (ids.has(row.contact_id_1) && ids.has(row.contact_id_2)) {
+            if (row.confidence > bestConfidence) {
+              bestConfidence = row.confidence;
+              bestMatchType = row.match_type;
+            }
+          }
+        }
+        return { contacts: groupContacts, matchType: bestMatchType, confidence: bestConfidence };
+      })
+      .sort((a, b) => b.confidence - a.confidence);
+
+    res.json({ groups });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Merge contacts ─────────────────────────────────────────────────────
+
+router.post(
+  '/merge',
+  requirePermission('contacts', 'edit'),
+  requirePermission('contacts', 'delete'),
+  async (req, res, next) => {
+    try {
+      const companyId = req.companyId!;
+      const userId = req.userId!;
+      const { keepContactId, mergeContactId, resolvedFields } = req.body;
+
+      if (!keepContactId || !mergeContactId) {
+        res.status(400).json({ error: 'keepContactId and mergeContactId are required' });
+        return;
+      }
+
+      // Validate both contacts
+      const { data: contacts } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .in('id', [keepContactId, mergeContactId])
+        .eq('company_id', companyId)
+        .eq('is_deleted', false);
+
+      if (!contacts || contacts.length !== 2) {
+        res.status(404).json({ error: 'One or both contacts not found' });
+        return;
+      }
+
+      const keepContact = contacts.find((c) => c.id === keepContactId)!;
+      const mergeContact = contacts.find((c) => c.id === mergeContactId)!;
+
+      // 1. Update kept contact with resolved fields
+      const mergedTags = [...new Set([
+        ...(resolvedFields.tags || keepContact.tags || []),
+        ...(mergeContact.tags || []),
+      ])];
+
+      const updateData: Record<string, unknown> = {
+        ...resolvedFields,
+        tags: mergedTags,
+        updated_at: new Date().toISOString(),
+      };
+      delete updateData.id;
+      delete updateData.company_id;
+      delete updateData.created_by;
+      delete updateData.created_at;
+      delete updateData.is_deleted;
+      delete updateData.merged_into;
+
+      const { data: updatedContact, error: updateError } = await supabaseAdmin
+        .from('contacts')
+        .update(updateData)
+        .eq('id', keepContactId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // 2. Transfer contact_notes
+      await supabaseAdmin
+        .from('contact_notes')
+        .update({ contact_id: keepContactId })
+        .eq('contact_id', mergeContactId);
+
+      // 3. Transfer contact_list_members (upsert to avoid dupes)
+      const { data: mergeListMembers } = await supabaseAdmin
+        .from('contact_list_members')
+        .select('list_id, added_by')
+        .eq('contact_id', mergeContactId);
+
+      if (mergeListMembers && mergeListMembers.length > 0) {
+        const rows = mergeListMembers.map((m) => ({
+          list_id: m.list_id,
+          contact_id: keepContactId,
+          added_by: m.added_by,
+        }));
+        await supabaseAdmin
+          .from('contact_list_members')
+          .upsert(rows, { onConflict: 'list_id,contact_id' });
+        await supabaseAdmin
+          .from('contact_list_members')
+          .delete()
+          .eq('contact_id', mergeContactId);
+      }
+
+      // 4. Transfer custom_field_values (only for fields not already on kept contact)
+      const { data: keepCfv } = await supabaseAdmin
+        .from('custom_field_values')
+        .select('field_definition_id')
+        .eq('contact_id', keepContactId);
+      const keepFieldIds = new Set((keepCfv || []).map((v) => v.field_definition_id));
+
+      const { data: mergeCfv } = await supabaseAdmin
+        .from('custom_field_values')
+        .select('*')
+        .eq('contact_id', mergeContactId);
+
+      if (mergeCfv && mergeCfv.length > 0) {
+        const toTransfer = mergeCfv.filter((v) => !keepFieldIds.has(v.field_definition_id));
+        if (toTransfer.length > 0) {
+          const rows = toTransfer.map((v) => ({
+            contact_id: keepContactId,
+            field_definition_id: v.field_definition_id,
+            value: v.value,
+            value_json: v.value_json,
+          }));
+          await supabaseAdmin.from('custom_field_values').insert(rows);
+        }
+        // Delete merged contact's custom field values
+        await supabaseAdmin
+          .from('custom_field_values')
+          .delete()
+          .eq('contact_id', mergeContactId);
+      }
+
+      // 5. Soft-delete merged contact
+      await supabaseAdmin
+        .from('contacts')
+        .update({
+          is_deleted: true,
+          merged_into: keepContactId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', mergeContactId);
+
+      // 6. Log activity
+      const mergeName = [mergeContact.first_name, mergeContact.last_name]
+        .filter(Boolean).join(' ') || mergeContact.phone_number;
+      await logContactActivity({
+        contactId: keepContactId,
+        companyId,
+        userId,
+        action: 'merged',
+        metadata: {
+          merged_contact_id: mergeContactId,
+          merged_contact_name: mergeName,
+          merged_contact_phone: mergeContact.phone_number,
+        },
+      });
+
+      res.json({ contact: updatedContact });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // Get single contact
 router.get('/:contactId', requirePermission('contacts', 'view'), async (req, res, next) => {
@@ -300,6 +606,14 @@ router.post('/', requirePermission('contacts', 'create'), async (req, res, next)
       }
     }
 
+    // Log activity
+    await logContactActivity({
+      contactId: data.id,
+      companyId,
+      userId: req.userId!,
+      action: 'created',
+    });
+
     res.json({ contact: data });
   } catch (err) {
     next(err);
@@ -316,6 +630,14 @@ router.put('/:contactId', requirePermission('contacts', 'edit'), async (req, res
       address_street, address_city, address_state, address_postal_code, address_country,
       custom_field_values,
     } = req.body;
+
+    // Fetch old values for change tracking
+    const { data: oldContact } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .eq('id', contactId)
+      .eq('company_id', companyId)
+      .single();
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (first_name !== undefined) updates.first_name = first_name;
@@ -374,6 +696,37 @@ router.put('/:contactId', requirePermission('contacts', 'edit'), async (req, res
       }
     }
 
+    // Log edit activity with changed fields
+    if (oldContact) {
+      const trackedFields = [
+        'first_name', 'last_name', 'email', 'company', 'notes', 'phone_number',
+        'address_street', 'address_city', 'address_state', 'address_postal_code', 'address_country',
+      ];
+      const changes: Record<string, { from: unknown; to: unknown }> = {};
+      for (const field of trackedFields) {
+        if (updates[field] !== undefined && updates[field] !== oldContact[field]) {
+          changes[field] = { from: oldContact[field], to: updates[field] };
+        }
+      }
+      // Track tag changes
+      if (updates.tags !== undefined) {
+        const oldTags = (oldContact.tags || []).sort().join(',');
+        const newTags = (updates.tags as string[]).sort().join(',');
+        if (oldTags !== newTags) {
+          changes.tags = { from: oldContact.tags, to: updates.tags };
+        }
+      }
+      if (Object.keys(changes).length > 0) {
+        await logContactActivity({
+          contactId,
+          companyId,
+          userId: req.userId!,
+          action: 'edited',
+          metadata: { changes },
+        });
+      }
+    }
+
     res.json({ contact: data });
   } catch (err) {
     next(err);
@@ -393,6 +746,165 @@ router.delete('/:contactId', requirePermission('contacts', 'delete'), async (req
       .eq('company_id', companyId);
 
     res.json({ status: 'ok' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get potential duplicates for a single contact
+router.get('/:contactId/duplicates', requirePermission('contacts', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { contactId } = req.params;
+
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .eq('id', contactId)
+      .eq('company_id', companyId)
+      .eq('is_deleted', false)
+      .single();
+
+    if (!contact) {
+      res.status(404).json({ error: 'Contact not found' });
+      return;
+    }
+
+    const duplicates: { contact: unknown; matchType: string; confidence: number }[] = [];
+
+    // Check email match
+    if (contact.email) {
+      const { data: emailMatches } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('email', contact.email)
+        .eq('is_deleted', false)
+        .neq('id', contactId);
+
+      for (const match of emailMatches || []) {
+        duplicates.push({ contact: match, matchType: 'email', confidence: 0.9 });
+      }
+    }
+
+    // Check name similarity (only if contact has a first name)
+    if (contact.first_name) {
+      const fullName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
+      const { data: nameMatches } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('is_deleted', false)
+        .neq('id', contactId)
+        .not('first_name', 'is', null);
+
+      for (const match of nameMatches || []) {
+        // Skip if already found as email match
+        if (duplicates.some((d) => (d.contact as { id: string }).id === match.id)) continue;
+        const matchName = `${match.first_name || ''} ${match.last_name || ''}`.trim();
+        // Simple similarity check — compare lowercase normalized
+        const sim = jaroWinkler(fullName.toLowerCase(), matchName.toLowerCase());
+        if (sim > 0.85) {
+          duplicates.push({ contact: match, matchType: 'name', confidence: sim });
+        }
+      }
+    }
+
+    duplicates.sort((a, b) => b.confidence - a.confidence);
+    res.json({ duplicates });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get activity timeline for a contact
+router.get('/:contactId/activity', requirePermission('contacts', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { contactId } = req.params;
+    const { limit = '20', before } = req.query;
+    const lim = Number(limit);
+
+    // Get contact's phone number for message query
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('phone_number')
+      .eq('id', contactId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (!contact) {
+      res.status(404).json({ error: 'Contact not found' });
+      return;
+    }
+
+    // Query all three sources in parallel
+    let activityQuery = supabaseAdmin
+      .from('contact_activity_log')
+      .select('*')
+      .eq('contact_id', contactId)
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+      .limit(lim);
+
+    let notesQuery = supabaseAdmin
+      .from('contact_notes')
+      .select('*')
+      .eq('contact_id', contactId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false })
+      .limit(lim);
+
+    let messagesQuery = supabaseAdmin
+      .from('chat_messages')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('phone_number', contact.phone_number)
+      .order('created_at', { ascending: false })
+      .limit(lim);
+
+    if (before) {
+      activityQuery = activityQuery.lt('created_at', String(before));
+      notesQuery = notesQuery.lt('created_at', String(before));
+      messagesQuery = messagesQuery.lt('created_at', String(before));
+    }
+
+    const [activityRes, notesRes, messagesRes] = await Promise.all([
+      activityQuery,
+      notesQuery,
+      messagesQuery,
+    ]);
+
+    // Normalize into unified events
+    const events = [
+      ...(activityRes.data || []).map((a) => ({
+        type: 'activity' as const,
+        event: a.action as string,
+        timestamp: a.created_at as string,
+        data: a,
+      })),
+      ...(notesRes.data || []).map((n) => ({
+        type: 'note' as const,
+        event: 'note_added',
+        timestamp: n.created_at as string,
+        data: n,
+      })),
+      ...(messagesRes.data || []).map((m) => ({
+        type: 'message' as const,
+        event: m.direction === 'inbound' ? 'message_received' : 'message_sent',
+        timestamp: m.created_at as string,
+        data: m,
+      })),
+    ];
+
+    // Sort by timestamp desc, trim to limit
+    events.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    const limited = events.slice(0, lim);
+    const hasMore = events.length > lim;
+
+    res.json({ events: limited, hasMore });
   } catch (err) {
     next(err);
   }
