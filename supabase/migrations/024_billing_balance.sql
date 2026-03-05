@@ -30,21 +30,14 @@ CREATE TABLE IF NOT EXISTS public.company_balances (
 -- RLS
 ALTER TABLE public.company_balances ENABLE ROW LEVEL SECURITY;
 
+-- Read-only for all company members. All writes go through the server (service role),
+-- which bypasses RLS — so no client-side INSERT/UPDATE policies are needed.
 CREATE POLICY "company_members_view_balance"
   ON public.company_balances FOR SELECT
   USING (
     company_id IN (
       SELECT company_id FROM public.company_members
       WHERE user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "company_owners_update_balance"
-  ON public.company_balances FOR ALL
-  USING (
-    company_id IN (
-      SELECT company_id FROM public.company_members
-      WHERE user_id = auth.uid() AND role IN ('owner', 'admin')
     )
   );
 
