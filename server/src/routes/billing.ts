@@ -368,8 +368,9 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
 
         // Retrieve full subscription from Stripe for period dates
         const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string);
-        const periodStart = new Date(stripeSub.current_period_start * 1000).toISOString().split('T')[0];
-        const periodEnd = new Date(stripeSub.current_period_end * 1000).toISOString().split('T')[0];
+        const subItem = stripeSub.items.data[0];
+        const periodStart = new Date(subItem.current_period.start * 1000).toISOString().split('T')[0];
+        const periodEnd = new Date(subItem.current_period.end * 1000).toISOString().split('T')[0];
 
         await supabaseAdmin
           .from('subscriptions')
@@ -399,8 +400,9 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
           .eq('stripe_price_id', priceId)
           .maybeSingle();
 
-        const periodStart = new Date(stripeSub.current_period_start * 1000).toISOString().split('T')[0];
-        const periodEnd = new Date(stripeSub.current_period_end * 1000).toISOString().split('T')[0];
+        const subItem = stripeSub.items.data[0];
+        const periodStart = new Date(subItem.current_period.start * 1000).toISOString().split('T')[0];
+        const periodEnd = new Date(subItem.current_period.end * 1000).toISOString().split('T')[0];
 
         // Map Stripe status to our status
         const statusMap: Record<string, string> = {
