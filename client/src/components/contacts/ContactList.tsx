@@ -3,7 +3,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Plus, User } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Search, Plus, User, ArrowDownUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Contact, ContactFilters as FilterState } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
@@ -87,8 +92,9 @@ export default function ContactList({
 
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
-      <div className="flex items-center gap-2 border-b p-3">
-        <div className="relative flex-1">
+      {/* Row 1: Search */}
+      <div className="border-b px-3 pt-3 pb-2">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search contacts..."
@@ -97,6 +103,10 @@ export default function ContactList({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
+      </div>
+
+      {/* Row 2: Filter + Sort + Settings + Add */}
+      <div className="flex items-center gap-1 border-b px-3 py-1.5">
         <ContactFilters
           filters={filters}
           onFiltersChange={onFiltersChange}
@@ -104,10 +114,69 @@ export default function ContactList({
           availableLists={availableLists}
           customFieldDefinitions={customFieldDefinitions}
         />
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              title="Sort"
+            >
+              <ArrowDownUp className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-44 p-2">
+            <span className="px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Sort by
+            </span>
+            <div className="mt-1 space-y-0.5">
+              {([
+                ['updated_at', 'Updated'],
+                ['created_at', 'Created'],
+                ['name', 'Name'],
+                ['company', 'Company'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  className={cn(
+                    'flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-accent',
+                    (filters.sortBy || 'updated_at') === value && 'bg-accent font-medium'
+                  )}
+                  onClick={() => onFiltersChange({ ...filters, sortBy: value })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 border-t pt-2">
+              <span className="px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Order
+              </span>
+              <div className="mt-1 space-y-0.5">
+                {([
+                  ['desc', 'Newest first'],
+                  ['asc', 'Oldest first'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={cn(
+                      'flex w-full items-center rounded px-2 py-1.5 text-xs hover:bg-accent',
+                      (filters.sortOrder || 'desc') === value && 'bg-accent font-medium'
+                    )}
+                    onClick={() => onFiltersChange({ ...filters, sortOrder: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+        {headerActions}
+        <div className="flex-1" />
         <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={onAdd}>
           <Plus className="h-4 w-4" />
         </Button>
-        {headerActions}
       </div>
 
       <ContactListSelector

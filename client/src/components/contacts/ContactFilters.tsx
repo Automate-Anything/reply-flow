@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { ArrowDownUp, Building2, Filter, MapPin, Tag, Calendar, SlidersHorizontal } from 'lucide-react';
+import { Building2, Filter, MapPin, Tag, Calendar, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContactFilters as FilterState } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
@@ -81,13 +81,14 @@ export default function ContactFilters({
       <PopoverTrigger asChild>
         <Button
           variant={hasActiveFilters ? 'secondary' : 'ghost'}
-          size="icon"
-          className="relative h-9 w-9 shrink-0"
+          size="sm"
+          className="relative h-8 gap-1.5 text-xs"
           title="Filters"
         >
-          <Filter className="h-4 w-4" />
+          <Filter className="h-3.5 w-3.5" />
+          Filters
           {hasActiveFilters && (
-            <Badge className="absolute -right-1 -top-1 h-4 min-w-4 px-1 text-[10px]">
+            <Badge className="ml-0.5 h-4 min-w-4 px-1 text-[10px]">
               {activeFilterCount}
             </Badge>
           )}
@@ -278,39 +279,6 @@ export default function ContactFilters({
           </div>
         )}
 
-        {/* Sort */}
-        <div className="mt-3 border-t pt-3">
-          <div className="flex items-center gap-2">
-            <ArrowDownUp className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Sort</span>
-            <Select
-              value={filters.sortBy || 'updated_at'}
-              onValueChange={(v) => updateFilter('sortBy', v as FilterState['sortBy'])}
-            >
-              <SelectTrigger className="ml-auto h-7 w-auto border-transparent bg-muted/60 px-2 text-xs shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated_at">Updated</SelectItem>
-                <SelectItem value="created_at">Created</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="company">Company</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={filters.sortOrder || 'desc'}
-              onValueChange={(v) => updateFilter('sortOrder', v as 'asc' | 'desc')}
-            >
-              <SelectTrigger className="h-7 w-auto border-transparent bg-muted/60 px-2 text-xs shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desc">Newest</SelectItem>
-                <SelectItem value="asc">Oldest</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
       </PopoverContent>
     </Popover>
   );

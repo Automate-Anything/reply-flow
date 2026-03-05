@@ -119,6 +119,9 @@ export default function KnowledgeBasePage() {
     try {
       await deleteKnowledgeBase(kbId);
       if (expandedKbId === kbId) setExpandedKbId(null);
+      // Clear stale search results — deleted KB entries may still be shown
+      setSearchQuery('');
+      setSearchResults([]);
       toast.success('Knowledge base deleted');
     } catch {
       toast.error('Failed to delete knowledge base');
