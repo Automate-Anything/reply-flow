@@ -35,6 +35,12 @@ const FILE_PATH_RE = /\.\w{1,5}$|\/\w+\/|\\[\w]+\\/;
 /** Code-like patterns: function calls, brackets, operators */
 const CODE_RE = /\w+\(.*\)|[{}[\]<>]|=>|::|->|\$\w+/;
 
+/** Short uppercase acronyms (SMS, API, CRM, PDF, etc.) or mixed-case proper nouns */
+const ACRONYM_RE = /\b[A-Z]{2,6}\b/;
+
+/** Specific short distinctive terms (2-4 chars) that are likely keywords to match literally */
+const SHORT_SPECIFIC_TERM_RE = /\b(?:sms|api|crm|pdf|csv|url|faq|erp|sql|ssl|ssh|dns|vpn|ios|xml|json|html|css)\b/i;
+
 /** Question words at start */
 const QUESTION_RE = /^(what|how|why|when|where|who|which|can|does|is|are|should|would|could|tell|explain|describe|summarize)\b/i;
 
@@ -99,6 +105,18 @@ export function classifyQuery(query: string): QueryClassification {
     reasons.push('contains code pattern');
   }
 
+  // Contains uppercase acronyms (SMS, API, CRM, etc.)
+  if (ACRONYM_RE.test(trimmed)) {
+    ftsScore += 2;
+    reasons.push('contains acronym');
+  }
+
+  // Contains known short technical/specific terms
+  if (SHORT_SPECIFIC_TERM_RE.test(trimmed)) {
+    ftsScore += 2;
+    reasons.push('contains specific term');
+  }
+
   // ── Vector Signals ──
 
   // Starts with question word
@@ -126,35 +144,33 @@ export function classifyQuery(query: string): QueryClassification {
   }
 
   // ── Decision ──
+  // Always use hybrid with weighted scores — never fully skip a method.
+  // Minimum weight of 0.15 ensures both vector and FTS always contribute.
+  const MIN_WEIGHT = 0.15;
 
   const diff = ftsScore - vectorScore;
+  let method: RetrievalMethod;
+  let ftsWeight: number;
+  let vectorWeight: number;
 
   if (diff >= 3) {
-    return {
-      method: 'fts',
-      reasoning: `FTS preferred (${reasons.join(', ')})`,
-      vectorWeight: 0,
-      ftsWeight: 1,
-    };
+    method = 'fts';
+    ftsWeight = 1;
+    vectorWeight = MIN_WEIGHT;
+  } else if (diff <= -3) {
+    method = 'vector';
+    vectorWeight = 1;
+    ftsWeight = MIN_WEIGHT;
+  } else {
+    method = 'hybrid';
+    const total = Math.max(ftsScore + vectorScore, 1);
+    ftsWeight = Math.max(MIN_WEIGHT, 0.3 + 0.7 * (ftsScore / total));
+    vectorWeight = Math.max(MIN_WEIGHT, 0.3 + 0.7 * (vectorScore / total));
   }
-
-  if (diff <= -3) {
-    return {
-      method: 'vector',
-      reasoning: `Vector preferred (${reasons.join(', ')})`,
-      vectorWeight: 1,
-      ftsWeight: 0,
-    };
-  }
-
-  // Close scores → hybrid with weights
-  const total = Math.max(ftsScore + vectorScore, 1);
-  const ftsWeight = 0.3 + 0.7 * (ftsScore / total);
-  const vectorWeight = 0.3 + 0.7 * (vectorScore / total);
 
   return {
-    method: 'hybrid',
-    reasoning: `Hybrid (${reasons.join(', ') || 'balanced query'})`,
+    method,
+    reasoning: `${method === 'hybrid' ? 'Hybrid' : method === 'fts' ? 'FTS preferred' : 'Vector preferred'} (${reasons.join(', ') || 'balanced query'})`,
     vectorWeight: Math.round(vectorWeight * 100) / 100,
     ftsWeight: Math.round(ftsWeight * 100) / 100,
   };

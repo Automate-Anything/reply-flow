@@ -21,6 +21,7 @@ const RESPONSE_MODEL = 'claude-sonnet-4-20250514';
 interface AIContext {
   profileData: ProfileData;
   kbEntries: KBEntry[];
+  kbLowConfidence?: boolean;
   channelOverrides?: ChannelOverrides;
   maxTokens: number;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -236,6 +237,7 @@ export async function shouldAIRespond(
 
   // 8. Semantic search for relevant KB content (or fall back to loading all)
   let kbData: KBEntry[] = [];
+  let kbLowConfidence = false;
   let searchQuery = messages[messages.length - 1]?.content || '';
 
   if (isEmbeddingsAvailable()) {
@@ -248,11 +250,13 @@ export async function shouldAIRespond(
     });
 
     if (searchResults.length > 0) {
+      kbLowConfidence = searchResults.every((r) => r.confidence === 'low');
       kbData = searchResults.map((r) => ({
         id: r.id,
         title: (r.metadata?.sourceEntryTitle as string) || 'Knowledge Base',
         content: r.content,
         knowledge_base_id: r.knowledgeBaseId,
+        sectionHeading: (r.metadata?.sectionHeading as string) || null,
       }));
     }
   }
@@ -293,7 +297,7 @@ export async function shouldAIRespond(
 
   return {
     action: 'respond',
-    context: { profileData, kbEntries: kbData, channelOverrides, maxTokens, messages, contactMemories },
+    context: { profileData, kbEntries: kbData, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories },
   };
 }
 
@@ -409,7 +413,7 @@ export async function generateAndSendAIReply(
 ): Promise<void> {
   if (!anthropic) return;
 
-  const { profileData, kbEntries, channelOverrides, maxTokens, messages, contactMemories } = context;
+  const { profileData, kbEntries, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories } = context;
   const hasScenarios = !!(profileData.response_flow?.scenarios?.length);
 
   let systemPrompt: string;
@@ -426,6 +430,11 @@ export async function generateAndSendAIReply(
     }
   } else {
     systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+  }
+
+  // Warn the AI when KB results are low confidence or absent
+  if (kbLowConfidence || kbEntries.length === 0) {
+    systemPrompt += '\n\nNote: No highly relevant knowledge base content was found for this query. If you are not confident in your answer, let the customer know you will look into it and get back to them.';
   }
 
   // Append contact memories from previous sessions

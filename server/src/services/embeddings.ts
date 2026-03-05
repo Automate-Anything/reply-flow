@@ -9,6 +9,7 @@ import OpenAI from 'openai';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { cleanText } from './documentProcessor.js';
+import { getRetrievalSettings } from './retrievalSettings.js';
 
 // ── Types ──────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export interface SearchResult {
   vectorRank: number;
   ftsRank: number;
   rrfScore: number;
+  confidence: 'high' | 'medium' | 'low';
 }
 
 export interface SearchOptions {
@@ -50,11 +52,10 @@ export interface SearchOptions {
 }
 
 // ── Constants ──────────────────────────────────────
+// Chunking & search thresholds are now configurable via super admin panel.
+// Defaults defined in retrievalSettings.ts, loaded at runtime from DB.
+// Only non-configurable constants remain here.
 
-const MAX_CHUNK_SIZE = 3000;       // safety net for oversized chunks
-const SIZE_SPLIT_TARGET = 2000;    // target size for fallback size-based splitting
-const SIZE_SPLIT_OVERLAP = 200;    // overlap for size-based splitting
-const MIN_CHUNK_SIZE = 100;        // skip tiny fragments
 const EMBEDDING_MODEL = 'text-embedding-3-small' as const;
 const EMBEDDING_BATCH_SIZE = 20;   // keep batches small to stay within token limits
 
@@ -231,7 +232,7 @@ function percentile(values: number[], pct: number): number {
  * Returns null if the text has too few sentences for reliable semantic splitting
  * (caller should fall back to size-based splitting).
  */
-async function semanticSplitSection(text: string): Promise<string[] | null> {
+async function semanticSplitSection(text: string, maxChunkSize = 3000, minChunkSize = 100): Promise<string[] | null> {
   const sentences = splitIntoSentences(text);
 
   // Too few sentences — percentile computation would be noisy
@@ -280,7 +281,7 @@ async function semanticSplitSection(text: string): Promise<string[] | null> {
   // Post-process: merge tiny chunks with their nearest neighbor
   const merged: string[] = [];
   for (const chunk of rawChunks) {
-    if (chunk.length < MIN_CHUNK_SIZE && merged.length > 0) {
+    if (chunk.length < minChunkSize && merged.length > 0) {
       merged[merged.length - 1] += ' ' + chunk;
     } else {
       merged.push(chunk);
@@ -290,7 +291,7 @@ async function semanticSplitSection(text: string): Promise<string[] | null> {
   // Post-process: split oversized chunks using size-based fallback
   const final: string[] = [];
   for (const chunk of merged) {
-    if (chunk.length > MAX_CHUNK_SIZE) {
+    if (chunk.length > maxChunkSize) {
       final.push(...sizeSplitSection(chunk));
     } else {
       final.push(chunk);
@@ -354,7 +355,7 @@ function mergeSplits(
 }
 
 /** Split a section into chunks respecting paragraph and sentence boundaries (size-based fallback) */
-function sizeSplitSection(text: string, maxSize = SIZE_SPLIT_TARGET, overlap = SIZE_SPLIT_OVERLAP, minSize = MIN_CHUNK_SIZE): string[] {
+function sizeSplitSection(text: string, maxSize = 2000, overlap = 200, minSize = 100): string[] {
   if (text.length <= maxSize) {
     return text.trim().length >= minSize ? [text.trim()] : [];
   }
@@ -376,6 +377,15 @@ function sizeSplitSection(text: string, maxSize = SIZE_SPLIT_TARGET, overlap = S
   return mergeSplits(words, maxSize, overlap, minSize);
 }
 
+/** Build contextual prefix for chunks: "From: Title | Section: Heading > Subheading" */
+function buildChunkPrefix(entryTitle: string, headingHierarchy: string[]): string {
+  let prefix = `From: ${entryTitle}`;
+  if (headingHierarchy.length > 0) {
+    prefix += ` | Section: ${headingHierarchy.join(' > ')}`;
+  }
+  return prefix + '\n\n';
+}
+
 /**
  * Section-aware document chunking with semantic splitting.
  *
@@ -395,17 +405,18 @@ export async function chunkDocument(
     strategy?: string;
   },
 ): Promise<DocumentChunk[]> {
+  const settings = await getRetrievalSettings();
   const strategy = documentMeta.strategy;
 
   // For structured/tabular data: the processors already produce pre-chunked text
   // separated by "---". Skip semantic splitting, just validate sizes.
   if (strategy === 'structured_data' || strategy === 'tabular_pipeline') {
-    return chunkPreStructured(structuredText, documentMeta);
+    return chunkPreStructured(structuredText, documentMeta, settings.maxChunkSize, settings.minChunkSize, settings.chunkTargetSize, settings.chunkOverlap);
   }
 
   // For code: skip semantic splitting, use size-based only as safety net
   if (strategy === 'code_pipeline') {
-    return chunkPreStructured(structuredText, documentMeta);
+    return chunkPreStructured(structuredText, documentMeta, settings.maxChunkSize, settings.minChunkSize, settings.chunkTargetSize, settings.chunkOverlap);
   }
 
   // For prose, markdown, html, and default: use section-aware semantic chunking
@@ -417,39 +428,36 @@ export async function chunkDocument(
     let sectionChunks: string[];
 
     // If section fits in one chunk, keep it whole
-    if (section.text.trim().length <= MAX_CHUNK_SIZE && section.text.trim().length >= MIN_CHUNK_SIZE) {
+    if (section.text.trim().length <= settings.maxChunkSize && section.text.trim().length >= settings.minChunkSize) {
       sectionChunks = [section.text.trim()];
-    } else if (section.text.trim().length < MIN_CHUNK_SIZE) {
+    } else if (section.text.trim().length < settings.minChunkSize) {
       sectionChunks = [];
     } else {
       // Try semantic splitting first (returns null if too few sentences)
       try {
-        const semanticResult = openai ? await semanticSplitSection(section.text) : null;
-        sectionChunks = semanticResult ?? sizeSplitSection(section.text);
+        const semanticResult = openai ? await semanticSplitSection(section.text, settings.maxChunkSize, settings.minChunkSize) : null;
+        sectionChunks = semanticResult ?? sizeSplitSection(section.text, settings.chunkTargetSize, settings.chunkOverlap, settings.minChunkSize);
       } catch {
         // Embedding API failure — fall back to size-based
-        sectionChunks = sizeSplitSection(section.text);
+        sectionChunks = sizeSplitSection(section.text, settings.chunkTargetSize, settings.chunkOverlap, settings.minChunkSize);
       }
     }
 
     // Safety net: split any oversized chunks that slipped through
     const safeSectionChunks: string[] = [];
     for (const c of sectionChunks) {
-      if (c.length > MAX_CHUNK_SIZE) {
-        safeSectionChunks.push(...sizeSplitSection(c));
+      if (c.length > settings.maxChunkSize) {
+        safeSectionChunks.push(...sizeSplitSection(c, settings.chunkTargetSize, settings.chunkOverlap, settings.minChunkSize));
       } else {
         safeSectionChunks.push(c);
       }
     }
 
     for (const chunkText of safeSectionChunks) {
-      // Prepend heading context for better embedding quality
-      const headingContext = section.headingHierarchy.length > 0
-        ? section.headingHierarchy.join(' > ') + '\n\n'
-        : '';
+      const prefix = buildChunkPrefix(documentMeta.entryTitle, section.headingHierarchy);
 
       chunks.push({
-        content: headingContext + chunkText,
+        content: prefix + chunkText,
         metadata: {
           sourceEntryTitle: documentMeta.entryTitle,
           sourceFileName: documentMeta.fileName,
@@ -479,27 +487,33 @@ export async function chunkDocument(
 function chunkPreStructured(
   structuredText: string,
   documentMeta: { entryTitle: string; fileName: string | null; sourceType: string; contentType?: string },
+  maxChunkSize = 3000,
+  minChunkSize = 100,
+  chunkTargetSize = 2000,
+  chunkOverlap = 200,
 ): DocumentChunk[] {
   // Split by "---" separators (used by CSV/JSON/XLSX processors)
-  let rawChunks = structuredText.split(/\n---\n/).map((c) => c.trim()).filter((c) => c.length >= MIN_CHUNK_SIZE);
+  let rawChunks = structuredText.split(/\n---\n/).map((c) => c.trim()).filter((c) => c.length >= minChunkSize);
 
   // If no separators found, fall back to section-based or size-based splitting
-  if (rawChunks.length === 0 && structuredText.trim().length >= MIN_CHUNK_SIZE) {
+  if (rawChunks.length === 0 && structuredText.trim().length >= minChunkSize) {
     rawChunks = [structuredText.trim()];
   }
 
   // Safety net: split oversized chunks
   const safeChunks: string[] = [];
   for (const c of rawChunks) {
-    if (c.length > MAX_CHUNK_SIZE) {
-      safeChunks.push(...sizeSplitSection(c));
+    if (c.length > maxChunkSize) {
+      safeChunks.push(...sizeSplitSection(c, chunkTargetSize, chunkOverlap, minChunkSize));
     } else {
       safeChunks.push(c);
     }
   }
 
+  const prefix = buildChunkPrefix(documentMeta.entryTitle, []);
+
   return safeChunks.map((content, i) => ({
-    content,
+    content: prefix + content,
     metadata: {
       sourceEntryTitle: documentMeta.entryTitle,
       sourceFileName: documentMeta.fileName,
@@ -672,22 +686,22 @@ export async function searchKnowledgeBase(
   query: string,
   options?: SearchOptions,
 ): Promise<SearchResult[]> {
+  const settings = await getRetrievalSettings();
   const method = options?.retrievalMethod ?? 'hybrid';
-  const matchCount = options?.matchCount ?? 5;
+  const matchCount = options?.matchCount ?? settings.matchCount;
   const kbIds = options?.knowledgeBaseIds ?? null;
 
   try {
-    // FTS-only: no embedding needed — fast keyword search
-    if (method === 'fts') {
-      return await ftsOnlySearch(companyId, query, kbIds, matchCount);
+    // FTS-only when method dictates or embeddings unavailable
+    if (method === 'fts' || !openai) {
+      return await ftsOnlySearch(companyId, query, kbIds, matchCount, settings.ftsThreshold);
     }
 
-    // Vector and hybrid both need an embedding
-    if (!openai) return [];
     const queryEmbedding = await generateEmbedding(query);
 
+    // Vector-only
     if (method === 'vector') {
-      return await vectorOnlySearch(companyId, queryEmbedding, kbIds, matchCount);
+      return await vectorOnlySearch(companyId, queryEmbedding, kbIds, matchCount, settings.similarityThreshold);
     }
 
     // Hybrid with configurable weights
@@ -703,17 +717,20 @@ export async function searchKnowledgeBase(
 
     if (error) throw error;
 
-    return (data || []).map((row: Record<string, unknown>) => ({
-      id: row.id as string,
-      entryId: row.entry_id as string,
-      knowledgeBaseId: row.knowledge_base_id as string,
-      chunkIndex: row.chunk_index as number,
-      content: row.content as string,
-      metadata: (row.metadata as Record<string, unknown>) || {},
-      vectorRank: row.vector_rank as number,
-      ftsRank: row.fts_rank as number,
-      rrfScore: row.rrf_score as number,
-    }));
+    return (data || [])
+      .map((row: Record<string, unknown>) => ({
+        id: row.id as string,
+        entryId: row.entry_id as string,
+        knowledgeBaseId: row.knowledge_base_id as string,
+        chunkIndex: row.chunk_index as number,
+        content: row.content as string,
+        metadata: (row.metadata as Record<string, unknown>) || {},
+        vectorRank: row.vector_rank as number,
+        ftsRank: row.fts_rank as number,
+        rrfScore: row.rrf_score as number,
+        confidence: scoreToConfidence(row.rrf_score as number, 'hybrid'),
+      }))
+      .filter((r: SearchResult) => r.rrfScore >= settings.rrfThreshold);
   } catch (error) {
     console.error(`Search failed (method=${method}):`, error);
     return [];
@@ -725,6 +742,7 @@ async function vectorOnlySearch(
   queryEmbedding: number[],
   kbIds: string[] | null,
   matchCount: number,
+  similarityThreshold: number,
 ): Promise<SearchResult[]> {
   const { data, error } = await supabaseAdmin.rpc('vector_search', {
     p_query_embedding: JSON.stringify(queryEmbedding),
@@ -735,17 +753,20 @@ async function vectorOnlySearch(
 
   if (error) throw error;
 
-  return (data || []).map((row: Record<string, unknown>, i: number) => ({
-    id: row.id as string,
-    entryId: row.entry_id as string,
-    knowledgeBaseId: row.knowledge_base_id as string,
-    chunkIndex: row.chunk_index as number,
-    content: row.content as string,
-    metadata: (row.metadata as Record<string, unknown>) || {},
-    vectorRank: i + 1,
-    ftsRank: 0,
-    rrfScore: row.similarity as number,
-  }));
+  return (data || [])
+    .map((row: Record<string, unknown>, i: number) => ({
+      id: row.id as string,
+      entryId: row.entry_id as string,
+      knowledgeBaseId: row.knowledge_base_id as string,
+      chunkIndex: row.chunk_index as number,
+      content: row.content as string,
+      metadata: (row.metadata as Record<string, unknown>) || {},
+      vectorRank: i + 1,
+      ftsRank: 0,
+      rrfScore: row.similarity as number,
+      confidence: scoreToConfidence(row.similarity as number, 'vector'),
+    }))
+    .filter((r: SearchResult) => r.rrfScore >= similarityThreshold);
 }
 
 async function ftsOnlySearch(
@@ -753,6 +774,7 @@ async function ftsOnlySearch(
   query: string,
   kbIds: string[] | null,
   matchCount: number,
+  ftsThreshold: number,
 ): Promise<SearchResult[]> {
   const { data, error } = await supabaseAdmin.rpc('fts_search', {
     p_query_text: query,
@@ -763,17 +785,42 @@ async function ftsOnlySearch(
 
   if (error) throw error;
 
-  return (data || []).map((row: Record<string, unknown>, i: number) => ({
-    id: row.id as string,
-    entryId: row.entry_id as string,
-    knowledgeBaseId: row.knowledge_base_id as string,
-    chunkIndex: row.chunk_index as number,
-    content: row.content as string,
-    metadata: (row.metadata as Record<string, unknown>) || {},
-    vectorRank: 0,
-    ftsRank: i + 1,
-    rrfScore: row.fts_rank as number,
-  }));
+  return (data || [])
+    .map((row: Record<string, unknown>, i: number) => ({
+      id: row.id as string,
+      entryId: row.entry_id as string,
+      knowledgeBaseId: row.knowledge_base_id as string,
+      chunkIndex: row.chunk_index as number,
+      content: row.content as string,
+      metadata: (row.metadata as Record<string, unknown>) || {},
+      vectorRank: 0,
+      ftsRank: i + 1,
+      rrfScore: row.fts_rank as number,
+      confidence: scoreToConfidence(row.fts_rank as number, 'fts'),
+    }))
+    .filter((r: SearchResult) => r.rrfScore >= ftsThreshold);
+}
+
+// ── Confidence Scoring ────────────────────────────
+
+function scoreToConfidence(
+  score: number,
+  method: 'vector' | 'fts' | 'hybrid',
+): 'high' | 'medium' | 'low' {
+  if (method === 'vector') {
+    if (score > 0.5) return 'high';
+    if (score > 0.35) return 'medium';
+    return 'low';
+  }
+  if (method === 'fts') {
+    if (score > 0.1) return 'high';
+    if (score > 0.03) return 'medium';
+    return 'low';
+  }
+  // hybrid (RRF)
+  if (score > 0.02) return 'high';
+  if (score > 0.01) return 'medium';
+  return 'low';
 }
 
 // ── Backfill ───────────────────────────────────────

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import {
   Shield,
   Users,
@@ -22,9 +23,10 @@ import {
   Save,
   Eye,
   ArrowRight,
+  Settings2,
 } from 'lucide-react';
 
-const TABS = ['overview', 'templates', 'preview', 'knowledge-bases'] as const;
+const TABS = ['overview', 'templates', 'preview', 'knowledge-bases', 'retrieval'] as const;
 type Tab = (typeof TABS)[number];
 
 // ── Types ──────────────────────────────────────────
@@ -169,6 +171,7 @@ export default function SuperAdminPage() {
           <TabsTrigger value="templates" className="flex-1">Prompt Building Blocks</TabsTrigger>
           <TabsTrigger value="preview" className="flex-1">Prompt Preview</TabsTrigger>
           <TabsTrigger value="knowledge-bases" className="flex-1">Knowledge Bases</TabsTrigger>
+          <TabsTrigger value="retrieval" className="flex-1">Retrieval Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -182,6 +185,9 @@ export default function SuperAdminPage() {
         </TabsContent>
         <TabsContent value="knowledge-bases" className="mt-6">
           <KnowledgeBasesTab />
+        </TabsContent>
+        <TabsContent value="retrieval" className="mt-6">
+          <RetrievalSettingsTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -987,5 +993,130 @@ function EmbeddingStatusBadge({ status }: { status: string }) {
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variants[status] || variants.pending}`}>
       {status}
     </span>
+  );
+}
+
+// ── Retrieval Settings Tab ────────────────────────
+
+interface RetrievalSetting {
+  key: string;
+  value: string;
+  label: string;
+  description: string | null;
+  updated_at: string;
+}
+
+const SETTING_GROUPS: Record<string, { title: string; description: string; keys: string[] }> = {
+  search: {
+    title: 'Search Settings',
+    description: 'Control how many results are returned and the minimum quality thresholds.',
+    keys: ['match_count', 'similarity_threshold', 'fts_threshold', 'rrf_threshold'],
+  },
+  chunking: {
+    title: 'Chunking Settings',
+    description: 'Control how documents are split into chunks during upload. Changes only affect newly uploaded documents.',
+    keys: ['max_chunk_size', 'chunk_target_size', 'chunk_overlap', 'min_chunk_size'],
+  },
+};
+
+function RetrievalSettingsTab() {
+  const [settings, setSettings] = useState<RetrievalSetting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<{ settings: RetrievalSetting[] }>('/super-admin/retrieval-settings')
+      .then(({ data }) => {
+        setSettings(data.settings);
+        const values: Record<string, string> = {};
+        for (const s of data.settings) values[s.key] = s.value;
+        setEditValues(values);
+      })
+      .catch(() => toast.error('Failed to load retrieval settings'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const saveSetting = async (key: string) => {
+    const value = editValues[key];
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0) {
+      toast.error('Value must be a non-negative number');
+      return;
+    }
+
+    setSaving(key);
+    try {
+      await api.put(`/super-admin/retrieval-settings/${key}`, { value });
+      setSettings((prev) => prev.map((s) => s.key === key ? { ...s, value } : s));
+      toast.success('Setting saved');
+    } catch {
+      toast.error('Failed to save setting');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (loading) return <Skeleton className="h-64" />;
+
+  const settingsByKey = Object.fromEntries(settings.map((s) => [s.key, s]));
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Configure how the knowledge base search and chunking pipeline works. Changes to search settings take effect within 60 seconds.
+      </p>
+
+      {Object.entries(SETTING_GROUPS).map(([groupKey, group]) => (
+        <Card key={groupKey}>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Settings2 className="h-4 w-4" />
+              {group.title}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">{group.description}</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {group.keys.map((key) => {
+              const setting = settingsByKey[key];
+              if (!setting) return null;
+              const isChanged = editValues[key] !== setting.value;
+
+              return (
+                <div key={key} className="flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium">{setting.label}</label>
+                      <Badge variant="outline" className="text-xs shrink-0">{key}</Badge>
+                    </div>
+                    {setting.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{setting.description}</p>
+                    )}
+                  </div>
+                  <Input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className="w-28 text-right"
+                    value={editValues[key] || ''}
+                    onChange={(e) => setEditValues((prev) => ({ ...prev, [key]: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && isChanged && saveSetting(key)}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => saveSetting(key)}
+                    disabled={saving === key || !isChanged}
+                    className="shrink-0"
+                  >
+                    <Save className="mr-1 h-3 w-3" />
+                    {saving === key ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }

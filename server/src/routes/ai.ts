@@ -9,7 +9,7 @@ import { buildSystemPrompt, buildScenarioResponsePrompt } from '../services/prom
 import type { ProfileData, KBEntry } from '../services/promptBuilder.js';
 import { classifyMessage } from '../services/ai.js';
 import { processDocument, cleanText } from '../services/documentProcessor.js';
-import { processAndEmbedEntry, isEmbeddingsAvailable, searchKnowledgeBase, backfillExistingEntries } from '../services/embeddings.js';
+import { processAndEmbedEntry, isEmbeddingsAvailable, searchKnowledgeBase, backfillExistingEntries, generateEmbedding } from '../services/embeddings.js';
 import { classifyQuery } from '../services/queryClassifier.js';
 
 const router = Router();
@@ -609,6 +609,127 @@ router.get('/kbs/:kbId/entries/:entryId/chunks', requirePermission('knowledge_ba
   }
 });
 
+// Update a single chunk's content (auto re-embeds)
+router.put('/kbs/:kbId/entries/:entryId/chunks/:chunkId', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const entryId = req.params.entryId as string;
+    const chunkId = req.params.chunkId as string;
+    const { content } = req.body as { content?: string };
+
+    if (!content?.trim()) {
+      res.status(400).json({ error: 'Content is required' });
+      return;
+    }
+
+    // Verify chunk belongs to this entry and company
+    const { data: existing, error: fetchErr } = await supabaseAdmin
+      .from('kb_chunks')
+      .select('id')
+      .eq('id', chunkId)
+      .eq('entry_id', entryId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (fetchErr || !existing) {
+      res.status(404).json({ error: 'Chunk not found' });
+      return;
+    }
+
+    const trimmedContent = content.trim();
+
+    // Try to re-embed the updated content
+    let reembedded = false;
+    let newEmbedding: number[] | null = null;
+    if (isEmbeddingsAvailable()) {
+      try {
+        newEmbedding = await generateEmbedding(trimmedContent);
+        reembedded = true;
+      } catch (err) {
+        console.warn('Failed to re-embed chunk, saving content only:', err);
+      }
+    }
+
+    // Build update payload
+    const updatePayload: Record<string, unknown> = { content: trimmedContent };
+    if (newEmbedding) {
+      updatePayload.embedding = JSON.stringify(newEmbedding);
+    }
+
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('kb_chunks')
+      .update(updatePayload)
+      .eq('id', chunkId)
+      .select('id, chunk_index, content, metadata, created_at')
+      .single();
+
+    if (updateErr) throw updateErr;
+    res.json({ chunk: updated, reembedded });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete a single chunk and re-index remaining chunks
+router.delete('/kbs/:kbId/entries/:entryId/chunks/:chunkId', requirePermission('knowledge_base', 'delete'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const entryId = req.params.entryId as string;
+    const chunkId = req.params.chunkId as string;
+
+    // Verify chunk belongs to this entry and company
+    const { data: existing, error: fetchErr } = await supabaseAdmin
+      .from('kb_chunks')
+      .select('id')
+      .eq('id', chunkId)
+      .eq('entry_id', entryId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (fetchErr || !existing) {
+      res.status(404).json({ error: 'Chunk not found' });
+      return;
+    }
+
+    // Delete the chunk
+    const { error: deleteErr } = await supabaseAdmin
+      .from('kb_chunks')
+      .delete()
+      .eq('id', chunkId);
+
+    if (deleteErr) throw deleteErr;
+
+    // Re-index remaining chunks to keep sequential ordering
+    const { data: remaining, error: remainErr } = await supabaseAdmin
+      .from('kb_chunks')
+      .select('id, metadata')
+      .eq('entry_id', entryId)
+      .eq('company_id', companyId)
+      .order('chunk_index', { ascending: true });
+
+    if (remainErr) throw remainErr;
+
+    const total = remaining?.length || 0;
+    if (remaining && remaining.length > 0) {
+      for (let i = 0; i < remaining.length; i++) {
+        const chunk = remaining[i];
+        const meta = (chunk.metadata || {}) as Record<string, unknown>;
+        await supabaseAdmin
+          .from('kb_chunks')
+          .update({
+            chunk_index: i,
+            metadata: { ...meta, chunkIndex: i, totalChunks: total },
+          })
+          .eq('id', chunk.id);
+      }
+    }
+
+    res.json({ success: true, remainingChunks: total });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Re-embed a specific entry
 router.post('/kbs/:kbId/entries/:entryId/reembed', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
   try {
@@ -650,6 +771,75 @@ router.post('/kbs/:kbId/entries/:entryId/reembed', requirePermission('knowledge_
   }
 });
 
+// ── Search helpers ───────────────────────────────
+
+/** Extract a snippet centered around the best keyword match instead of taking the first N chars */
+function extractSnippet(content: string, queryWords: string[], maxLen: number): string {
+  if (!queryWords.length) return content.slice(0, maxLen);
+
+  const lower = content.toLowerCase();
+  let bestPos = -1;
+  let bestWord = '';
+
+  // Find the first occurrence of any query word
+  for (const word of queryWords) {
+    const pos = lower.indexOf(word);
+    if (pos !== -1 && (bestPos === -1 || pos < bestPos)) {
+      bestPos = pos;
+      bestWord = word;
+    }
+  }
+
+  // No keyword found — fall back to beginning
+  if (bestPos === -1) return content.slice(0, maxLen);
+
+  // Center the snippet around the match with some leading context
+  const leadContext = 80; // chars of context before the match
+  const start = Math.max(0, bestPos - leadContext);
+  let snippet = content.slice(start, start + maxLen);
+
+  // Clean up: don't start/end mid-word
+  if (start > 0) {
+    const firstSpace = snippet.indexOf(' ');
+    if (firstSpace > 0 && firstSpace < 20) {
+      snippet = '...' + snippet.slice(firstSpace + 1);
+    } else {
+      snippet = '...' + snippet;
+    }
+  }
+  if (start + maxLen < content.length) {
+    const lastSpace = snippet.lastIndexOf(' ');
+    if (lastSpace > snippet.length - 20) {
+      snippet = snippet.slice(0, lastSpace) + '...';
+    } else {
+      snippet = snippet + '...';
+    }
+  }
+
+  return snippet;
+}
+
+/**
+ * Filter out search results that are clearly irrelevant.
+ * When some results have strong keyword matches and others don't,
+ * the non-matching results are usually noise (RRF scores are too
+ * compressed with k=60 to differentiate on score alone).
+ */
+function filterIrrelevantResults<T extends { rrfScore: number; vectorRank: number; ftsRank: number }>(results: T[]): T[] {
+  if (results.length <= 1) return results;
+
+  // Check if any results have strong keyword matches (low ftsRank)
+  const hasKeywordMatches = results.some((r) => r.ftsRank > 0 && r.ftsRank <= 10);
+  if (!hasKeywordMatches) return results; // Pure vector — can't differentiate further
+
+  // When keyword matches exist, keep results that either:
+  // 1. Have a keyword match (ftsRank ≤ 10), OR
+  // 2. Are a strong vector match (vectorRank ≤ 2)
+  return results.filter((r) =>
+    (r.ftsRank > 0 && r.ftsRank <= 10) || (r.vectorRank > 0 && r.vectorRank <= 2)
+  );
+}
+
 // Test search against the knowledge base
 router.post('/kb/search', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
   try {
@@ -676,7 +866,54 @@ router.post('/kb/search', requirePermission('knowledge_base', 'view'), async (re
       ftsWeight: classification.ftsWeight,
     });
 
-    res.json({ results, queryClassification: { method: classification.method, reasoning: classification.reasoning } });
+    // Filter out clearly irrelevant results based on score gap from top result
+    const filteredResults = filterIrrelevantResults(results);
+
+    // Extract keyword-based snippets so the preview shows the matching text
+    // instead of the first N chars (which may not contain the match)
+    const queryWords = query.trim().toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const resultsWithSnippets = filteredResults.map((r) => ({
+      ...r,
+      snippet: extractSnippet(r.content, queryWords, 300),
+    }));
+
+    // Generate AI explanations for why each chunk was selected
+    let finalResults = resultsWithSnippets;
+    if (resultsWithSnippets.length > 0 && env.ANTHROPIC_API_KEY) {
+      try {
+        const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+        const chunksForPrompt = resultsWithSnippets.map((r, i) => `[Chunk ${i + 1}]: ${r.content.slice(0, 500)}`).join('\n\n');
+        const response = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: `You are analyzing knowledge base search results. The user searched for: "${query.trim()}"
+
+The search method used was ${classification.method.toUpperCase()} (${classification.reasoning}).
+
+Here are the chunks returned:
+
+${chunksForPrompt}
+
+For each chunk, write a brief 1-sentence explanation of why it's relevant to the query. Focus on the semantic connection between the query and the chunk content.
+
+Respond as a JSON array of strings, one per chunk. Example: ["Directly answers the question about...", "Contains related context about..."]
+Return ONLY the JSON array, no other text.`,
+          }],
+        });
+        const text = response.content[0].type === 'text' ? response.content[0].text : '';
+        const reasons: string[] = JSON.parse(text);
+        finalResults = resultsWithSnippets.map((r, i) => ({
+          ...r,
+          relevanceReason: reasons[i] || null,
+        }));
+      } catch (err) {
+        console.warn('Failed to generate relevance explanations:', err);
+      }
+    }
+
+    res.json({ results: finalResults, queryClassification: { method: classification.method, reasoning: classification.reasoning } });
   } catch (err) {
     next(err);
   }

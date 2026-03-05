@@ -24,7 +24,7 @@ export default function KnowledgeBasePage() {
     knowledgeBases, loading,
     createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase,
     fetchKBEntries, addKBEntry, uploadKBFile, updateKBEntry, deleteKBEntry,
-    fetchEntryChunks, reembedEntry, searchKB,
+    fetchEntryChunks, updateChunk, deleteChunk, reembedEntry, searchKB,
   } = useCompanyKB();
 
   // Create KB form
@@ -195,6 +195,20 @@ export default function KnowledgeBasePage() {
       await reembedEntry(kbId, entryId);
     },
     [reembedEntry]
+  );
+
+  const handleUpdateChunk = useCallback(
+    (kbId: string) => async (entryId: string, chunkId: string, content: string) => {
+      return updateChunk(kbId, entryId, chunkId, content);
+    },
+    [updateChunk]
+  );
+
+  const handleDeleteChunk = useCallback(
+    (kbId: string) => async (entryId: string, chunkId: string) => {
+      return deleteChunk(kbId, entryId, chunkId);
+    },
+    [deleteChunk]
   );
 
   const handleSearch = async () => {
@@ -383,6 +397,8 @@ export default function KnowledgeBasePage() {
                       onUpdate={handleUpdateEntry(kb.id)}
                       onDelete={handleDeleteEntry(kb.id)}
                       onFetchChunks={handleFetchChunks(kb.id)}
+                      onUpdateChunk={handleUpdateChunk(kb.id)}
+                      onDeleteChunk={handleDeleteChunk(kb.id)}
                       onReembed={handleReembed(kb.id)}
                       loading={isLoadingEntries}
                     />
@@ -491,8 +507,13 @@ export default function KnowledgeBasePage() {
                           </span>
                         )}
                       </div>
+                      {result.relevanceReason && (
+                        <p className="text-xs text-primary/80 italic">
+                          {result.relevanceReason}
+                        </p>
+                      )}
                       <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
-                        {result.content.slice(0, 300)}{result.content.length > 300 ? '...' : ''}
+                        {result.snippet || result.content.slice(0, 300)}{!result.snippet && result.content.length > 300 ? '...' : ''}
                       </p>
                     </div>
                   ))}

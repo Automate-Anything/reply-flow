@@ -50,6 +50,8 @@ export interface KBSearchResult {
   rrfScore: number;
   vectorRank: number;
   ftsRank: number;
+  relevanceReason?: string | null;
+  snippet?: string;
 }
 
 export function useCompanyKB() {
@@ -158,6 +160,22 @@ export function useCompanyKB() {
     []
   );
 
+  const updateChunk = useCallback(
+    async (kbId: string, entryId: string, chunkId: string, content: string): Promise<{ chunk: KBChunk; reembedded: boolean }> => {
+      const { data } = await api.put(`/ai/kbs/${kbId}/entries/${entryId}/chunks/${chunkId}`, { content });
+      return { chunk: data.chunk, reembedded: data.reembedded };
+    },
+    []
+  );
+
+  const deleteChunk = useCallback(
+    async (kbId: string, entryId: string, chunkId: string): Promise<{ remainingChunks: number }> => {
+      const { data } = await api.delete(`/ai/kbs/${kbId}/entries/${entryId}/chunks/${chunkId}`);
+      return { remainingChunks: data.remainingChunks };
+    },
+    []
+  );
+
   const reembedEntry = useCallback(
     async (kbId: string, entryId: string) => {
       await api.post(`/ai/kbs/${kbId}/entries/${entryId}/reembed`);
@@ -188,6 +206,8 @@ export function useCompanyKB() {
     updateKBEntry,
     deleteKBEntry,
     fetchEntryChunks,
+    updateChunk,
+    deleteChunk,
     reembedEntry,
     searchKB,
     refetch: fetchKnowledgeBases,

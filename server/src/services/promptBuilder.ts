@@ -86,6 +86,7 @@ export interface KBEntry {
   title: string;
   content: string;
   knowledge_base_id?: string;
+  sectionHeading?: string | null;
 }
 
 export interface ChannelOverrides {
@@ -293,7 +294,7 @@ function buildLanguageSection(profile: ProfileData, t: PromptTemplateCache): str
 function buildKBSection(kbEntries: KBEntry[], t: PromptTemplateCache): string | null {
   if (kbEntries.length === 0) return null;
   const kbSection = kbEntries
-    .map((entry) => `### ${entry.title}\n${entry.content}`)
+    .map((entry) => `### ${entry.title}${entry.sectionHeading ? ' — ' + entry.sectionHeading : ''}\n${entry.content}`)
     .join('\n\n---\n\n');
   return `## Relevant Knowledge Base Context\n${t.kbContext}\n\n${kbSection}`;
 }
