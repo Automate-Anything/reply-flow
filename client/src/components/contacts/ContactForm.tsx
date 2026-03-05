@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { Contact } from '@/hooks/useContacts';
+import { usePlan } from '@/contexts/PlanContext';
 
 interface ContactFormProps {
   contact?: Contact | null;
@@ -16,6 +17,7 @@ interface ContactFormProps {
 }
 
 export default function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
+  const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [form, setForm] = useState({
     phone_number: '',
     first_name: '',
@@ -41,6 +43,10 @@ export default function ContactForm({ contact, onSave, onCancel }: ContactFormPr
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!planLoading && !hasActivePlan) {
+      openNoPlanModal();
+      return;
+    }
     setError('');
     setPhoneError('');
     if (!form.phone_number.trim()) {

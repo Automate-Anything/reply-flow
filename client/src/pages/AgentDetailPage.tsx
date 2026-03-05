@@ -9,6 +9,7 @@ import { useAgent } from '@/hooks/useAgents';
 import type { ProfileData } from '@/hooks/useCompanyAI';
 import AIAgentSections from '@/components/settings/AIAgentSections';
 import api from '@/lib/api';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -100,25 +101,29 @@ export default function AgentDetailPage() {
                   if (e.key === 'Escape') setEditingName(false);
                 }}
               />
-              <Button size="sm" variant="outline" className="h-8" onClick={handleNameSave}>
-                Save
-              </Button>
+              <PlanGate>
+                <Button size="sm" variant="outline" className="h-8" onClick={handleNameSave}>
+                  Save
+                </Button>
+              </PlanGate>
               <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingName(false)}>
                 Cancel
               </Button>
             </div>
           ) : (
-            <button
-              onClick={() => {
-                setNameValue(agent.name);
-                setEditingName(true);
-              }}
-              className="text-left"
-            >
-              <h2 className="text-lg font-semibold hover:text-primary transition-colors">
-                {agent.name}
-              </h2>
-            </button>
+            <PlanGate>
+              <button
+                onClick={() => {
+                  setNameValue(agent.name);
+                  setEditingName(true);
+                }}
+                className="text-left"
+              >
+                <h2 className="text-lg font-semibold hover:text-primary transition-colors">
+                  {agent.name}
+                </h2>
+              </button>
+            </PlanGate>
           )}
           {agent.channel_count > 0 && (
             <p className="text-xs text-muted-foreground">
@@ -142,24 +147,28 @@ export default function AgentDetailPage() {
             <span className="text-xs text-muted-foreground">
               Delete this agent? Channels using it will lose their AI configuration.
             </span>
-            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
-              {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
-              {deleting ? 'Deleting...' : 'Confirm'}
-            </Button>
+            <PlanGate>
+              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+                {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
+                {deleting ? 'Deleting...' : 'Confirm'}
+              </Button>
+            </PlanGate>
             <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>
               Cancel
             </Button>
           </div>
         ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => setConfirmDelete(true)}
-          >
-            <Trash2 className="mr-2 h-3.5 w-3.5" />
-            Delete Agent
-          </Button>
+          <PlanGate>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete Agent
+            </Button>
+          </PlanGate>
         )}
       </div>
     </div>

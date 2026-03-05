@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
+import { PlanGate } from '@/components/auth/PlanGate';
 import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
 
@@ -223,10 +224,12 @@ export default function KnowledgeBasePage() {
           </p>
         </div>
         {!showCreateForm && (
-          <Button size="sm" onClick={() => setShowCreateForm(true)} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />
-            Create Knowledge Base
-          </Button>
+          <PlanGate>
+            <Button size="sm" onClick={() => setShowCreateForm(true)} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
+              Create Knowledge Base
+            </Button>
+          </PlanGate>
         )}
       </div>
 
@@ -263,10 +266,12 @@ export default function KnowledgeBasePage() {
               className="h-8 text-sm"
             />
           </div>
-          <Button size="sm" onClick={handleCreate} disabled={creating} className="h-8 text-xs">
-            {creating ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Plus className="mr-1.5 h-3 w-3" />}
-            Create
-          </Button>
+          <PlanGate>
+            <Button size="sm" onClick={handleCreate} disabled={creating} className="h-8 text-xs">
+              {creating ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Plus className="mr-1.5 h-3 w-3" />}
+              Create
+            </Button>
+          </PlanGate>
         </div>
       )}
 
@@ -298,9 +303,11 @@ export default function KnowledgeBasePage() {
                           onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(); }}
                           autoFocus
                         />
-                        <Button size="sm" onClick={handleSaveEdit} disabled={savingEdit} className="h-7 text-xs shrink-0">
-                          {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
-                        </Button>
+                        <PlanGate>
+                          <Button size="sm" onClick={handleSaveEdit} disabled={savingEdit} className="h-7 text-xs shrink-0">
+                            {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                          </Button>
+                        </PlanGate>
                         <Button variant="ghost" size="sm" onClick={() => setEditingKbId(null)} className="h-7 text-xs shrink-0">
                           Cancel
                         </Button>
@@ -320,23 +327,27 @@ export default function KnowledgeBasePage() {
                         {kb.entry_count} {kb.entry_count === 1 ? 'entry' : 'entries'}
                       </span>
                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleStartEdit(kb)}
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(kb.id)}
-                          disabled={isDeleting}
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        >
-                          {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                        </Button>
+                        <PlanGate>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStartEdit(kb)}
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </PlanGate>
+                        <PlanGate>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(kb.id)}
+                            disabled={isDeleting}
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          >
+                            {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                          </Button>
+                        </PlanGate>
                       </div>
                       {isExpanded ? (
                         <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -376,15 +387,17 @@ export default function KnowledgeBasePage() {
             <p className="mt-1 text-xs text-muted-foreground">
               Create a knowledge base to organize information for your AI agent.
             </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowCreateForm(true)}
-              className="mt-4"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Create Knowledge Base
-            </Button>
+            <PlanGate>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowCreateForm(true)}
+                className="mt-4"
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Create Knowledge Base
+              </Button>
+            </PlanGate>
           </div>
         )
       )}

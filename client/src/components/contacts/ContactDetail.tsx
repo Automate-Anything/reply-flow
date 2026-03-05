@@ -9,6 +9,7 @@ import type { Message } from '@/hooks/useMessages';
 import ContactNotes from './ContactNotes';
 import MessageBubble from '@/components/inbox/MessageBubble';
 import type { Contact } from '@/hooks/useContacts';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 interface ContactDetailProps {
   contact: Contact;
@@ -76,16 +77,20 @@ export default function ContactDetail({ contact, onEdit, onDelete, deleting, onB
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete} disabled={deleting}>
-            {deleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </Button>
+          <PlanGate>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </PlanGate>
+          <PlanGate>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete} disabled={deleting}>
+              {deleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
+          </PlanGate>
         </div>
       </div>
 

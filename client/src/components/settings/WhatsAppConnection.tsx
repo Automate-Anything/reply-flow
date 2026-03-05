@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Smartphone, Loader2, XCircle, RefreshCw, Trash2, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 type ConnectionState = 'idle' | 'provisioning' | 'qr_display' | 'error';
 
@@ -189,9 +190,11 @@ export default function WhatsAppConnection({ onCreated }: Props) {
                 if (e.key === 'Enter' && channelName.trim()) handleCreateChannel();
               }}
             />
-            <Button size="sm" onClick={handleCreateChannel} disabled={!channelName.trim()}>
-              Add Channel
-            </Button>
+            <PlanGate>
+              <Button size="sm" onClick={handleCreateChannel} disabled={!channelName.trim()}>
+                Add Channel
+              </Button>
+            </PlanGate>
           </div>
         </CardContent>
       </Card>

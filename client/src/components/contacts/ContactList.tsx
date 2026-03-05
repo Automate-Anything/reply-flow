@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Search, Plus, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Contact } from '@/hooks/useContacts';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 interface ContactListProps {
   contacts: Contact[];
@@ -36,9 +37,11 @@ export default function ContactList({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
-        <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={onAdd}>
-          <Plus className="h-4 w-4" />
-        </Button>
+        <PlanGate>
+          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={onAdd}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </PlanGate>
       </div>
 
       <div className="flex-1 overflow-y-auto p-1">

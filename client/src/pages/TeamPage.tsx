@@ -40,6 +40,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -462,15 +463,17 @@ export default function TeamPage() {
                     {/* Actions */}
                     <TableCell className="pr-6 text-right">
                       {canDeleteMember(member) && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => setMemberToRemove(member)}
-                        >
-                          <Trash2 className="size-4" />
-                          <span className="sr-only">Remove member</span>
-                        </Button>
+                        <PlanGate>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => setMemberToRemove(member)}
+                          >
+                            <Trash2 className="size-4" />
+                            <span className="sr-only">Remove member</span>
+                          </Button>
+                        </PlanGate>
                       )}
                     </TableCell>
                   </TableRow>
@@ -538,18 +541,20 @@ export default function TeamPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button
-                  onClick={handleInvite}
-                  disabled={inviting || !inviteEmail.trim() || !inviteRoleId}
-                  className="w-full sm:w-auto"
-                >
-                  {inviting ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Copy className="size-4" />
-                  )}
-                  Copy Invite Link
-                </Button>
+                <PlanGate>
+                  <Button
+                    onClick={handleInvite}
+                    disabled={inviting || !inviteEmail.trim() || !inviteRoleId}
+                    className="w-full sm:w-auto"
+                  >
+                    {inviting ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Copy className="size-4" />
+                    )}
+                    Copy Invite Link
+                  </Button>
+                </PlanGate>
               </div>
             </CardContent>
           </Card>
@@ -615,33 +620,37 @@ export default function TeamPage() {
                       </TableCell>
                       <TableCell className="pr-6">
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopyLink(inv.id)}
-                            disabled={copyingLink === inv.id}
-                          >
-                            {copyingLink === inv.id ? (
-                              <Loader2 className="size-3 animate-spin" />
-                            ) : (
-                              <Copy className="size-3" />
-                            )}
-                            Copy Link
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleCancelInvitation(inv.id)}
-                            disabled={cancellingInvitation === inv.id}
-                          >
-                            {cancellingInvitation === inv.id ? (
-                              <Loader2 className="size-3 animate-spin" />
-                            ) : (
-                              <Trash2 className="size-3" />
-                            )}
-                            Cancel
-                          </Button>
+                          <PlanGate>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCopyLink(inv.id)}
+                              disabled={copyingLink === inv.id}
+                            >
+                              {copyingLink === inv.id ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <Copy className="size-3" />
+                              )}
+                              Copy Link
+                            </Button>
+                          </PlanGate>
+                          <PlanGate>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleCancelInvitation(inv.id)}
+                              disabled={cancellingInvitation === inv.id}
+                            >
+                              {cancellingInvitation === inv.id ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="size-3" />
+                              )}
+                              Cancel
+                            </Button>
+                          </PlanGate>
                         </div>
                       </TableCell>
                     </TableRow>

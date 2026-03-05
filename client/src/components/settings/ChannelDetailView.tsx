@@ -19,6 +19,7 @@ import {
   Bot, ArrowLeft, Plus, AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { PlanGate } from '@/components/auth/PlanGate';
 import { useChannelAgent, type ChannelAgentSettings } from '@/hooks/useChannelAgent';
 import { useAgents } from '@/hooks/useAgents';
 import ScheduleSection from './sections/ScheduleSection';
@@ -358,10 +359,12 @@ export default function ChannelDetailPage() {
                   This WhatsApp channel is no longer connected. Reconnect to resume messaging.
                 </p>
               </div>
-              <Button size="sm" onClick={handleReconnect}>
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                Reconnect
-              </Button>
+              <PlanGate>
+                <Button size="sm" onClick={handleReconnect}>
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  Reconnect
+                </Button>
+              </PlanGate>
             </div>
           )}
 
@@ -401,16 +404,20 @@ export default function ChannelDetailPage() {
           {(isConnected || isAwaitingScan) && (
             <div className="flex flex-wrap items-center gap-2">
               {isConnected && (
-                <Button variant="outline" size="sm" onClick={handleLogout} disabled={disconnecting || deleting}>
-                  {disconnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-2 h-3.5 w-3.5" />}
-                  {disconnecting ? 'Disconnecting...' : 'Disconnect'}
-                </Button>
+                <PlanGate>
+                  <Button variant="outline" size="sm" onClick={handleLogout} disabled={disconnecting || deleting}>
+                    {disconnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-2 h-3.5 w-3.5" />}
+                    {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                  </Button>
+                </PlanGate>
               )}
               {isAwaitingScan && (
-                <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
-                  <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshingQR ? 'animate-spin' : ''}`} />
-                  {refreshingQR ? 'Refreshing...' : 'Refresh QR'}
-                </Button>
+                <PlanGate>
+                  <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
+                    <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshingQR ? 'animate-spin' : ''}`} />
+                    {refreshingQR ? 'Refreshing...' : 'Refresh QR'}
+                  </Button>
+                </PlanGate>
               )}
             </div>
           )}
@@ -425,25 +432,29 @@ export default function ChannelDetailPage() {
                 </div>
                 {confirmDelete ? (
                   <div className="flex items-center gap-2">
-                    <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
-                      {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
-                      {deleting ? 'Deleting...' : 'Confirm'}
-                    </Button>
+                    <PlanGate>
+                      <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+                        {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
+                        {deleting ? 'Deleting...' : 'Confirm'}
+                      </Button>
+                    </PlanGate>
                     <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>
                       Cancel
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => setConfirmDelete(true)}
-                    disabled={deleting || disconnecting}
-                  >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />
-                    Delete
-                  </Button>
+                  <PlanGate>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setConfirmDelete(true)}
+                      disabled={deleting || disconnecting}
+                    >
+                      <Trash2 className="mr-2 h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  </PlanGate>
                 )}
               </div>
             </div>
@@ -461,6 +472,7 @@ export default function ChannelDetailPage() {
                 {settings.is_enabled ? 'AI is responding on this channel' : 'AI is disabled for this channel'}
               </p>
             </div>
+            <PlanGate>
             <button
               onClick={handleToggleAI}
               disabled={toggling || loadingSettings}
@@ -476,6 +488,7 @@ export default function ChannelDetailPage() {
                 {toggling && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
               </span>
             </button>
+            </PlanGate>
           </div>
 
           {settings.is_enabled && (

@@ -15,6 +15,7 @@ import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import { usePlan } from '@/contexts/PlanContext';
 
 interface LabelOption {
   id: string;
@@ -54,6 +55,7 @@ export default function BulkActionBar({
   labels,
   onLabelsCreated,
 }: BulkActionBarProps) {
+  const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [loading, setLoading] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [creatingLabel, setCreatingLabel] = useState(false);
@@ -76,6 +78,10 @@ export default function BulkActionBar({
   };
 
   const executeBulk = async (action: string, value: unknown) => {
+    if (!planLoading && !hasActivePlan) {
+      openNoPlanModal();
+      return;
+    }
     setLoading(true);
     try {
       await api.post('/conversations/bulk', { sessionIds: selectedIds, action, value });

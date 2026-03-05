@@ -7,6 +7,7 @@ import { Bot, Plus, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAgents } from '@/hooks/useAgents';
 import { useSubscription } from '@/hooks/useSubscription';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 export default function AIAgentsPage() {
   const navigate = useNavigate();
@@ -44,15 +45,17 @@ export default function AIAgentsPage() {
             </p>
           )}
         </div>
-        <Button
-          size="sm"
-          onClick={handleCreate}
-          disabled={atLimit || loading}
-          title={atLimit ? `Agent limit reached (${agentLimit}). Upgrade your plan to add more.` : undefined}
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          Create Agent
-        </Button>
+        <PlanGate>
+          <Button
+            size="sm"
+            onClick={handleCreate}
+            disabled={atLimit || loading}
+            title={atLimit ? `Agent limit reached (${agentLimit}). Upgrade your plan to add more.` : undefined}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Create Agent
+          </Button>
+        </PlanGate>
       </div>
 
       {atLimit && !loading && (
@@ -81,10 +84,12 @@ export default function AIAgentsPage() {
             <p className="text-xs text-muted-foreground">
               Create your first AI agent to get started.
             </p>
-            <Button size="sm" variant="outline" className="mt-2" onClick={handleCreate} disabled={atLimit}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Create Agent
-            </Button>
+            <PlanGate>
+              <Button size="sm" variant="outline" className="mt-2" onClick={handleCreate} disabled={atLimit}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Create Agent
+              </Button>
+            </PlanGate>
           </CardContent>
         </Card>
       ) : (
