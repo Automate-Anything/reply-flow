@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PlanGate } from '@/components/auth/PlanGate';
 import {
   RotateCcw, Save, Loader2, Lock,
   Crown, Shield, UserCog, Users, User, Eye,
@@ -441,20 +442,22 @@ export default function RolePermissionsPage() {
               )}
             </div>
             {editable && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5"
-                disabled={resettingRoleId === selectedRole.id}
-                onClick={() => handleReset(selectedRole)}
-              >
-                {resettingRoleId === selectedRole.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RotateCcw className="h-3.5 w-3.5" />
-                )}
-                Reset to Defaults
-              </Button>
+              <PlanGate>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  disabled={resettingRoleId === selectedRole.id}
+                  onClick={() => handleReset(selectedRole)}
+                >
+                  {resettingRoleId === selectedRole.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
+                  Reset to Defaults
+                </Button>
+              </PlanGate>
             )}
           </div>
 
@@ -555,14 +558,16 @@ export default function RolePermissionsPage() {
               <Button variant="outline" size="sm" onClick={handleDiscard} disabled={saving}>
                 Discard
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
-                {saving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )}
-                Save Changes
-              </Button>
+              <PlanGate>
+                <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
+                  {saving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Save Changes
+                </Button>
+              </PlanGate>
             </div>
           </div>
         </div>

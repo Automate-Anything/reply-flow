@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
+import { PlanGate } from '@/components/auth/PlanGate';
 import type { ProfileData } from '@/hooks/useCompanyAI';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
@@ -61,10 +62,12 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
       <Button variant="outline" size="sm" onClick={reset}>
         Cancel
       </Button>
-      <Button size="sm" onClick={handleSaveFlow} disabled={saving}>
-        {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-        Save
-      </Button>
+      <PlanGate>
+        <Button size="sm" onClick={handleSaveFlow} disabled={saving}>
+          {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          Save
+        </Button>
+      </PlanGate>
     </div>
   ) : null;
 

@@ -5,6 +5,8 @@ import { Send, Zap, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCannedResponses, type CannedResponse } from '@/hooks/useCannedResponses';
 import type { Message } from '@/hooks/useMessages';
+import { PlanGate } from '@/components/auth/PlanGate';
+import { usePlan } from '@/contexts/PlanContext';
 
 interface MessageInputProps {
   onSend: (body: string) => Promise<void>;
@@ -49,6 +51,7 @@ function getSchedulePresets(): { label: string; getDate: () => Date }[] {
 }
 
 export default function MessageInput({ onSend, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply }: MessageInputProps) {
+  const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
   const [sending, setSending] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
@@ -176,6 +179,10 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (!planLoading && !hasActivePlan) {
+        openNoPlanModal();
+        return;
+      }
       handleSend();
     }
   };
@@ -278,15 +285,17 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
       {/* Schedule send button */}
       <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
         <PopoverTrigger asChild>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={!hasText || disabled || sending}
-            className="h-9 w-9 shrink-0"
-            title="Schedule message"
-          >
-            <Clock className="h-4 w-4" />
-          </Button>
+          <PlanGate>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={!hasText || disabled || sending}
+              className="h-9 w-9 shrink-0"
+              title="Schedule message"
+            >
+              <Clock className="h-4 w-4" />
+            </Button>
+          </PlanGate>
         </PopoverTrigger>
         <PopoverContent align="end" side="top" sideOffset={8} className="w-56 p-2">
           <p className="px-2 py-1 text-xs font-medium text-muted-foreground">Schedule send</p>
@@ -322,14 +331,16 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
         </PopoverContent>
       </Popover>
 
-      <Button
-        size="icon"
-        onClick={handleSend}
-        disabled={!hasText || disabled || sending}
-        className="h-9 w-9 shrink-0"
-      >
-        <Send className="h-4 w-4" />
-      </Button>
+      <PlanGate>
+        <Button
+          size="icon"
+          onClick={handleSend}
+          disabled={!hasText || disabled || sending}
+          className="h-9 w-9 shrink-0"
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      </PlanGate>
       </div>
     </div>
   );

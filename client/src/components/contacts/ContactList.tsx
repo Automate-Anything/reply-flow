@@ -18,6 +18,7 @@ import ContactFilters from './ContactFilters';
 import ContactListSelector from './ContactListSelector';
 import ContactBulkActionBar from './ContactBulkActionBar';
 import ContactContextMenu from './ContactContextMenu';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 interface ContactListProps {
   contacts: Contact[];
@@ -181,9 +182,11 @@ export default function ContactList({
         </Popover>
         {headerActions}
         <div className="flex-1" />
-        <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={onAdd}>
-          <Plus className="h-4 w-4" />
-        </Button>
+        <PlanGate>
+          <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={onAdd}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </PlanGate>
       </div>
 
       <ContactListSelector

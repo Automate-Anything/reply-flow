@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Loader2, Building2, Trash2, Clock } from 'lucide-react';
 import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 interface Company {
   id: string;
@@ -190,10 +191,12 @@ export default function CompanySettingsPage() {
 
           {canEdit && (
             <div className="flex justify-end border-t pt-4">
-              <Button onClick={handleSave} disabled={saving || !hasChanges}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
-              </Button>
+              <PlanGate>
+                <Button onClick={handleSave} disabled={saving || !hasChanges}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </PlanGate>
             </div>
           )}
         </CardContent>
@@ -270,10 +273,12 @@ export default function CompanySettingsPage() {
           <CardContent className="flex items-center justify-end">
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm">
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                  Delete
-                </Button>
+                <PlanGate>
+                  <Button variant="destructive" size="sm">
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                </PlanGate>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>

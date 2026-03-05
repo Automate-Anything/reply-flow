@@ -12,6 +12,9 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   BACKEND_URL: z.string().url().default('http://localhost:3001'),
+  CLIENT_URL: z.string().url().default('http://localhost:5173'),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

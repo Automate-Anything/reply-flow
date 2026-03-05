@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { checkPlanLimit } from './billing.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -53,6 +54,14 @@ router.get('/', requirePermission('ai_settings', 'view'), async (req, res, next)
 router.post('/', requirePermission('ai_settings', 'create'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
+
+    // Enforce plan limit
+    const limit = await checkPlanLimit(companyId, 'agents');
+    if (!limit.allowed) {
+      res.status(402).json({ error: 'Agent limit reached', used: limit.used, included: limit.included });
+      return;
+    }
+
     const { name, profile_data } = req.body;
 
     const { data, error } = await supabaseAdmin

@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { SessionProvider } from '@/contexts/SessionContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import AppLayout from '@/components/layout/AppLayout';
+import { PlanProvider } from '@/contexts/PlanContext';
 import AuthPage from '@/pages/AuthPage';
 import AuthCallback from '@/pages/AuthCallback';
 import DashboardPage from '@/pages/DashboardPage';
@@ -21,7 +22,6 @@ import AIAgentsPage from '@/pages/AIAgentsPage';
 import AgentDetailPage from '@/pages/AgentDetailPage';
 import SuperAdminPage from '@/pages/SuperAdminPage';
 
-
 function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
@@ -34,7 +34,7 @@ function App() {
               <Route path="/invite/:token" element={<AcceptInvitePage />} />
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route element={<ProtectedRoute />}>
-                <Route element={<AppLayout />}>
+                <Route element={<PlanProvider><AppLayout /></PlanProvider>}>
                   <Route index element={<DashboardPage />} />
                   <Route path="inbox" element={<InboxPage />} />
                   <Route path="contacts" element={<ContactsPage />} />

@@ -17,6 +17,7 @@ import api from '@/lib/api';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
+import { usePlan } from '@/contexts/PlanContext';
 
 interface LabelOption {
   id: string;
@@ -58,6 +59,7 @@ export default function BulkActionBar({
   onLabelsCreated,
   statuses = [],
 }: BulkActionBarProps) {
+  const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [loading, setLoading] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [creatingLabel, setCreatingLabel] = useState(false);
@@ -80,6 +82,10 @@ export default function BulkActionBar({
   };
 
   const executeBulk = async (action: string, value: unknown) => {
+    if (!planLoading && !hasActivePlan) {
+      openNoPlanModal();
+      return;
+    }
     setLoading(true);
     try {
       await api.post('/conversations/bulk', { sessionIds: selectedIds, action, value });

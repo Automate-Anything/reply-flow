@@ -23,6 +23,7 @@ import type { CustomFieldDefinition, CustomFieldValue } from '@/hooks/useCustomF
 import TagInput from './TagInput';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
+import { usePlan } from '@/contexts/PlanContext';
 
 interface ContactFormProps {
   contact?: Contact | null;
@@ -45,6 +46,7 @@ export default function ContactForm({
   onCreateTag,
   onDirtyChange,
 }: ContactFormProps) {
+  const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [form, setForm] = useState({
     phone_number: '',
     first_name: '',
@@ -121,6 +123,10 @@ export default function ContactForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!planLoading && !hasActivePlan) {
+      openNoPlanModal();
+      return;
+    }
     setError('');
     setPhoneError('');
     if (!form.phone_number.trim()) {

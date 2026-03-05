@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/.env*)",
+      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/.env*)",
+      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/client/.env*)",
+      "Bash(xargs grep -l \"billing\\\\|subscription\\\\|agent\\\\|channel\")",
+      "Bash(npm install stripe)"
+    ]
+  }
+}

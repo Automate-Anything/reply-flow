@@ -12,6 +12,7 @@ import MergeContactDialog from './MergeContactDialog';
 import type { Contact } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { CustomFieldValue } from '@/hooks/useCustomFields';
+import { PlanGate } from '@/components/auth/PlanGate';
 
 interface ContactSession {
   id: string;
@@ -152,23 +153,27 @@ export default function ContactDetail({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <ConfirmDialog
-            title={`Delete ${name}?`}
-            description="This will delete the contact and all associated data. This action cannot be undone."
-            onConfirm={onDelete}
-            loading={deleting}
-          >
-            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={deleting}>
-              {deleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
+          <PlanGate>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
+              <Pencil className="h-4 w-4" />
             </Button>
-          </ConfirmDialog>
+          </PlanGate>
+          <PlanGate>
+            <ConfirmDialog
+              title={`Delete ${name}?`}
+              description="This will delete the contact and all associated data. This action cannot be undone."
+              onConfirm={onDelete}
+              loading={deleting}
+            >
+              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={deleting}>
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            </ConfirmDialog>
+          </PlanGate>
         </div>
       </div>
 
