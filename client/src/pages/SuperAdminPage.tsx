@@ -558,7 +558,7 @@ function KnowledgeBasesTab() {
       promises.push(
         api.get<{ entries: KBEntryRow[] }>(`/super-admin/knowledge-bases/${kbId}/entries`)
           .then(({ data }) => setKBEntries((prev) => ({ ...prev, [kbId]: data.entries })))
-          .catch(() => toast.error('Failed to load entries'))
+          .catch(() => { toast.error('Failed to load entries'); })
           .finally(() => setLoadingEntries(null))
       );
     }
@@ -568,7 +568,7 @@ function KnowledgeBasesTab() {
       promises.push(
         api.get<KBAnalytics>(`/super-admin/knowledge-bases/${kbId}/analytics`)
           .then(({ data }) => setKBAnalytics((prev) => ({ ...prev, [kbId]: data })))
-          .catch(() => toast.error('Failed to load analytics'))
+          .catch(() => { toast.error('Failed to load analytics'); })
           .finally(() => setLoadingAnalytics(null))
       );
     }
