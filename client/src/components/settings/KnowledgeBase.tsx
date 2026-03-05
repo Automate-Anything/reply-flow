@@ -176,6 +176,7 @@ function EntryCard({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reembedding, setReembedding] = useState(false);
+  const [showFullContent, setShowFullContent] = useState(false);
 
   // Chunk viewer state
   const [showChunks, setShowChunks] = useState(false);
@@ -299,9 +300,20 @@ function EntryCard({
             </>
           ) : (
             <>
-              <div className="max-h-32 overflow-y-auto rounded bg-muted/50 p-2">
-                <p className="whitespace-pre-wrap text-xs text-muted-foreground">{entry.content.slice(0, 500)}{entry.content.length > 500 ? '...' : ''}</p>
+              <div className={cn("overflow-y-auto rounded bg-muted/50 p-2", !showFullContent && "max-h-32")}>
+                <p className="whitespace-pre-wrap text-xs text-muted-foreground">
+                  {showFullContent ? entry.content : entry.content.slice(0, 500)}{!showFullContent && entry.content.length > 500 ? '...' : ''}
+                </p>
               </div>
+              {entry.content.length > 500 && (
+                <button
+                  type="button"
+                  onClick={() => setShowFullContent(!showFullContent)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {showFullContent ? 'Show less' : 'Show more'}
+                </button>
+              )}
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-7 text-xs">
                   Edit
