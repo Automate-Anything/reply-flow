@@ -441,7 +441,14 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
     }
 
     // Process document: extract, clean, structure, extract metadata
-    const processed = await processDocument(file.buffer, file.originalname, file.mimetype);
+    let processed;
+    try {
+      processed = await processDocument(file.buffer, file.originalname, file.mimetype);
+    } catch (docErr: any) {
+      console.error('Document processing failed:', docErr);
+      res.status(400).json({ error: `Failed to process file: ${docErr.message || 'Unknown error'}` });
+      return;
+    }
 
     if (!processed.cleanedText.trim()) {
       res.status(400).json({ error: 'Could not extract text from file' });
