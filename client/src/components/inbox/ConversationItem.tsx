@@ -21,11 +21,11 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: 'bg-blue-500',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending',
-  resolved: 'Resolved',
-  closed: 'Closed',
-};
+// Show badge for any status except the default "open"
+function getStatusLabel(status: string): string | null {
+  if (status === 'open') return null;
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
 
 function formatSnoozeUntil(dateStr: string): string {
   const date = new Date(dateStr);
@@ -66,7 +66,7 @@ export default function ConversationItem({
   const name = conversation.contact_name || conversation.phone_number;
   const initial = (name[0] || '?').toUpperCase();
   const priorityColor = PRIORITY_COLORS[conversation.priority];
-  const statusLabel = STATUS_LABELS[conversation.status];
+  const statusLabel = getStatusLabel(conversation.status);
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
 

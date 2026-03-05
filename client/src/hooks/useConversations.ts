@@ -24,7 +24,7 @@ export interface Conversation {
   last_message_at: string | null;
   last_message_direction: string | null;
   last_message_sender: string | null;
-  status: 'open' | 'pending' | 'resolved' | 'closed';
+  status: string;
   priority: 'none' | 'low' | 'medium' | 'high' | 'urgent';
   is_archived: boolean;
   is_starred: boolean;

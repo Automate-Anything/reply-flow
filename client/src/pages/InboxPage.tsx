@@ -6,6 +6,7 @@ import { useConversations, type Conversation, type ConversationFilters } from '@
 import { useMessages, type Message } from '@/hooks/useMessages';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
+import { useConversationStatuses } from '@/hooks/useConversationStatuses';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationHeader from '@/components/inbox/ConversationHeader';
 import MessageThread from '@/components/inbox/MessageThread';
@@ -30,6 +31,7 @@ export default function InboxPage() {
     activeConversation?.id ?? null
   );
   const { members: teamMembers } = useTeamMembers();
+  const { statuses: conversationStatuses } = useConversationStatuses();
 
   // Fetch labels for bulk actions
   const refreshLabels = useCallback(() => {
@@ -176,6 +178,7 @@ export default function InboxPage() {
             labels={allLabels}
             onLabelsCreated={refreshLabels}
             onOpenInboxTools={() => setInboxToolsOpen(true)}
+            statuses={conversationStatuses}
           />
         )}
       </div>
@@ -191,6 +194,7 @@ export default function InboxPage() {
               onBack={handleBack}
               onConversationUpdate={handleConversationUpdate}
               teamMembers={teamMembers}
+              statuses={conversationStatuses}
               onOpenContact={() => setContactPanelOpen(true)}
               onToggleNotes={() => setNotesPanelOpen((prev) => !prev)}
               notesPanelOpen={notesPanelOpen}

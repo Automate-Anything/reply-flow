@@ -166,12 +166,12 @@ export function useCompanyKB() {
   );
 
   const searchKB = useCallback(
-    async (query: string, knowledgeBaseIds?: string[]): Promise<KBSearchResult[]> => {
+    async (query: string, knowledgeBaseIds?: string[]): Promise<{ results: KBSearchResult[]; queryClassification?: { method: string; reasoning: string } }> => {
       const { data } = await api.post('/ai/kb/search', {
         query,
         knowledge_base_ids: knowledgeBaseIds,
       });
-      return data.results;
+      return { results: data.results, queryClassification: data.queryClassification };
     },
     []
   );

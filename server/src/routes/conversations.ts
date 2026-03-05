@@ -283,15 +283,23 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
     if (status !== undefined) {
-      const validStatuses = ['open', 'pending', 'resolved', 'closed'];
-      if (!validStatuses.includes(status)) {
-        res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      // Look up the status in conversation_statuses for this company
+      const { data: statusRow } = await supabaseAdmin
+        .from('conversation_statuses')
+        .select('id, name, "group"')
+        .eq('company_id', companyId)
+        .eq('name', status)
+        .eq('is_deleted', false)
+        .single();
+
+      if (!statusRow) {
+        res.status(400).json({ error: `Invalid status: "${status}"` });
         return;
       }
       updates.status = status;
 
-      // Session boundary: end session when resolved/closed, reopen when open/pending
-      if (status === 'resolved' || status === 'closed') {
+      // Session boundary based on status group
+      if (statusRow.group === 'closed') {
         updates.ended_at = new Date().toISOString();
       } else {
         updates.ended_at = null;
@@ -431,17 +439,25 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
           .in('id', validIds);
         break;
       case 'status': {
-        const validStatuses = ['open', 'pending', 'resolved', 'closed'];
-        if (!validStatuses.includes(value)) {
-          res.status(400).json({ error: 'Invalid status' });
+        // Look up the status in conversation_statuses for this company
+        const { data: statusRow } = await supabaseAdmin
+          .from('conversation_statuses')
+          .select('id, name, "group"')
+          .eq('company_id', companyId)
+          .eq('name', value)
+          .eq('is_deleted', false)
+          .single();
+
+        if (!statusRow) {
+          res.status(400).json({ error: `Invalid status: "${value}"` });
           return;
         }
         const statusUpdate: Record<string, unknown> = {
           status: value,
           updated_at: new Date().toISOString(),
         };
-        // Session boundary: end sessions when bulk-resolving/closing
-        if (value === 'resolved' || value === 'closed') {
+        // Session boundary based on status group
+        if (statusRow.group === 'closed') {
           statusUpdate.ended_at = new Date().toISOString();
         } else {
           statusUpdate.ended_at = null;

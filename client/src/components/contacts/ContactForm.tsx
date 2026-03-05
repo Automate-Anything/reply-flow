@@ -138,7 +138,10 @@ export default function ContactForm({
       }
       onSave();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save contact';
+      const axiosErr = err as { response?: { data?: { error?: string; message?: string } } };
+      const message = axiosErr.response?.data?.message
+        || axiosErr.response?.data?.error
+        || (err instanceof Error ? err.message : 'Failed to save contact');
       setError(message);
       toast.error(message);
     } finally {
@@ -154,29 +157,17 @@ export default function ContactForm({
   };
 
   return (
-    <Card className="mx-auto w-full max-w-lg">
+    <Card className="w-full rounded-none border-0 shadow-none bg-transparent">
       <CardHeader>
         <CardTitle>{contact ? 'Edit Contact' : 'New Contact'}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="max-w-xl">
         {error && (
           <div className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </div>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Phone Number *</Label>
-            <PhoneInput
-              value={form.phone_number}
-              onChange={(val) => {
-                update('phone_number', val);
-                if (phoneError) setPhoneError('');
-              }}
-              error={phoneError}
-              disabled={saving}
-            />
-          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>First Name</Label>
@@ -195,14 +186,28 @@ export default function ContactForm({
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => update('email', e.target.value)}
-              placeholder="john@example.com"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="john@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone Number *</Label>
+              <PhoneInput
+                value={form.phone_number}
+                onChange={(val) => {
+                  update('phone_number', val);
+                  if (phoneError) setPhoneError('');
+                }}
+                error={phoneError}
+                disabled={saving}
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Company</Label>
@@ -210,18 +215,6 @@ export default function ContactForm({
               value={form.company}
               onChange={(e) => update('company', e.target.value)}
               placeholder="Acme Inc."
-            />
-          </div>
-
-          {/* Tags */}
-          <div className="space-y-2">
-            <Label>Tags</Label>
-            <TagInput
-              value={form.tags}
-              onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
-              availableTags={availableTags}
-              onCreateTag={onCreateTag}
-              disabled={saving}
             />
           </div>
 
@@ -257,6 +250,18 @@ export default function ContactForm({
               value={form.address_country}
               onChange={(e) => update('address_country', e.target.value)}
               placeholder="Country"
+            />
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-2">
+            <Label>Tags</Label>
+            <TagInput
+              value={form.tags}
+              onChange={(tags) => setForm((prev) => ({ ...prev, tags }))}
+              availableTags={availableTags}
+              onCreateTag={onCreateTag}
+              disabled={saving}
             />
           </div>
 

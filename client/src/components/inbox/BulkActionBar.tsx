@@ -15,6 +15,7 @@ import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
 interface LabelOption {
   id: string;
@@ -29,9 +30,10 @@ interface BulkActionBarProps {
   teamMembers: TeamMember[];
   labels: LabelOption[];
   onLabelsCreated?: () => void;
+  statuses?: ConversationStatus[];
 }
 
-const STATUS_OPTIONS = [
+const FALLBACK_STATUSES = [
   { value: 'open', label: 'Open' },
   { value: 'pending', label: 'Pending' },
   { value: 'resolved', label: 'Resolved' },
@@ -53,6 +55,7 @@ export default function BulkActionBar({
   teamMembers,
   labels,
   onLabelsCreated,
+  statuses = [],
 }: BulkActionBarProps) {
   const [loading, setLoading] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
@@ -125,7 +128,10 @@ export default function BulkActionBar({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {STATUS_OPTIONS.map((s) => (
+          {(statuses.length > 0
+            ? statuses.map((s) => ({ value: s.name, label: s.name }))
+            : FALLBACK_STATUSES
+          ).map((s) => (
             <DropdownMenuItem key={s.value} onClick={() => executeBulk('status', s.value)}>
               {s.label}
             </DropdownMenuItem>

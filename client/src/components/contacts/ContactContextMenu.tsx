@@ -98,23 +98,43 @@ export default function ContactContextMenu({
         </ContextMenuSub>
 
         {/* Lists */}
-        {availableLists.length > 0 && (
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <List className="mr-2 h-3.5 w-3.5" />
-              Lists
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuSub>
-                <ContextMenuSubTrigger>Add to list</ContextMenuSubTrigger>
-                <ContextMenuSubContent>
-                  {availableLists.map((list) => (
-                    <ContextMenuItem
-                      key={list.id}
-                      onClick={() => bulkAction('list_add', list.id)}
-                    >
-                      <span
-                        className="mr-2 h-2 w-2 rounded-full"
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <List className="mr-2 h-3.5 w-3.5" />
+            Lists
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {availableLists.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">No lists</div>
+            ) : (
+              <>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>Add to list</ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    {availableLists.map((list) => (
+                      <ContextMenuItem
+                        key={list.id}
+                        onClick={() => bulkAction('list_add', list.id)}
+                      >
+                        <span
+                          className="mr-2 h-2 w-2 rounded-full"
+                          style={{ backgroundColor: list.color }}
+                        />
+                        {list.name}
+                      </ContextMenuItem>
+                    ))}
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>Remove from list</ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    {availableLists.map((list) => (
+                      <ContextMenuItem
+                        key={list.id}
+                        onClick={() => bulkAction('list_remove', list.id)}
+                      >
+                        <span
+                          className="mr-2 h-2 w-2 rounded-full"
                         style={{ backgroundColor: list.color }}
                       />
                       {list.name}
@@ -122,26 +142,10 @@ export default function ContactContextMenu({
                   ))}
                 </ContextMenuSubContent>
               </ContextMenuSub>
-              <ContextMenuSub>
-                <ContextMenuSubTrigger>Remove from list</ContextMenuSubTrigger>
-                <ContextMenuSubContent>
-                  {availableLists.map((list) => (
-                    <ContextMenuItem
-                      key={list.id}
-                      onClick={() => bulkAction('list_remove', list.id)}
-                    >
-                      <span
-                        className="mr-2 h-2 w-2 rounded-full"
-                        style={{ backgroundColor: list.color }}
-                      />
-                      {list.name}
-                    </ContextMenuItem>
-                  ))}
-                </ContextMenuSubContent>
-              </ContextMenuSub>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        )}
+              </>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
 
         <ContextMenuSeparator />
 

@@ -735,14 +735,14 @@ async function vectorOnlySearch(
 
   if (error) throw error;
 
-  return (data || []).map((row: Record<string, unknown>) => ({
+  return (data || []).map((row: Record<string, unknown>, i: number) => ({
     id: row.id as string,
     entryId: row.entry_id as string,
     knowledgeBaseId: row.knowledge_base_id as string,
     chunkIndex: row.chunk_index as number,
     content: row.content as string,
     metadata: (row.metadata as Record<string, unknown>) || {},
-    vectorRank: 0,
+    vectorRank: i + 1,
     ftsRank: 0,
     rrfScore: row.similarity as number,
   }));
@@ -763,7 +763,7 @@ async function ftsOnlySearch(
 
   if (error) throw error;
 
-  return (data || []).map((row: Record<string, unknown>) => ({
+  return (data || []).map((row: Record<string, unknown>, i: number) => ({
     id: row.id as string,
     entryId: row.entry_id as string,
     knowledgeBaseId: row.knowledge_base_id as string,
@@ -771,7 +771,7 @@ async function ftsOnlySearch(
     content: row.content as string,
     metadata: (row.metadata as Record<string, unknown>) || {},
     vectorRank: 0,
-    ftsRank: 0,
+    ftsRank: i + 1,
     rrfScore: row.fts_rank as number,
   }));
 }

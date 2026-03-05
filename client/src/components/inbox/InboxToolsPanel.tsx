@@ -4,13 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import CannedResponsesManager from '@/components/settings/CannedResponsesManager';
 import LabelsManager from '@/components/settings/LabelsManager';
+import StatusesManager from '@/components/settings/StatusesManager';
 
 interface InboxToolsPanelProps {
   onClose: () => void;
 }
 
 export default function InboxToolsPanel({ onClose }: InboxToolsPanelProps) {
-  const [tab, setTab] = useState<'quick-replies' | 'labels'>('quick-replies');
+  const [tab, setTab] = useState<'quick-replies' | 'labels' | 'statuses'>('quick-replies');
 
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
@@ -25,6 +26,7 @@ export default function InboxToolsPanel({ onClose }: InboxToolsPanelProps) {
         <TabsList className="mx-3 mt-3 w-auto">
           <TabsTrigger value="quick-replies" className="flex-1">Quick Replies</TabsTrigger>
           <TabsTrigger value="labels" className="flex-1">Labels</TabsTrigger>
+          <TabsTrigger value="statuses" className="flex-1">Statuses</TabsTrigger>
         </TabsList>
 
         <TabsContent value="quick-replies" className="flex-1 overflow-y-auto p-3">
@@ -33,6 +35,10 @@ export default function InboxToolsPanel({ onClose }: InboxToolsPanelProps) {
 
         <TabsContent value="labels" className="flex-1 overflow-y-auto p-3">
           <LabelsManager />
+        </TabsContent>
+
+        <TabsContent value="statuses" className="flex-1 overflow-y-auto p-3">
+          <StatusesManager />
         </TabsContent>
       </Tabs>
     </div>

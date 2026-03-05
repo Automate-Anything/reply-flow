@@ -24,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -270,12 +271,14 @@ export default function ContactsPage() {
                       Manage Fields
                     </DropdownMenuItem>
                   </PermissionGate>
+                  <DropdownMenuSeparator />
                   <PermissionGate resource="contacts" action="edit">
                     <DropdownMenuItem onClick={() => setDuplicateScannerOpen(true)}>
                       <GitMerge className="mr-2 h-4 w-4" />
                       Find Duplicates
                     </DropdownMenuItem>
                   </PermissionGate>
+                  <DropdownMenuSeparator />
                   <PermissionGate resource="contacts" action="create">
                     <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
                       <Upload className="mr-2 h-4 w-4" />
@@ -295,7 +298,7 @@ export default function ContactsPage() {
       </div>
 
       {view === 'new' || view === 'edit' ? (
-        <div className="flex flex-1 items-start justify-center overflow-auto p-6">
+        <div className="flex flex-1 flex-col overflow-auto pl-6">
           <ContactForm
             contact={view === 'edit' ? activeContact : null}
             onSave={handleFormSave}

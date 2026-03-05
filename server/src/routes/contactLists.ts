@@ -40,6 +40,7 @@ router.get('/', requirePermission('contact_lists', 'view'), async (req, res, nex
 
     res.json({ lists });
   } catch (err) {
+    console.error('[contact-lists GET] Error:', err);
     next(err);
   }
 });

@@ -24,6 +24,7 @@ import contactTagsRouter from './routes/contactTags.js';
 import contactListsRouter from './routes/contactLists.js';
 import customFieldsRouter from './routes/customFields.js';
 import conversationNotesRouter from './routes/conversationNotes.js';
+import conversationStatusesRouter from './routes/conversationStatuses.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
 import seedRouter from './routes/seed.js';
 import { startScheduler } from './services/scheduler.js';
@@ -69,6 +70,7 @@ app.use('/api/me', meRouter);
 app.use('/api/super-admin', superAdminRouter);
 
 app.use('/api/conversation-notes', conversationNotesRouter);
+app.use('/api/conversation-statuses', conversationStatusesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
 app.use('/api/seed', seedRouter);
 

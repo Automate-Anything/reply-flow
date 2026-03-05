@@ -472,7 +472,7 @@ router.post('/import/execute', requirePermission('contacts', 'create'), async (r
         } else {
           toInsert.push({
             company_id: companyId,
-            created_by: userId,
+            user_id: userId,
             phone_number: phone,
             first_name: contactData.first_name || null,
             last_name: contactData.last_name || null,

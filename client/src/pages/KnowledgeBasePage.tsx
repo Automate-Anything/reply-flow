@@ -49,6 +49,7 @@ export default function KnowledgeBasePage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<KBSearchResult[]>([]);
+  const [searchClassification, setSearchClassification] = useState<{ method: string; reasoning: string } | null>(null);
   const [searching, setSearching] = useState(false);
 
   const handleCreate = async () => {
@@ -191,9 +192,11 @@ export default function KnowledgeBasePage() {
     if (!q) return;
     setSearching(true);
     setSearchResults([]);
+    setSearchClassification(null);
     try {
-      const results = await searchKB(q);
+      const { results, queryClassification } = await searchKB(q);
       setSearchResults(results);
+      setSearchClassification(queryClassification ?? null);
     } catch {
       toast.error('Search failed');
     } finally {
@@ -440,20 +443,31 @@ export default function KnowledgeBasePage() {
 
               {!searching && searchResults.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">{searchResults.length} results</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground">{searchResults.length} results</p>
+                    {searchClassification && (
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary" title={searchClassification.reasoning}>
+                        {searchClassification.method.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
                   {searchResults.map((result, i) => (
                     <div key={result.id} className="rounded border bg-muted/30 p-2.5 space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">#{i + 1}</span>
                         <span className="text-[11px] text-muted-foreground">
-                          RRF: {result.rrfScore.toFixed(4)}
+                          {searchClassification?.method === 'vector' ? 'Sim' : searchClassification?.method === 'fts' ? 'FTS' : 'RRF'}: {result.rrfScore.toFixed(4)}
                         </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          Vector: #{result.vectorRank}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          FTS: #{result.ftsRank}
-                        </span>
+                        {result.vectorRank > 0 && (
+                          <span className="text-[11px] text-muted-foreground">
+                            Vector: #{result.vectorRank}
+                          </span>
+                        )}
+                        {result.ftsRank > 0 && (
+                          <span className="text-[11px] text-muted-foreground">
+                            FTS: #{result.ftsRank}
+                          </span>
+                        )}
                       </div>
                       <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
                         {result.content.slice(0, 300)}{result.content.length > 300 ? '...' : ''}

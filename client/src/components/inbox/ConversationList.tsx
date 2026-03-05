@@ -9,6 +9,7 @@ import ConversationFiltersPopover from './ConversationFilters';
 import BulkActionBar from './BulkActionBar';
 import type { Conversation, ConversationFilters } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
 interface LabelOption {
   id: string;
@@ -37,6 +38,7 @@ interface ConversationListProps {
   labels: LabelOption[];
   onLabelsCreated?: () => void;
   onOpenInboxTools?: () => void;
+  statuses?: ConversationStatus[];
 }
 
 export default function ConversationList({
@@ -59,6 +61,7 @@ export default function ConversationList({
   labels,
   onLabelsCreated,
   onOpenInboxTools,
+  statuses = [],
 }: ConversationListProps) {
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
@@ -73,7 +76,7 @@ export default function ConversationList({
               onChange={(e) => onSearchChange(e.target.value)}
             />
           </div>
-          <ConversationFiltersPopover filters={filters} onFiltersChange={onFiltersChange} />
+          <ConversationFiltersPopover filters={filters} onFiltersChange={onFiltersChange} statuses={statuses} />
           {onOpenInboxTools && (
             <Button
               variant="ghost"
@@ -141,6 +144,7 @@ export default function ConversationList({
                 key={conv.id}
                 conversation={conv}
                 teamMembers={teamMembers}
+                statuses={statuses}
                 onUpdate={onRefresh}
               >
                 <ConversationItem
@@ -178,6 +182,7 @@ export default function ConversationList({
           teamMembers={teamMembers}
           labels={labels}
           onLabelsCreated={onLabelsCreated}
+          statuses={statuses}
         />
       )}
     </div>

@@ -575,7 +575,7 @@ router.post('/', requirePermission('contacts', 'create'), async (req, res, next)
       .from('contacts')
       .insert({
         company_id: companyId,
-        created_by: req.userId,
+        user_id: req.userId,
         phone_number: phoneResult.e164,
         first_name: first_name || null,
         last_name: last_name || null,

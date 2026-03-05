@@ -35,6 +35,7 @@ import api from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 import AIToggle from '@/components/ai/AIToggle';
 
 interface ConversationHeaderProps {
@@ -46,6 +47,7 @@ interface ConversationHeaderProps {
   onOpenContact?: () => void;
   onToggleNotes?: () => void;
   teamMembers?: TeamMember[];
+  statuses?: ConversationStatus[];
   notesPanelOpen?: boolean;
   onLabelsCreated?: () => void;
 }
@@ -56,11 +58,11 @@ interface LabelOption {
   color: string;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'open', label: 'Open', color: 'text-green-600' },
-  { value: 'pending', label: 'Pending', color: 'text-yellow-600' },
-  { value: 'resolved', label: 'Resolved', color: 'text-blue-600' },
-  { value: 'closed', label: 'Closed', color: 'text-gray-500' },
+const FALLBACK_STATUSES = [
+  { value: 'open', label: 'Open', color: '#22C55E' },
+  { value: 'pending', label: 'Pending', color: '#EAB308' },
+  { value: 'resolved', label: 'Resolved', color: '#3B82F6' },
+  { value: 'closed', label: 'Closed', color: '#6B7280' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -108,6 +110,7 @@ export default function ConversationHeader({
   onOpenContact,
   onToggleNotes,
   teamMembers = [],
+  statuses = [],
   notesPanelOpen,
   onLabelsCreated,
 }: ConversationHeaderProps) {
@@ -187,7 +190,10 @@ export default function ConversationHeader({
     }
   };
 
-  const currentStatus = STATUS_OPTIONS.find((s) => s.value === conversation.status);
+  const statusOptions = statuses.length > 0
+    ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
+    : FALLBACK_STATUSES;
+  const currentStatus = statusOptions.find((s) => s.value === conversation.status);
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
 
@@ -364,16 +370,16 @@ export default function ConversationHeader({
               disabled={patchLoading}
               title={`Status: ${currentStatus?.label}`}
             >
-              <CircleDot className={cn('h-4 w-4', currentStatus?.color)} />
+              <CircleDot className="h-4 w-4" style={{ color: currentStatus?.color }} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {STATUS_OPTIONS.map((s) => (
+            {statusOptions.map((s) => (
               <DropdownMenuItem
                 key={s.value}
                 onClick={() => patchConversation({ status: s.value })}
               >
-                <CircleDot className={cn('mr-2 h-3 w-3', s.color)} />
+                <CircleDot className="mr-2 h-3 w-3" style={{ color: s.color }} />
                 {s.label}
                 {conversation.status === s.value && <Check className="ml-auto h-3 w-3" />}
               </DropdownMenuItem>

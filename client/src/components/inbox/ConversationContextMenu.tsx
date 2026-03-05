@@ -26,19 +26,21 @@ import api from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
 interface ConversationContextMenuProps {
   conversation: Conversation;
   teamMembers: TeamMember[];
+  statuses?: ConversationStatus[];
   onUpdate: () => void;
   children: React.ReactNode;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'open', label: 'Open', color: 'text-green-600' },
-  { value: 'pending', label: 'Pending', color: 'text-yellow-600' },
-  { value: 'resolved', label: 'Resolved', color: 'text-blue-600' },
-  { value: 'closed', label: 'Closed', color: 'text-gray-500' },
+const FALLBACK_STATUSES = [
+  { value: 'open', label: 'Open', color: '#22C55E' },
+  { value: 'pending', label: 'Pending', color: '#EAB308' },
+  { value: 'resolved', label: 'Resolved', color: '#3B82F6' },
+  { value: 'closed', label: 'Closed', color: '#6B7280' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -78,9 +80,13 @@ function getSnoozeUntil(option: (typeof SNOOZE_OPTIONS)[number]): string {
 export default function ConversationContextMenu({
   conversation,
   teamMembers,
+  statuses = [],
   onUpdate,
   children,
 }: ConversationContextMenuProps) {
+  const statusOptions = statuses.length > 0
+    ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
+    : FALLBACK_STATUSES;
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
@@ -162,9 +168,9 @@ export default function ConversationContextMenu({
             Status
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            {STATUS_OPTIONS.map((s) => (
+            {statusOptions.map((s) => (
               <ContextMenuItem key={s.value} onClick={() => patch({ status: s.value })}>
-                <CircleDot className={cn('mr-2 h-3 w-3', s.color)} />
+                <CircleDot className="mr-2 h-3 w-3" style={{ color: s.color }} />
                 {s.label}
                 {conversation.status === s.value && <Check className="ml-auto h-3 w-3" />}
               </ContextMenuItem>

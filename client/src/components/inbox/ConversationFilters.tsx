@@ -15,15 +15,18 @@ import {
 import { ArrowDownUp, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationFilters as FilterState } from '@/hooks/useConversations';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
 interface ConversationFiltersProps {
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
+  statuses?: ConversationStatus[];
 }
 
 export default function ConversationFilters({
   filters,
   onFiltersChange,
+  statuses = [],
 }: ConversationFiltersProps) {
   const updateFilter = (key: keyof FilterState, value: unknown) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -92,10 +95,17 @@ export default function ConversationFilters({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
+                  {statuses.length > 0
+                    ? statuses.map((s) => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))
+                    : <>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="resolved">Resolved</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </>
+                  }
                   <SelectItem value="snoozed">Snoozed</SelectItem>
                 </SelectContent>
               </Select>
