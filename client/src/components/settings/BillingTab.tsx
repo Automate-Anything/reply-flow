@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
+import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -108,14 +108,23 @@ function formatDate(dateStr: string) {
   });
 }
 
+function daysRemaining(isoDate: string): number {
+  const now = new Date();
+  const end = new Date(isoDate);
+  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
 export default function BillingTab() {
   const [activePlanId, setActivePlanId] = useState<PlanId | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [currentPeriodEnd, setCurrentPeriodEnd] = useState<string | null>(null);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [selected, setSelected] = useState<PlanId | null>(null);
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
+  const [skippingTrial, setSkippingTrial] = useState(false);
   const [changingPlan, setChangingPlan] = useState<PlanId | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [reactivating, setReactivating] = useState(false);
@@ -133,10 +142,16 @@ export default function BillingTab() {
     return api.get('/billing/subscription')
       .then(({ data }) => {
         if (data.subscription) {
-          setActivePlanId(data.subscription.plan_id);
-          setHasStripeSubscription(!!data.subscription.stripe_subscription_id);
-          setCancelAtPeriodEnd(!!data.subscription.cancel_at_period_end);
-          setCurrentPeriodEnd(data.subscription.current_period_end ?? null);
+          const sub = data.subscription;
+          setActivePlanId(sub.plan_id as PlanId);
+          setSubscriptionStatus(sub.status);
+          setHasStripeSubscription(!!sub.stripe_subscription_id);
+          setCancelAtPeriodEnd(!!sub.cancel_at_period_end);
+          setCurrentPeriodEnd(sub.current_period_end ?? null);
+          setTrialEndsAt(sub.trial_ends_at ?? null);
+        } else {
+          setSubscriptionStatus(null);
+          setActivePlanId(null);
         }
       })
       .catch(() => {});
@@ -146,16 +161,32 @@ export default function BillingTab() {
     fetchSubscription().finally(() => setLoading(false));
   }, []);
 
-  // Redirect to Stripe Checkout for new subscribers
-  const handleCheckout = async () => {
-    if (!selected) return;
+  // Redirect to Stripe Checkout — with_trial: true adds a 7-day free trial period
+  const handleCheckout = async (planId: PlanId, withTrial = false) => {
     setRedirecting(true);
     try {
-      const { data } = await api.post('/billing/create-checkout-session', { plan_id: selected });
+      const { data } = await api.post('/billing/create-checkout-session', {
+        plan_id: planId,
+        with_trial: withTrial,
+      });
       window.location.href = data.url;
-    } catch {
-      toast.error('Failed to start checkout. Please try again.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to start checkout. Please try again.');
       setRedirecting(false);
+    }
+  };
+
+  // End the trial immediately — first charge fires now, full plan limits apply
+  const handleSkipTrial = async () => {
+    setSkippingTrial(true);
+    try {
+      await api.post('/billing/skip-trial');
+      toast.success('Trial ended. Your full plan is now active.');
+      await fetchSubscription();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to skip trial. Please try again.');
+    } finally {
+      setSkippingTrial(false);
     }
   };
 
@@ -186,14 +217,18 @@ export default function BillingTab() {
     }
   };
 
-  // Cancel at period end
+  // Cancel at period end (if trialing, cancels at trial end — no charge)
   const handleCancel = async () => {
     setShowCancelDialog(false);
     setCancelling(true);
     try {
       await api.post('/billing/cancel');
       setCancelAtPeriodEnd(true);
-      toast.success('Your subscription will be cancelled at the end of the billing period.');
+      toast.success(
+        isTrialing
+          ? 'Trial cancelled. You will not be charged.'
+          : 'Your subscription will be cancelled at the end of the billing period.'
+      );
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? 'Failed to cancel. Please try again.');
     } finally {
@@ -219,18 +254,77 @@ export default function BillingTab() {
     return <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>;
   }
 
+  const isTrialing = subscriptionStatus === 'trialing';
+  // A user who had any subscription (even cancelled) has used their trial eligibility
+  const hasHadSubscription = subscriptionStatus !== null;
+  const hasNoSubscription = subscriptionStatus === null;
   const pendingPlan = PLANS.find((p) => p.id === selected);
+  const trialDaysLeft = trialEndsAt ? daysRemaining(trialEndsAt) : 0;
+  const activePlanName = PLANS.find((p) => p.id === activePlanId)?.name;
 
   return (
     <div className="space-y-8">
-      {/* Current plan banner */}
-      {activePlanId && (
+      {/* Trial banner */}
+      {isTrialing && trialEndsAt && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <div className="text-sm">
+                <p className="font-semibold text-blue-900 dark:text-blue-100">
+                  {trialDaysLeft > 0
+                    ? `${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left in your free trial`
+                    : 'Your free trial ends today'}
+                  {activePlanName && (
+                    <span className="font-normal text-blue-700 dark:text-blue-300"> — {activePlanName} plan</span>
+                  )}
+                </p>
+                <p className="mt-0.5 text-blue-700 dark:text-blue-300">
+                  Trial limits: 1 WhatsApp channel · 1 AI agent · 100 messages · 3 KB pages.
+                  {trialEndsAt && (
+                    <> Your {activePlanName} plan starts automatically on <strong>{formatDate(trialEndsAt)}</strong>.</>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowCancelDialog(true)}
+                disabled={cancelling || cancelAtPeriodEnd}
+                className="border-blue-300 text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300"
+              >
+                {cancelAtPeriodEnd ? 'Cancellation Scheduled' : 'Cancel Trial'}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSkipTrial}
+                disabled={skippingTrial || cancelAtPeriodEnd}
+              >
+                {skippingTrial ? 'Activating…' : 'Skip Trial & Start Now'}
+              </Button>
+            </div>
+          </div>
+          {cancelAtPeriodEnd && (
+            <div className="mt-3 flex items-center justify-between border-t border-blue-200 pt-3 text-sm dark:border-blue-800">
+              <span className="text-blue-700 dark:text-blue-300">
+                Trial will end on <strong>{trialEndsAt ? formatDate(trialEndsAt) : '—'}</strong>. You will not be charged.
+              </span>
+              <Button size="sm" variant="ghost" onClick={handleReactivate} disabled={reactivating}
+                className="text-blue-700 hover:text-blue-900 dark:text-blue-300">
+                {reactivating ? 'Reactivating…' : 'Undo Cancellation'}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Current plan banner (active paid subscribers, not on trial) */}
+      {activePlanId && !isTrialing && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           <span>
-            Current plan:{' '}
-            <span className="font-semibold">
-              {PLANS.find((p) => p.id === activePlanId)?.name}
-            </span>
+            Current plan: <span className="font-semibold">{activePlanName}</span>
           </span>
           {hasStripeSubscription && (
             <Button
@@ -247,8 +341,8 @@ export default function BillingTab() {
         </div>
       )}
 
-      {/* Cancellation scheduled banner */}
-      {cancelAtPeriodEnd && currentPeriodEnd && (
+      {/* Cancellation scheduled banner (paid subscribers only) */}
+      {cancelAtPeriodEnd && !isTrialing && currentPeriodEnd && (
         <div className="flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
@@ -257,12 +351,7 @@ export default function BillingTab() {
               <span className="font-semibold">{formatDate(currentPeriodEnd)}</span>. You'll keep access until then.
             </span>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleReactivate}
-            disabled={reactivating}
-          >
+          <Button size="sm" variant="outline" onClick={handleReactivate} disabled={reactivating}>
             {reactivating ? 'Reactivating…' : 'Reactivate Plan'}
           </Button>
         </div>
@@ -271,9 +360,10 @@ export default function BillingTab() {
       {/* Plan Cards */}
       <div className="grid gap-6 sm:grid-cols-3">
         {PLANS.map((plan) => {
-          const isCurrent = activePlanId === plan.id;
-          const isStripe = hasStripeSubscription && activePlanId !== null;
-          const direction = activePlanId ? getPlanDirection(activePlanId, plan.id) : null;
+          const isCurrent = !isTrialing && activePlanId === plan.id;
+          const isTrialPlan = isTrialing && activePlanId === plan.id;
+          const isStripeActive = hasStripeSubscription && !isTrialing && activePlanId !== null;
+          const direction = activePlanId && !isTrialing ? getPlanDirection(activePlanId, plan.id) : null;
           const isChanging = changingPlan === plan.id;
 
           return (
@@ -283,7 +373,8 @@ export default function BillingTab() {
                 'relative flex flex-col transition-shadow',
                 plan.popular && 'border-primary shadow-md',
                 isCurrent && 'ring-2 ring-primary ring-offset-2',
-                selected === plan.id && !isCurrent && 'ring-2 ring-primary/50 ring-offset-2'
+                isTrialPlan && 'ring-2 ring-blue-400 ring-offset-2',
+                selected === plan.id && !isCurrent && !isTrialPlan && 'ring-2 ring-primary/50 ring-offset-2'
               )}
             >
               {plan.popular && (
@@ -295,11 +386,21 @@ export default function BillingTab() {
               )}
 
               <CardHeader className="pb-4 pt-6">
-                <CardTitle className="text-lg font-semibold">{plan.name}</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg font-semibold">{plan.name}</CardTitle>
+                  {isTrialPlan && (
+                    <Badge variant="secondary" className="text-xs">
+                      In Trial
+                    </Badge>
+                  )}
+                </div>
                 <div className="mt-1 flex items-baseline gap-1">
                   <span className="text-3xl font-bold">${plan.price}</span>
                   <span className="text-sm text-muted-foreground">/ month</span>
                 </div>
+                {hasNoSubscription && (
+                  <p className="text-xs text-muted-foreground">Includes 7-day free trial</p>
+                )}
               </CardHeader>
 
               <CardContent className="flex flex-1 flex-col gap-6">
@@ -333,7 +434,21 @@ export default function BillingTab() {
                   <Button className="mt-auto w-full" variant="outline" disabled>
                     Current Plan
                   </Button>
-                ) : isStripe ? (
+                ) : isTrialPlan ? (
+                  <Button className="mt-auto w-full" variant="outline" disabled>
+                    Currently Trialing
+                  </Button>
+                ) : isTrialing ? (
+                  // On a trial for a different plan — offer switching
+                  <Button
+                    className="mt-auto w-full"
+                    variant="outline"
+                    onClick={() => handleSkipTrial()}
+                    disabled={skippingTrial}
+                  >
+                    Switch to {plan.name}
+                  </Button>
+                ) : isStripeActive ? (
                   <Button
                     className="mt-auto w-full gap-1.5"
                     variant={direction === 'upgrade' ? 'default' : 'outline'}
@@ -404,21 +519,41 @@ export default function BillingTab() {
         </CardContent>
       </Card>
 
-      {/* Checkout CTA — only shown for users without a Stripe subscription */}
-      {selected && !hasStripeSubscription && (
-        <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+      {/* Checkout CTA — shown when a plan is selected and user has no existing subscription */}
+      {selected && !isTrialing && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-4 space-y-3">
           <p className="text-sm font-medium">
-            Subscribe to{' '}
             <span className="font-semibold">{pendingPlan?.name}</span> — ${pendingPlan?.price}/month
           </p>
-          <Button size="sm" onClick={handleCheckout} disabled={redirecting}>
-            {redirecting ? 'Redirecting…' : 'Confirm & Subscribe'}
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {hasNoSubscription && (
+              <Button
+                className="flex-1"
+                onClick={() => handleCheckout(selected, true)}
+                disabled={redirecting}
+              >
+                {redirecting ? 'Redirecting…' : 'Start 7-Day Free Trial'}
+              </Button>
+            )}
+            <Button
+              variant={hasNoSubscription ? 'outline' : 'default'}
+              className="flex-1"
+              onClick={() => handleCheckout(selected, false)}
+              disabled={redirecting}
+            >
+              {redirecting ? 'Redirecting…' : hasHadSubscription ? 'Subscribe Now' : 'Subscribe Without Trial'}
+            </Button>
+          </div>
+          {hasNoSubscription && (
+            <p className="text-xs text-muted-foreground">
+              Free trial: 1 channel · 1 agent · 100 messages · 3 KB pages for 7 days. Credit card required — you won't be charged until the trial ends.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Cancel plan option */}
-      {hasStripeSubscription && !cancelAtPeriodEnd && (
+      {/* Cancel plan option (paid subscribers only) */}
+      {hasStripeSubscription && !isTrialing && !cancelAtPeriodEnd && (
         <div className="text-center">
           <button
             onClick={() => setShowCancelDialog(true)}
@@ -434,21 +569,34 @@ export default function BillingTab() {
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel your plan?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isTrialing ? 'Cancel your free trial?' : 'Cancel your plan?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Your subscription will remain active until{' '}
-              {currentPeriodEnd ? formatDate(currentPeriodEnd) : 'the end of your billing period'}.
-              After that, you'll lose access to AI agents, channels, and other paid features.
-              You can reactivate any time before then.
+              {isTrialing ? (
+                <>
+                  Your trial will be cancelled and you will <strong>not be charged</strong>.
+                  You'll keep access to trial features until{' '}
+                  {trialEndsAt ? formatDate(trialEndsAt) : 'the trial ends'}.
+                  You can reactivate before then if you change your mind.
+                </>
+              ) : (
+                <>
+                  Your subscription will remain active until{' '}
+                  {currentPeriodEnd ? formatDate(currentPeriodEnd) : 'the end of your billing period'}.
+                  After that, you'll lose access to AI agents, channels, and other paid features.
+                  You can reactivate any time before then.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep Plan</AlertDialogCancel>
+            <AlertDialogCancel>{isTrialing ? 'Keep Trial' : 'Keep Plan'}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancel}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Yes, Cancel Plan
+              {isTrialing ? 'Yes, Cancel Trial' : 'Yes, Cancel Plan'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

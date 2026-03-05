@@ -11,10 +11,23 @@ const stripe = env.STRIPE_SECRET_KEY
   ? new Stripe(env.STRIPE_SECRET_KEY)
   : null;
 
+// Resource limits enforced during a free trial regardless of the chosen plan
+const TRIAL_LIMITS = { channels: 1, agents: 1, messages_per_month: 100, kb_pages: 3 } as const;
+
+// Map Stripe subscription statuses to our DB statuses
+const STRIPE_STATUS_MAP: Record<string, string> = {
+  active: 'active',
+  trialing: 'trialing',
+  past_due: 'past_due',
+  canceled: 'cancelled',
+  unpaid: 'past_due',
+};
+
 // ────────────────────────────────────────────────
 // Shared helper: check if company is within plan limits
-// Returns { allowed, used, included } for 'channels' or 'agents'
-// If no subscription exists, enforcement is skipped (allowed = true)
+// Returns { allowed, used, included } for 'channels' or 'agents'.
+// During a trial, TRIAL_LIMITS are used instead of the full plan limits.
+// If no subscription exists, enforcement is skipped (allowed = true).
 // ────────────────────────────────────────────────
 export async function checkPlanLimit(
   companyId: string,
@@ -22,28 +35,28 @@ export async function checkPlanLimit(
 ): Promise<{ allowed: boolean; used: number; included: number }> {
   const { data: sub } = await supabaseAdmin
     .from('subscriptions')
-    .select('*, plan:plans(*)')
+    .select('status, plan:plans(*)')
     .eq('company_id', companyId)
     .maybeSingle();
 
   if (!sub) return { allowed: true, used: 0, included: Infinity };
 
   const plan = sub.plan as { channels: number; agents: number };
-  const table = resource === 'channels' ? 'whatsapp_channels' : 'ai_agents';
+  const included = sub.status === 'trialing' ? TRIAL_LIMITS[resource] : plan[resource];
 
+  const table = resource === 'channels' ? 'whatsapp_channels' : 'ai_agents';
   const { count } = await supabaseAdmin
     .from(table)
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId);
 
   const used = count ?? 0;
-  const included = plan[resource];
   return { allowed: used < included, used, included };
 }
 
 // ────────────────────────────────────────────────
 // GET /api/billing/subscription
-// Returns the company's current subscription + plan
+// Returns the company's current subscription + plan.
 // ────────────────────────────────────────────────
 router.get('/subscription', async (req, res, next) => {
   try {
@@ -70,7 +83,8 @@ router.get('/subscription', async (req, res, next) => {
 // ────────────────────────────────────────────────
 // POST /api/billing/create-checkout-session
 // Creates a Stripe Checkout session for a new subscription.
-// Body: { plan_id: 'starter' | 'pro' | 'scale' }
+// Body: { plan_id: 'starter' | 'pro' | 'scale', with_trial?: boolean }
+// Pass with_trial: true to start the subscription with a 7-day free trial.
 // Returns: { url } — redirect the user to this URL
 // ────────────────────────────────────────────────
 router.post('/create-checkout-session', async (req, res, next) => {
@@ -86,10 +100,24 @@ router.post('/create-checkout-session', async (req, res, next) => {
       return;
     }
 
-    const { plan_id } = req.body;
+    const { plan_id, with_trial } = req.body;
     if (!plan_id) {
       res.status(400).json({ error: 'plan_id is required' });
       return;
+    }
+
+    // Trials are one-per-company: if a subscription already exists (any status),
+    // don't allow starting another trial via this flag.
+    if (with_trial) {
+      const { data: existing } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id')
+        .eq('company_id', companyId)
+        .maybeSingle();
+      if (existing) {
+        res.status(400).json({ error: 'Free trial has already been used for this account.' });
+        return;
+      }
     }
 
     // Look up the plan and its Stripe price ID
@@ -124,6 +152,10 @@ router.post('/create-checkout-session', async (req, res, next) => {
       success_url: `${env.CLIENT_URL}/settings?tab=billing&success=true`,
       cancel_url: `${env.CLIENT_URL}/settings?tab=billing`,
     };
+
+    if (with_trial) {
+      sessionParams.subscription_data = { trial_period_days: 7 };
+    }
 
     if (existingSub?.stripe_customer_id) {
       sessionParams.customer = existingSub.stripe_customer_id;
@@ -238,6 +270,52 @@ router.post('/subscribe', async (req, res, next) => {
 });
 
 // ────────────────────────────────────────────────
+// POST /api/billing/skip-trial
+// Ends the Stripe trial immediately and starts billing now.
+// The subscription switches from trialing → active and the first charge fires.
+// ────────────────────────────────────────────────
+router.post('/skip-trial', async (req, res, next) => {
+  try {
+    if (!stripe) {
+      res.status(503).json({ error: 'Stripe is not configured' });
+      return;
+    }
+
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const { data: sub, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_subscription_id, status')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    if (subError) throw subError;
+    if (!sub?.stripe_subscription_id) {
+      res.status(400).json({ error: 'No active Stripe subscription found.' });
+      return;
+    }
+    if (sub.status !== 'trialing') {
+      res.status(400).json({ error: 'No active trial to skip.' });
+      return;
+    }
+
+    // Setting trial_end: 'now' immediately ends the trial and triggers billing
+    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+      trial_end: 'now',
+    });
+
+    // The customer.subscription.updated webhook will sync the status to 'active'
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
 // POST /api/billing/change-plan
 // Upgrades or downgrades an existing Stripe subscription immediately with proration.
 // Body: { plan_id: 'starter' | 'pro' | 'scale' }
@@ -320,7 +398,8 @@ router.post('/change-plan', async (req, res, next) => {
 
 // ────────────────────────────────────────────────
 // POST /api/billing/cancel
-// Schedules the subscription to cancel at the end of the current billing period.
+// Schedules the subscription to cancel at the end of the current billing period
+// (or at the end of the trial period if currently trialing — no charge is made).
 // ────────────────────────────────────────────────
 router.post('/cancel', async (req, res, next) => {
   try {
@@ -408,7 +487,8 @@ router.post('/reactivate', async (req, res, next) => {
 
 // ────────────────────────────────────────────────
 // GET /api/billing/usage
-// Returns usage stats for the current billing period
+// Returns usage stats for the current billing period.
+// During a trial, TRIAL_LIMITS are used for channel/agent/message/kb_page counts.
 // ────────────────────────────────────────────────
 router.get('/usage', async (req, res, next) => {
   try {
@@ -440,6 +520,13 @@ router.get('/usage', async (req, res, next) => {
       overage_page_cents: number;
     };
 
+    // During a trial, enforce fixed trial limits instead of the full plan limits
+    const isTrialing = sub.status === 'trialing';
+    const includedChannels = isTrialing ? TRIAL_LIMITS.channels : plan.channels;
+    const includedAgents = isTrialing ? TRIAL_LIMITS.agents : plan.agents;
+    const includedMessages = isTrialing ? TRIAL_LIMITS.messages_per_month : plan.messages_per_month;
+    const includedKbPages = isTrialing ? TRIAL_LIMITS.kb_pages : plan.kb_pages;
+
     const { count: channelsUsed } = await supabaseAdmin
       .from('whatsapp_channels')
       .select('id', { count: 'exact', head: true })
@@ -470,9 +557,9 @@ router.get('/usage', async (req, res, next) => {
     );
     const kbPagesUsed = Math.ceil(totalChars / 8000);
 
-    const messageOverage = Math.max(0, (messagesUsed ?? 0) - plan.messages_per_month);
-    const kbPageOverage = Math.max(0, kbPagesUsed - plan.kb_pages);
-
+    // Overage is $0 during trial (no billing for overages while trialing)
+    const messageOverage = isTrialing ? 0 : Math.max(0, (messagesUsed ?? 0) - includedMessages);
+    const kbPageOverage = isTrialing ? 0 : Math.max(0, kbPagesUsed - includedKbPages);
     const messageOverageCost = messageOverage * plan.overage_message_cents;
     const kbPageOverageCost = kbPageOverage * plan.overage_page_cents;
 
@@ -480,17 +567,17 @@ router.get('/usage', async (req, res, next) => {
       subscription: sub,
       plan,
       usage: {
-        channels: { used: channelsUsed ?? 0, included: plan.channels },
-        agents: { used: agentsUsed ?? 0, included: plan.agents },
+        channels: { used: channelsUsed ?? 0, included: includedChannels },
+        agents: { used: agentsUsed ?? 0, included: includedAgents },
         messages: {
           used: messagesUsed ?? 0,
-          included: plan.messages_per_month,
+          included: includedMessages,
           overage: messageOverage,
           overage_cost_cents: messageOverageCost,
         },
         kb_pages: {
           used: kbPagesUsed,
-          included: plan.kb_pages,
+          included: includedKbPages,
           overage: kbPageOverage,
           overage_cost_cents: kbPageOverageCost,
         },
@@ -535,11 +622,15 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
         const { company_id, plan_id } = session.metadata ?? {};
         if (!company_id || !plan_id) break;
 
-        // Retrieve full subscription from Stripe for period dates
+        // Retrieve full subscription from Stripe for status and period dates
         const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string);
         const subItem = stripeSub.items.data[0];
         const periodStart = new Date(subItem.current_period_start * 1000).toISOString().split('T')[0];
         const periodEnd = new Date(subItem.current_period_end * 1000).toISOString().split('T')[0];
+        const status = STRIPE_STATUS_MAP[stripeSub.status] ?? 'active';
+        const trialEndsAt = stripeSub.trial_end
+          ? new Date(stripeSub.trial_end * 1000).toISOString()
+          : null;
 
         await supabaseAdmin
           .from('subscriptions')
@@ -547,11 +638,12 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
             {
               company_id,
               plan_id,
-              status: 'active',
+              status,
               stripe_customer_id: session.customer as string,
               stripe_subscription_id: session.subscription as string,
               current_period_start: periodStart,
               current_period_end: periodEnd,
+              trial_ends_at: trialEndsAt,
             },
             { onConflict: 'company_id' }
           );
@@ -572,16 +664,10 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
         const subItem = stripeSub.items.data[0];
         const periodStart = new Date(subItem.current_period_start * 1000).toISOString().split('T')[0];
         const periodEnd = new Date(subItem.current_period_end * 1000).toISOString().split('T')[0];
-
-        // Map Stripe status to our status
-        const statusMap: Record<string, string> = {
-          active: 'active',
-          trialing: 'trialing',
-          past_due: 'past_due',
-          canceled: 'cancelled',
-          unpaid: 'past_due',
-        };
-        const status = statusMap[stripeSub.status] ?? 'past_due';
+        const status = STRIPE_STATUS_MAP[stripeSub.status] ?? 'past_due';
+        const trialEndsAt = stripeSub.trial_end
+          ? new Date(stripeSub.trial_end * 1000).toISOString()
+          : null;
 
         await supabaseAdmin
           .from('subscriptions')
@@ -591,6 +677,7 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
             current_period_start: periodStart,
             current_period_end: periodEnd,
             cancel_at_period_end: stripeSub.cancel_at_period_end,
+            trial_ends_at: trialEndsAt,
           })
           .eq('stripe_subscription_id', stripeSub.id);
         break;
