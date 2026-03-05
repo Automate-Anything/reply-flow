@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Settings2, Tag, ListPlus, List, Upload, Download } from 'lucide-react';
+import { Users, Settings2, Tag, ListPlus, List, Upload, Download, GitMerge } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useContacts, type Contact, type ContactFilters } from '@/hooks/useContacts';
@@ -13,6 +13,7 @@ import TagsManager from '@/components/contacts/TagsManager';
 import CustomFieldsManager from '@/components/contacts/CustomFieldsManager';
 import ContactListsManager from '@/components/contacts/ContactListsManager';
 import ImportWizard from '@/components/contacts/ImportWizard';
+import DuplicateScanner from '@/components/contacts/DuplicateScanner';
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ export default function ContactsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [duplicateScannerOpen, setDuplicateScannerOpen] = useState(false);
 
   const { contacts, loading, refetch } = useContacts(search, filters);
   const { tags, loading: tagsLoading, createTag, updateTag, deleteTag } = useContactTags();
@@ -266,6 +268,12 @@ export default function ContactsPage() {
                       Manage Fields
                     </DropdownMenuItem>
                   </PermissionGate>
+                  <PermissionGate resource="contacts" action="edit">
+                    <DropdownMenuItem onClick={() => setDuplicateScannerOpen(true)}>
+                      <GitMerge className="mr-2 h-4 w-4" />
+                      Find Duplicates
+                    </DropdownMenuItem>
+                  </PermissionGate>
                   <PermissionGate resource="contacts" action="create">
                     <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
                       <Upload className="mr-2 h-4 w-4" />
@@ -305,6 +313,7 @@ export default function ContactsPage() {
           onBack={handleBack}
           availableTags={tags}
           customFieldValues={customFieldValues}
+          onRefresh={() => { refetch(); if (activeContact) fetchCustomFieldValues(activeContact.id); }}
         />
       ) : (
         <div className="hidden flex-1 flex-col items-center justify-center gap-3 text-muted-foreground md:flex">
@@ -366,6 +375,13 @@ export default function ContactsPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Scanner */}
+      <DuplicateScanner
+        open={duplicateScannerOpen}
+        onOpenChange={setDuplicateScannerOpen}
+        onMergeComplete={refetch}
+      />
 
       {/* Import Wizard */}
       <ImportWizard

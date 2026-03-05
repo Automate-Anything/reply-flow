@@ -8,12 +8,12 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle } from 'lucide-react';
 import api from '@/lib/api';
-import { useContactNotes } from '@/hooks/useContacts';
-import type { Message } from '@/hooks/useMessages';
-import ContactNotes from './ContactNotes';
-import MessageBubble from '@/components/inbox/MessageBubble';
+import { useContactActivity } from '@/hooks/useContactActivity';
+import { useSingleContactDuplicates } from '@/hooks/useContactDuplicates';
+import ActivityTimeline from './ActivityTimeline';
+import MergeContactDialog from './MergeContactDialog';
 import type { Contact } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { CustomFieldValue } from '@/hooks/useCustomFields';
@@ -26,6 +26,7 @@ interface ContactDetailProps {
   onBack?: () => void;
   availableTags?: ContactTag[];
   customFieldValues?: CustomFieldValue[];
+  onRefresh?: () => void;
 }
 
 export default function ContactDetail({
@@ -36,11 +37,13 @@ export default function ContactDetail({
   onBack,
   availableTags = [],
   customFieldValues = [],
+  onRefresh,
 }: ContactDetailProps) {
-  const { notes, loading: notesLoading, addNote, deleteNote } = useContactNotes(contact.id);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [msgsLoading, setMsgsLoading] = useState(false);
-  const [msgsLoaded, setMsgsLoaded] = useState(false);
+  const {
+    events, loading: activityLoading, hasMore, loadMore, loadingMore, refetch: refetchActivity,
+  } = useContactActivity(contact.id);
+  const { duplicates } = useSingleContactDuplicates(contact.id);
+  const [mergeTarget, setMergeTarget] = useState<Contact | null>(null);
 
   const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ')
     || contact.whatsapp_name
@@ -51,16 +54,20 @@ export default function ContactDetail({
   const hasAddress = contact.address_street || contact.address_city || contact.address_state
     || contact.address_postal_code || contact.address_country;
 
-  const loadMessages = async () => {
-    if (msgsLoaded) return;
-    setMsgsLoading(true);
-    try {
-      const { data } = await api.get(`/contacts/${contact.id}/messages`);
-      setMessages(data.messages || []);
-      setMsgsLoaded(true);
-    } finally {
-      setMsgsLoading(false);
-    }
+  const handleAddNote = async (content: string) => {
+    await api.post(`/contact-notes/${contact.id}`, { content });
+    refetchActivity();
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    await api.delete(`/contact-notes/${contact.id}/${noteId}`);
+    refetchActivity();
+  };
+
+  const handleMergeComplete = () => {
+    setMergeTarget(null);
+    refetchActivity();
+    onRefresh?.();
   };
 
   return (
@@ -154,12 +161,29 @@ export default function ContactDetail({
         </div>
       )}
 
+      {/* Duplicate warning banner */}
+      {duplicates.length > 0 && (
+        <div className="flex items-center gap-2 border-b bg-yellow-50 px-6 py-2 dark:bg-yellow-950/30">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600" />
+          <span className="text-xs text-yellow-800 dark:text-yellow-200">
+            {duplicates.length} potential duplicate{duplicates.length !== 1 ? 's' : ''} found
+          </span>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto px-1 py-0 text-xs text-yellow-800 underline dark:text-yellow-200"
+            onClick={() => setMergeTarget(duplicates[0].contact)}
+          >
+            Review
+          </Button>
+        </div>
+      )}
+
       {/* Tabs */}
       <Tabs defaultValue="details" className="flex flex-1 flex-col overflow-hidden">
         <TabsList className="mx-6 mt-4 w-fit">
           <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="messages" onClick={loadMessages}>Messages</TabsTrigger>
-          <TabsTrigger value="notes">Notes</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="flex-1 overflow-auto px-6 py-4">
@@ -206,29 +230,29 @@ export default function ContactDetail({
           </div>
         </TabsContent>
 
-        <TabsContent value="messages" className="flex-1 overflow-auto px-6 py-4">
-          {msgsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading messages...</p>
-          ) : messages.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No message history with this contact</p>
-          ) : (
-            <div className="space-y-2">
-              {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="notes" className="flex-1 overflow-auto px-6 py-4">
-          <ContactNotes
-            notes={notes}
-            loading={notesLoading}
-            onAdd={async (content) => { await addNote(content); }}
-            onDelete={async (noteId) => { await deleteNote(noteId); }}
+        <TabsContent value="activity" className="flex-1 overflow-auto px-6 py-4">
+          <ActivityTimeline
+            events={events}
+            loading={activityLoading}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+            loadingMore={loadingMore}
+            onAddNote={handleAddNote}
+            onDeleteNote={handleDeleteNote}
           />
         </TabsContent>
       </Tabs>
+
+      {/* Merge dialog */}
+      {mergeTarget && (
+        <MergeContactDialog
+          open={!!mergeTarget}
+          onOpenChange={(open) => !open && setMergeTarget(null)}
+          contactA={contact}
+          contactB={mergeTarget}
+          onMergeComplete={handleMergeComplete}
+        />
+      )}
     </div>
   );
 }

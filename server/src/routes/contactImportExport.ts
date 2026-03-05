@@ -5,6 +5,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { logContactActivitiesBulk } from '../services/activityLog.js';
 
 // ── Phone validation (same logic as contacts.ts) ────────────────────────────
 
@@ -573,6 +574,19 @@ router.post('/import/execute', requirePermission('contacts', 'create'), async (r
           .from('contact_list_members')
           .upsert(memberRows.slice(i, i + 100), { onConflict: 'list_id,contact_id' });
       }
+    }
+
+    // Log imported activity for new contacts
+    if (allNewContactIds.length > 0) {
+      await logContactActivitiesBulk(
+        allNewContactIds.map((cid) => ({
+          contactId: cid,
+          companyId,
+          userId,
+          action: 'imported' as const,
+          metadata: { source: 'csv_import' },
+        }))
+      );
     }
 
     // Cleanup session

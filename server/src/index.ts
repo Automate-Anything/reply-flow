@@ -75,7 +75,7 @@ app.use('/api/seed', seedRouter);
 app.use(errorHandler);
 
 app.listen(env.PORT, () => {
-  console.log(`Server running on port ${env.PORT}`);
+  console.log(`Server running on port ${env.PORT} (smart-kb)`);
   startScheduler();
 });
 

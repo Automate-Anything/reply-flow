@@ -436,11 +436,12 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
     }
 
     // Process document: extract, clean, structure, extract metadata
+    console.log('[upload] Processing file:', file.originalname, 'MIME:', file.mimetype, 'Size:', file.buffer.length);
     let processed;
     try {
       processed = await processDocument(file.buffer, file.originalname, file.mimetype);
     } catch (docErr: any) {
-      console.error('Document processing failed:', docErr);
+      console.error('[upload] Document processing failed:', docErr);
       res.status(400).json({ error: `Failed to process file: ${docErr.message || 'Unknown error'}` });
       return;
     }
