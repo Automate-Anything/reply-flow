@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash } from 'lucide-react';
 import api from '@/lib/api';
 import { useContactActivity } from '@/hooks/useContactActivity';
 import { useSingleContactDuplicates } from '@/hooks/useContactDuplicates';
@@ -187,36 +186,50 @@ export default function ContactDetail({
         </TabsList>
 
         <TabsContent value="details" className="flex-1 overflow-auto px-6 py-4">
-          <div className="max-w-md space-y-4">
-            <InfoRow label="Phone" value={contact.phone_number} />
-            <InfoRow label="First Name" value={contact.first_name} />
-            <InfoRow label="Last Name" value={contact.last_name} />
-            <InfoRow label="Email" value={contact.email} />
-            <InfoRow label="Company" value={contact.company} />
-            <InfoRow label="WhatsApp Name" value={contact.whatsapp_name} />
-            {contact.notes && <InfoRow label="Notes" value={contact.notes} />}
+          <div className="max-w-lg space-y-5">
+            {/* Contact methods */}
+            <DetailSection title="Contact">
+              <DetailField icon={<Phone className="h-3.5 w-3.5" />} label="Phone" value={contact.phone_number} />
+              <DetailField icon={<Mail className="h-3.5 w-3.5" />} label="Email" value={contact.email} />
+              <DetailField icon={<MessageCircle className="h-3.5 w-3.5" />} label="WhatsApp" value={contact.whatsapp_name} />
+            </DetailSection>
+
+            {/* Personal / work */}
+            <DetailSection title="Personal">
+              <DetailField icon={<User className="h-3.5 w-3.5" />} label="First Name" value={contact.first_name} />
+              <DetailField icon={<User className="h-3.5 w-3.5" />} label="Last Name" value={contact.last_name} />
+              <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Company" value={contact.company} />
+            </DetailSection>
+
+            {contact.notes && (
+              <DetailSection title="Notes">
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{contact.notes}</p>
+              </DetailSection>
+            )}
 
             {/* Address */}
             {hasAddress && (
-              <>
-                <Separator className="my-4" />
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Address</h4>
-                <InfoRow label="Street" value={contact.address_street} />
-                <InfoRow label="City" value={contact.address_city} />
-                <InfoRow label="State / Province" value={contact.address_state} />
-                <InfoRow label="Postal Code" value={contact.address_postal_code} />
-                <InfoRow label="Country" value={contact.address_country} />
-              </>
+              <DetailSection title="Address">
+                <div className="flex gap-2">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <p className="text-sm leading-relaxed">
+                    {[
+                      contact.address_street,
+                      [contact.address_city, contact.address_state, contact.address_postal_code].filter(Boolean).join(', '),
+                      contact.address_country,
+                    ].filter(Boolean).join('\n')}
+                  </p>
+                </div>
+              </DetailSection>
             )}
 
             {/* Custom Fields */}
             {customFieldValues.length > 0 && (
-              <>
-                <Separator className="my-4" />
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Additional Information</h4>
+              <DetailSection title="Additional">
                 {customFieldValues.map((cfv) => (
-                  <InfoRow
+                  <DetailField
                     key={cfv.id}
+                    icon={<Hash className="h-3.5 w-3.5" />}
                     label={cfv.field_definition.name}
                     value={
                       cfv.field_definition.field_type === 'multi_select'
@@ -225,7 +238,7 @@ export default function ContactDetail({
                     }
                   />
                 ))}
-              </>
+              </DetailSection>
             )}
           </div>
         </TabsContent>
@@ -257,11 +270,31 @@ export default function ContactDetail({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string | null }) {
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="text-sm">{value || '—'}</p>
+    <div className="rounded-lg border bg-card">
+      <div className="border-b px-4 py-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h4>
+      </div>
+      <div className="divide-y">{children}</div>
+    </div>
+  );
+}
+
+function DetailField({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | null;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5">
+      <span className="text-muted-foreground">{icon}</span>
+      <span className="w-24 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-sm">{value || '—'}</span>
     </div>
   );
 }
