@@ -8,7 +8,9 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { useState } from 'react';
 import { Check, List, Pencil, Tag, Trash2 } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { Contact } from '@/hooks/useContacts';
@@ -52,8 +54,14 @@ export default function ContactContextMenu({
   };
 
   const contactTags = contact.tags || [];
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ')
+    || contact.whatsapp_name
+    || contact.phone_number;
 
   return (
+    <>
     <ContextMenu>
       <ContextMenuTrigger>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-48">
@@ -151,7 +159,7 @@ export default function ContactContextMenu({
 
         {/* Delete */}
         <ContextMenuItem
-          onClick={handleDelete}
+          onClick={() => setConfirmDeleteOpen(true)}
           className="text-destructive focus:text-destructive"
         >
           <Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -159,5 +167,13 @@ export default function ContactContextMenu({
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+    <ConfirmDialog
+      open={confirmDeleteOpen}
+      onOpenChange={setConfirmDeleteOpen}
+      title={`Delete ${name}?`}
+      description="This will permanently delete this contact. This action cannot be undone."
+      onConfirm={() => { setConfirmDeleteOpen(false); handleDelete(); }}
+    />
+    </>
   );
 }

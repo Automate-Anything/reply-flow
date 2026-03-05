@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Clock, Pin, Star } from 'lucide-react';
+import { Clock, Pin, RotateCcw, Star } from 'lucide-react';
 import type { Conversation } from '@/hooks/useConversations';
 
 interface ConversationItemProps {
@@ -146,10 +146,19 @@ export default function ConversationItem({
               hasUnread ? 'font-medium text-foreground' : 'text-muted-foreground'
             )}
           >
-            {conversation.last_message_direction === 'outbound' && (
-              <span className="font-normal text-muted-foreground">You: </span>
+            {conversation.draft_message ? (
+              <>
+                <span className="font-medium text-orange-500">Draft: </span>
+                {conversation.draft_message}
+              </>
+            ) : (
+              <>
+                {conversation.last_message_direction === 'outbound' && (
+                  <span className="font-normal text-muted-foreground">You: </span>
+                )}
+                {conversation.last_message || 'No messages yet'}
+              </>
             )}
-            {conversation.last_message || 'No messages yet'}
           </span>
           {hasUnread && (
             conversation.unread_count > 0 ? (
@@ -162,8 +171,21 @@ export default function ConversationItem({
           )}
         </div>
 
-        {(conversation.labels.length > 0 || statusLabel || isSnoozed) && (
+        {(conversation.labels.length > 0 || statusLabel || isSnoozed || conversation.contact_session_count > 1) && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
+            {conversation.contact_session_count > 1 && (
+              <Badge
+                variant="secondary"
+                className="h-4 px-1.5 text-[10px] gap-0.5 text-violet-600 dark:text-violet-400"
+              >
+                <RotateCcw className="h-2.5 w-2.5" />
+                {conversation.contact_session_count === 2
+                  ? '2nd'
+                  : conversation.contact_session_count === 3
+                    ? '3rd'
+                    : `${conversation.contact_session_count}th`}
+              </Badge>
+            )}
             {isSnoozed && (
               <Badge
                 variant="secondary"

@@ -1,23 +1,40 @@
 import { useEffect, useRef } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import MessageBubble from './MessageBubble';
+import MessageContextMenu from './MessageContextMenu';
 import MessageInput from './MessageInput';
 import type { Message } from '@/hooks/useMessages';
 
 interface MessageThreadProps {
   messages: Message[];
   loading: boolean;
+  sessionId: string;
   onSend: (body: string) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   onCancelScheduled: (messageId: string) => Promise<void>;
+  initialDraft?: string;
+  onDraftChange?: (text: string) => void;
+  replyingTo?: Message | null;
+  onReply?: (message: Message) => void;
+  onCancelReply?: () => void;
+  onMessageUpdate: (message: Message) => void;
+  onForward: (message: Message) => void;
 }
 
 export default function MessageThread({
   messages,
   loading,
+  sessionId,
   onSend,
   onSchedule,
   onCancelScheduled,
+  initialDraft,
+  onDraftChange,
+  replyingTo,
+  onReply,
+  onCancelReply,
+  onMessageUpdate,
+  onForward,
 }: MessageThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -46,18 +63,34 @@ export default function MessageThread({
         ) : (
           <div className="space-y-2">
             {messages.map((msg) => (
-              <MessageBubble
+              <MessageContextMenu
                 key={msg.id}
                 message={msg}
-                onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
-              />
+                sessionId={sessionId}
+                onReply={onReply || (() => {})}
+                onMessageUpdate={onMessageUpdate}
+                onForward={onForward}
+              >
+                <MessageBubble
+                  message={msg}
+                  onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
+                  onReply={onReply}
+                />
+              </MessageContextMenu>
             ))}
             <div ref={bottomRef} />
           </div>
         )}
       </div>
 
-      <MessageInput onSend={onSend} onSchedule={onSchedule} />
+      <MessageInput
+        onSend={onSend}
+        onSchedule={onSchedule}
+        initialDraft={initialDraft}
+        onDraftChange={onDraftChange}
+        replyingTo={replyingTo}
+        onCancelReply={onCancelReply}
+      />
     </div>
   );
 }

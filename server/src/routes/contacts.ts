@@ -913,6 +913,91 @@ router.get('/:contactId/activity', requirePermission('contacts', 'view'), async 
   }
 });
 
+// Get session history for a contact
+router.get('/:contactId/sessions', requirePermission('contacts', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { contactId } = req.params;
+
+    const { data: sessions, error } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('id, status, created_at, ended_at, last_message, last_message_at, channel_id')
+      .eq('company_id', companyId)
+      .eq('contact_id', contactId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!sessions || sessions.length === 0) {
+      res.json({ sessions: [] });
+      return;
+    }
+
+    // Get message counts per session in one query
+    const sessionIds = sessions.map((s) => s.id);
+    const { data: messageCounts } = await supabaseAdmin
+      .from('chat_messages')
+      .select('session_id')
+      .in('session_id', sessionIds);
+
+    const countMap: Record<string, number> = {};
+    for (const row of messageCounts || []) {
+      countMap[row.session_id] = (countMap[row.session_id] || 0) + 1;
+    }
+
+    const enriched = sessions.map((s) => ({
+      ...s,
+      message_count: countMap[s.id] || 0,
+    }));
+
+    res.json({ sessions: enriched });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get AI-extracted memories for a contact
+router.get('/:contactId/memories', requirePermission('contacts', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { contactId } = req.params;
+
+    const { data, error } = await supabaseAdmin
+      .from('contact_memories')
+      .select('id, memory_type, content, session_id, is_active, created_at')
+      .eq('company_id', companyId)
+      .eq('contact_id', contactId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ memories: data || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Deactivate a contact memory
+router.patch('/:contactId/memories/:memoryId', requirePermission('contacts', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { memoryId } = req.params;
+    const { is_active } = req.body;
+
+    const { error } = await supabaseAdmin
+      .from('contact_memories')
+      .update({ is_active: is_active ?? false })
+      .eq('id', memoryId)
+      .eq('company_id', companyId);
+
+    if (error) throw error;
+    res.json({ status: 'ok' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get message history for a contact
 router.get('/:contactId/messages', requirePermission('contacts', 'view'), async (req, res, next) => {
   try {

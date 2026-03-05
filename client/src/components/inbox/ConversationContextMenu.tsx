@@ -21,9 +21,11 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
@@ -84,6 +86,8 @@ export default function ConversationContextMenu({
   onUpdate,
   children,
 }: ConversationContextMenuProps) {
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
+
   const statusOptions = statuses.length > 0
     ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
     : FALLBACK_STATUSES;
@@ -255,11 +259,29 @@ export default function ConversationContextMenu({
         <ContextMenuSeparator />
 
         {/* Archive */}
-        <ContextMenuItem onClick={handleArchive} className="text-destructive focus:text-destructive">
+        <ContextMenuItem
+          onClick={() => {
+            if (conversation.is_archived) {
+              handleArchive();
+            } else {
+              setConfirmArchiveOpen(true);
+            }
+          }}
+          className="text-destructive focus:text-destructive"
+        >
           <Archive className="mr-2 h-3.5 w-3.5" />
           {conversation.is_archived ? 'Unarchive' : 'Archive'}
         </ContextMenuItem>
       </ContextMenuContent>
+
+      <ConfirmDialog
+        open={confirmArchiveOpen}
+        onOpenChange={setConfirmArchiveOpen}
+        title="Archive this conversation?"
+        description="Archived conversations can be found in the archived filter."
+        actionLabel="Archive"
+        onConfirm={handleArchive}
+      />
     </ContextMenu>
   );
 }

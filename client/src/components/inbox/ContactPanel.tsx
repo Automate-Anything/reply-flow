@@ -10,10 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { Loader2, Pencil, Save, Send, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useContactNotes, type Contact, type ContactNote } from '@/hooks/useContacts';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 interface ContactPanelProps {
   contactId: string | null;
@@ -27,6 +31,10 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', company: '' });
+  const [originalForm, setOriginalForm] = useState({ first_name: '', last_name: '', email: '', company: '' });
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, editing ? originalForm : null);
+  useFormDirtyGuard(isDirty);
 
   const { notes, loading: notesLoading, addNote, deleteNote } = useContactNotes(
     open ? contactId : null
@@ -104,7 +112,26 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
     : '';
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+    <Sheet open={open} onOpenChange={(v) => {
+        if (!v) {
+          if (editing) {
+            guardedClose(() => {
+              setEditing(false);
+              if (contact) {
+                setForm({
+                  first_name: contact.first_name || '',
+                  last_name: contact.last_name || '',
+                  email: contact.email || '',
+                  company: contact.company || '',
+                });
+              }
+              onClose();
+            });
+          } else {
+            onClose();
+          }
+        }
+      }}>
       <SheetContent className="w-[380px] overflow-y-auto p-0 sm:max-w-[380px]">
         <SheetHeader className="border-b px-4 py-3">
           <div className="flex items-center gap-3">
@@ -142,14 +169,19 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
                   className="h-7"
                   onClick={() => {
                     if (editing) {
-                      setForm({
-                        first_name: contact.first_name || '',
-                        last_name: contact.last_name || '',
-                        email: contact.email || '',
-                        company: contact.company || '',
+                      guardedClose(() => {
+                        setForm({
+                          first_name: contact.first_name || '',
+                          last_name: contact.last_name || '',
+                          email: contact.email || '',
+                          company: contact.company || '',
+                        });
+                        setEditing(false);
                       });
+                    } else {
+                      setOriginalForm({ ...form });
+                      setEditing(true);
                     }
-                    setEditing(!editing);
                   }}
                 >
                   {editing ? (
@@ -299,14 +331,19 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
                               minute: '2-digit',
                             })}
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100"
-                            onClick={() => handleDeleteNote(note.id)}
+                          <ConfirmDialog
+                            title="Delete this note?"
+                            description="This action cannot be undone."
+                            onConfirm={() => handleDeleteNote(note.id)}
                           >
-                            <Trash2 className="h-3 w-3 text-muted-foreground" />
-                          </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 className="h-3 w-3 text-muted-foreground" />
+                            </Button>
+                          </ConfirmDialog>
                         </div>
                         <p className="mt-1 whitespace-pre-wrap text-xs">{note.content}</p>
                       </div>
@@ -352,6 +389,14 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
           </div>
         )}
       </SheetContent>
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSave}
+        saving={saving}
+      />
     </Sheet>
   );
 }

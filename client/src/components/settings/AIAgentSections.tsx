@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import type { ProfileData } from '@/hooks/useCompanyAI';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
 import IdentitySection from './sections/IdentitySection';
 import ResponseFlowSection from './response-flow/ResponseFlowSection';
@@ -39,6 +40,8 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
     addScenario, updateScenario, removeScenario,
     setFallbackMode, setFallbackKBAttachments, reset,
   } = useResponseFlow(profileData);
+
+  useFormDirtyGuard(dirty);
 
   const [saving, setSaving] = useState(false);
 

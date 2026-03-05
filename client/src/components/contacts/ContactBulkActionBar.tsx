@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { ContactList } from '@/hooks/useContactLists';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import PermissionGate from '@/components/auth/PermissionGate';
 
 interface ContactBulkActionBarProps {
@@ -141,16 +142,21 @@ export default function ContactBulkActionBar({
 
       {/* Delete */}
       <PermissionGate resource="contacts" action="delete">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-destructive"
-          disabled={loading}
-          onClick={() => executeBulk('delete')}
-          title="Delete"
+        <ConfirmDialog
+          title={`Delete ${selectedIds.length} contact${selectedIds.length === 1 ? '' : 's'}?`}
+          description="This will permanently delete the selected contacts and all associated data."
+          onConfirm={() => executeBulk('delete')}
         >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive"
+            disabled={loading}
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </ConfirmDialog>
       </PermissionGate>
 
       {loading && <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-muted-foreground" />}

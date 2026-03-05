@@ -18,10 +18,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { ArrowUp, ArrowDown, Loader2, Pencil, Plus, Trash2, ListPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CustomFieldDefinition } from '@/hooks/useCustomFields';
 import PermissionGate from '@/components/auth/PermissionGate';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 interface CustomFieldsManagerProps {
   definitions: CustomFieldDefinition[];
@@ -59,8 +63,18 @@ export default function CustomFieldsManager({
     options: [] as string[],
     is_required: false,
   });
+  const [originalForm, setOriginalForm] = useState({
+    name: '',
+    field_type: 'short_text',
+    options: [] as string[],
+    is_required: false,
+  });
   const [optionInput, setOptionInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, dialogOpen ? originalForm : null);
+  useFormDirtyGuard(isDirty);
 
   const resetForm = () => {
     setForm({ name: '', field_type: 'short_text', options: [], is_required: false });
@@ -70,16 +84,20 @@ export default function CustomFieldsManager({
 
   const openCreate = () => {
     resetForm();
+    const defaults = { name: '', field_type: 'short_text', options: [] as string[], is_required: false };
+    setOriginalForm(defaults);
     setDialogOpen(true);
   };
 
   const openEdit = (def: CustomFieldDefinition) => {
-    setForm({
+    const values = {
       name: def.name,
       field_type: def.field_type,
       options: def.options || [],
       is_required: def.is_required,
-    });
+    };
+    setForm(values);
+    setOriginalForm(values);
     setEditingId(def.id);
     setDialogOpen(true);
   };
@@ -165,7 +183,13 @@ export default function CustomFieldsManager({
           Define custom fields for your contacts.
         </p>
         <PermissionGate resource="custom_fields" action="create">
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+              if (!open) {
+                guardedClose(() => { setDialogOpen(false); resetForm(); });
+              } else {
+                setDialogOpen(true);
+              }
+            }}>
             <DialogTrigger asChild>
               <Button size="sm" className="shrink-0" onClick={openCreate}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -241,7 +265,7 @@ export default function CustomFieldsManager({
                   <Label>Required</Label>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  <Button variant="outline" onClick={() => guardedClose(() => { setDialogOpen(false); resetForm(); })}>
                     Cancel
                   </Button>
                   <Button onClick={handleSubmit} disabled={submitting}>
@@ -313,7 +337,7 @@ export default function CustomFieldsManager({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                    onClick={() => handleDelete(def.id)}
+                    onClick={() => setPendingDeleteId(def.id)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -323,6 +347,25 @@ export default function CustomFieldsManager({
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="Delete this field?"
+        description="This field and its values will be removed from all contacts."
+        onConfirm={() => {
+          handleDelete(pendingDeleteId!);
+          setPendingDeleteId(null);
+        }}
+      />
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSubmit}
+        saving={submitting}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, Settings2, Tag, ListPlus, List, Upload, Download, GitMerge } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import PermissionGate from '@/components/auth/PermissionGate';
 
 type View = 'detail' | 'new' | 'edit';
@@ -46,6 +47,8 @@ export default function ContactsPage() {
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [duplicateScannerOpen, setDuplicateScannerOpen] = useState(false);
+  const formDirtyRef = useRef(false);
+  const [pendingNavAction, setPendingNavAction] = useState<(() => void) | null>(null);
 
   const { contacts, loading, refetch } = useContacts(search, filters);
   const { tags, loading: tagsLoading, createTag, updateTag, deleteTag } = useContactTags();
@@ -118,17 +121,32 @@ export default function ContactsPage() {
 
   const handleBulkActionComplete = () => {
     refetch();
+    refetchLists();
     setSelectedIds([]);
   };
 
+  const isEditing = view === 'new' || view === 'edit';
+
+  const guardNavigation = useCallback((action: () => void) => {
+    if (isEditing && formDirtyRef.current) {
+      setPendingNavAction(() => action);
+    } else {
+      action();
+    }
+  }, [isEditing]);
+
   const handleSelect = (contact: Contact) => {
-    setActiveContact(contact);
-    setView('detail');
+    guardNavigation(() => {
+      setActiveContact(contact);
+      setView('detail');
+    });
   };
 
   const handleAdd = () => {
-    setActiveContact(null);
-    setView('new');
+    guardNavigation(() => {
+      setActiveContact(null);
+      setView('new');
+    });
   };
 
   const handleEdit = () => {
@@ -243,7 +261,7 @@ export default function ContactsPage() {
           activeListId={activeListId}
           onSelectList={setActiveListId}
           customFieldDefinitions={definitions}
-          onEditContact={(contact) => { setActiveContact(contact); setView('edit'); }}
+          onEditContact={(contact) => guardNavigation(() => { setActiveContact(contact); setView('edit'); })}
           onRefresh={refetch}
           headerActions={
             <DropdownMenu>
@@ -307,6 +325,7 @@ export default function ContactsPage() {
             customFieldDefinitions={definitions}
             existingCustomFieldValues={view === 'edit' ? customFieldValues : []}
             onCreateTag={handleCreateTagInline}
+            onDirtyChange={(dirty) => { formDirtyRef.current = dirty; }}
           />
         </div>
       ) : activeContact ? (
@@ -360,6 +379,10 @@ export default function ContactsPage() {
             onCreateList={createList}
             onUpdateList={updateList}
             onDeleteList={deleteList}
+            onSelectList={(listId) => {
+              setActiveListId(listId);
+              setListsDialogOpen(false);
+            }}
           />
         </DialogContent>
       </Dialog>
@@ -396,6 +419,20 @@ export default function ContactsPage() {
         availableTags={tags}
         availableLists={lists}
         customFieldDefinitions={definitions}
+      />
+
+      {/* Unsaved changes guard for ContactForm navigation */}
+      <ConfirmDialog
+        open={!!pendingNavAction}
+        onOpenChange={(open) => !open && setPendingNavAction(null)}
+        title="Unsaved changes"
+        description="You have unsaved changes that will be lost if you navigate away."
+        actionLabel="Discard"
+        onConfirm={() => {
+          pendingNavAction?.();
+          setPendingNavAction(null);
+          formDirtyRef.current = false;
+        }}
       />
     </div>
   );

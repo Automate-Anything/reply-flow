@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
 import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 export default function KnowledgeBasePage() {
   const navigate = useNavigate();
@@ -51,6 +52,14 @@ export default function KnowledgeBasePage() {
   const [searchResults, setSearchResults] = useState<KBSearchResult[]>([]);
   const [searchClassification, setSearchClassification] = useState<{ method: string; reasoning: string } | null>(null);
   const [searching, setSearching] = useState(false);
+
+  // Protect create/edit forms from accidental navigation
+  const isPageDirty = useMemo(() => {
+    if (showCreateForm && (newName.trim() || newDescription.trim())) return true;
+    if (editingKbId && (editName.trim() || editDescription.trim())) return true;
+    return false;
+  }, [showCreateForm, newName, newDescription, editingKbId, editName, editDescription]);
+  useFormDirtyGuard(isPageDirty);
 
   const handleCreate = async () => {
     if (!newName.trim()) {

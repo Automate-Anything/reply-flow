@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   MessageSquare,
   StickyNote,
@@ -282,13 +283,18 @@ export default function ActivityTimeline({
                         {formatTimestamp(event.timestamp)}
                       </span>
                       {isNote && noteId && (
-                        <button
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                          onClick={() => onDeleteNote(noteId)}
-                          title="Delete note"
+                        <ConfirmDialog
+                          title="Delete this note?"
+                          description="This action cannot be undone."
+                          onConfirm={() => onDeleteNote(noteId)}
                         >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            title="Delete note"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </ConfirmDialog>
                       )}
                     </div>
                   </div>

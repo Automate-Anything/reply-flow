@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -13,6 +13,7 @@ import MessageThread from '@/components/inbox/MessageThread';
 import ConversationNotes from '@/components/inbox/ConversationNotes';
 import ContactPanel from '@/components/inbox/ContactPanel';
 import InboxToolsPanel from '@/components/inbox/InboxToolsPanel';
+import ForwardMessageModal from '@/components/inbox/ForwardMessageModal';
 
 export default function InboxPage() {
   const [search, setSearch] = useState('');
@@ -24,6 +25,12 @@ export default function InboxPage() {
   const [notesPanelOpen, setNotesPanelOpen] = useState(false);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
   const [inboxToolsOpen, setInboxToolsOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+
+  // Draft persistence
+  const draftRef = useRef<string>('');
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
     useConversations(search, filters);
@@ -41,6 +48,33 @@ export default function InboxPage() {
   useEffect(() => {
     refreshLabels();
   }, [refreshLabels]);
+
+  // Draft save helper
+  const saveDraft = useCallback(async (sessionId: string, text: string) => {
+    try {
+      await api.patch(`/conversations/${sessionId}`, { draft_message: text });
+    } catch {
+      // Silently fail — drafts are a convenience, not critical
+    }
+  }, []);
+
+  const handleDraftChange = useCallback((text: string) => {
+    draftRef.current = text;
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    const convId = activeConversation?.id;
+    if (convId) {
+      draftTimerRef.current = setTimeout(() => {
+        saveDraft(convId, text);
+      }, 2000);
+    }
+  }, [activeConversation?.id, saveDraft]);
+
+  // Save draft on unmount (page navigation)
+  useEffect(() => {
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    };
+  }, []);
 
   // Realtime updates
   useRealtimeMessages({
@@ -71,7 +105,24 @@ export default function InboxPage() {
   });
 
   const handleSelectConversation = (conv: Conversation) => {
+    // Save draft for the conversation we're leaving
+    if (activeConversation && draftRef.current !== (activeConversation.draft_message || '')) {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      saveDraft(activeConversation.id, draftRef.current);
+      const savedDraft = draftRef.current.trim() || null;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === activeConversation.id ? { ...c, draft_message: savedDraft } : c))
+      );
+    }
+
+    // Init draft ref for the new conversation
+    draftRef.current = conv.draft_message || '';
+
     setActiveConversation(conv);
+    setReplyingTo(null);
     if (conv.unread_count > 0 || conv.marked_unread) {
       api.post(`/conversations/${conv.id}/read`).then(() => refetchConvs());
     }
@@ -79,7 +130,21 @@ export default function InboxPage() {
 
   const handleSend = async (body: string) => {
     try {
-      await sendMessage(body);
+      await sendMessage(body, replyingTo?.id);
+      setReplyingTo(null);
+
+      // Clear draft (server also clears it atomically on send)
+      draftRef.current = '';
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      if (activeConversation) {
+        setConversations((prev) =>
+          prev.map((c) => (c.id === activeConversation.id ? { ...c, draft_message: null } : c))
+        );
+      }
+
       refetchConvs();
     } catch {
       toast.error('Failed to send message');
@@ -123,7 +188,22 @@ export default function InboxPage() {
     );
   };
 
-  const handleBack = () => setActiveConversation(null);
+  const handleBack = () => {
+    // Save draft before leaving
+    if (activeConversation && draftRef.current) {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      saveDraft(activeConversation.id, draftRef.current);
+      const savedDraft = draftRef.current.trim() || null;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === activeConversation.id ? { ...c, draft_message: savedDraft } : c))
+      );
+    }
+    draftRef.current = '';
+    setActiveConversation(null);
+  };
 
   // Selection handlers
   const handleToggleSelectionMode = () => {
@@ -148,6 +228,12 @@ export default function InboxPage() {
   const handleBulkActionComplete = () => {
     refetchConvs();
     setSelectedIds([]);
+  };
+
+  const handleMessageUpdate = (updatedMsg: Message) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m))
+    );
   };
 
   return (
@@ -203,9 +289,17 @@ export default function InboxPage() {
             <MessageThread
               messages={messages}
               loading={msgsLoading}
+              sessionId={activeConversation.id}
               onSend={handleSend}
               onSchedule={handleSchedule}
               onCancelScheduled={handleCancelScheduled}
+              initialDraft={activeConversation?.draft_message || ''}
+              onDraftChange={handleDraftChange}
+              replyingTo={replyingTo}
+              onReply={setReplyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              onMessageUpdate={handleMessageUpdate}
+              onForward={setForwardingMessage}
             />
           </div>
 
@@ -224,6 +318,14 @@ export default function InboxPage() {
             contactId={activeConversation.contact_id}
             open={contactPanelOpen}
             onClose={() => setContactPanelOpen(false)}
+          />
+
+          {/* Forward message modal */}
+          <ForwardMessageModal
+            message={forwardingMessage}
+            currentSessionId={activeConversation.id}
+            conversations={conversations}
+            onClose={() => setForwardingMessage(null)}
           />
         </>
       ) : (

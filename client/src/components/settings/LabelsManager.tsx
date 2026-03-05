@@ -9,9 +9,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { Loader2, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 interface LabelItem {
   id: string;
@@ -38,7 +42,12 @@ export default function LabelsManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', color: PRESET_COLORS[5] });
+  const [originalForm, setOriginalForm] = useState({ name: '', color: PRESET_COLORS[5] });
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, dialogOpen ? originalForm : null);
+  useFormDirtyGuard(isDirty);
 
   const fetchLabels = async () => {
     try {
@@ -62,11 +71,15 @@ export default function LabelsManager() {
 
   const openCreate = () => {
     resetForm();
+    const defaults = { name: '', color: PRESET_COLORS[5] };
+    setOriginalForm(defaults);
     setDialogOpen(true);
   };
 
   const openEdit = (label: LabelItem) => {
-    setForm({ name: label.name, color: label.color });
+    const values = { name: label.name, color: label.color };
+    setForm(values);
+    setOriginalForm(values);
     setEditingId(label.id);
     setDialogOpen(true);
   };
@@ -119,7 +132,13 @@ export default function LabelsManager() {
         <p className="text-sm text-muted-foreground">
           Organize and categorize conversations.
         </p>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+              if (!open) {
+                guardedClose(() => { setDialogOpen(false); resetForm(); });
+              } else {
+                setDialogOpen(true);
+              }
+            }}>
           <DialogTrigger asChild>
             <Button size="sm" className="shrink-0" onClick={openCreate}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -160,7 +179,7 @@ export default function LabelsManager() {
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                <Button variant="outline" onClick={() => guardedClose(() => { setDialogOpen(false); resetForm(); })}>
                   Cancel
                 </Button>
                 <Button onClick={handleSubmit} disabled={submitting}>
@@ -206,7 +225,7 @@ export default function LabelsManager() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                  onClick={() => handleDelete(label.id)}
+                  onClick={() => setPendingDeleteId(label.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -215,6 +234,25 @@ export default function LabelsManager() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="Delete this label?"
+        description="The label will be removed from all conversations."
+        onConfirm={() => {
+          handleDelete(pendingDeleteId!);
+          setPendingDeleteId(null);
+        }}
+      />
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSubmit}
+        saving={submitting}
+      />
     </div>
   );
 }

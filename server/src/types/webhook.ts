@@ -38,6 +38,12 @@ export interface WhapiIncomingMessage {
   };
   from_name?: string;
   chat_id: string;
+  context?: {
+    quoted_id?: string;
+    quoted_author?: string;
+    quoted_content?: { body?: string };
+    quoted_type?: string;
+  };
 }
 
 export interface WhapiStatusUpdate {

@@ -34,8 +34,10 @@ export interface Conversation {
   human_takeover: boolean;
   marked_unread: boolean;
   pinned_at: string | null;
+  draft_message: string | null;
   unread_count: number;
   labels: ConversationLabel[];
+  contact_session_count: number;
   created_at: string;
 }
 

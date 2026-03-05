@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   MessageSquare,
@@ -13,10 +13,11 @@ import {
   Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useCallback, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSession } from '@/contexts/SessionContext';
+import { useFormGuard } from '@/contexts/FormGuardContext';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
@@ -35,6 +36,23 @@ interface SidebarProps {
 export default function Sidebar({ onNavigate }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const { hasPermission, isSuperAdmin } = useSession();
+  const { guardNavigation } = useFormGuard();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleNavClick = useCallback((e: MouseEvent, to: string) => {
+    e.preventDefault();
+    // Already on this page — no guard needed
+    if (location.pathname === to || (to === '/' && location.pathname === '/')) {
+      onNavigate?.();
+      return;
+    }
+    const blocked = guardNavigation(() => {
+      navigate(to);
+      onNavigate?.();
+    });
+    if (!blocked) return; // already navigated
+  }, [guardNavigation, navigate, location.pathname, onNavigate]);
 
   const visibleNavItems = navItems.filter(
     (item) => !item.permission || hasPermission(item.permission.resource, item.permission.action)
@@ -81,7 +99,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
               <NavLink
                 to={to}
                 end={to === '/'}
-                onClick={onNavigate}
+                onClick={(e) => handleNavClick(e, to)}
                 className={({ isActive }) =>
                   cn(
                     'relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
@@ -108,7 +126,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
               <TooltipTrigger asChild>
                 <NavLink
                   to="/super-admin"
-                  onClick={onNavigate}
+                  onClick={(e) => handleNavClick(e, '/super-admin')}
                   className={({ isActive }) =>
                     cn(
                       'relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',

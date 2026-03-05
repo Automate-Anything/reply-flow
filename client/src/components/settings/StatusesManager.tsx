@@ -15,9 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { CircleDot, GripVertical, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 import {
   DndContext,
   closestCenter,
@@ -63,7 +67,12 @@ export default function StatusesManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', color: PRESET_COLORS[0], group: 'open' as 'open' | 'closed' });
+  const [originalForm, setOriginalForm] = useState({ name: '', color: PRESET_COLORS[0], group: 'open' as 'open' | 'closed' });
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, dialogOpen ? originalForm : null);
+  useFormDirtyGuard(isDirty);
 
   const fetchStatuses = async () => {
     try {
@@ -87,12 +96,16 @@ export default function StatusesManager() {
 
   const openCreate = (group: 'open' | 'closed') => {
     resetForm();
-    setForm((prev) => ({ ...prev, group }));
+    const defaults = { name: '', color: PRESET_COLORS[0], group };
+    setForm(defaults);
+    setOriginalForm(defaults);
     setDialogOpen(true);
   };
 
   const openEdit = (status: StatusItem) => {
-    setForm({ name: status.name, color: status.color, group: status.group });
+    const values = { name: status.name, color: status.color, group: status.group };
+    setForm(values);
+    setOriginalForm(values);
     setEditingId(status.id);
     setDialogOpen(true);
   };
@@ -177,7 +190,7 @@ export default function StatusesManager() {
             Add
           </Button>
         </div>
-        <StatusGroup statuses={openStatuses} onEdit={openEdit} onDelete={handleDelete} onReorder={handleReorder} />
+        <StatusGroup statuses={openStatuses} onEdit={openEdit} onDelete={setPendingDeleteId} onReorder={handleReorder} />
       </div>
 
       {/* Closed group */}
@@ -189,11 +202,17 @@ export default function StatusesManager() {
             Add
           </Button>
         </div>
-        <StatusGroup statuses={closedStatuses} onEdit={openEdit} onDelete={handleDelete} onReorder={handleReorder} />
+        <StatusGroup statuses={closedStatuses} onEdit={openEdit} onDelete={setPendingDeleteId} onReorder={handleReorder} />
       </div>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            guardedClose(() => { setDialogOpen(false); resetForm(); });
+          } else {
+            setDialogOpen(true);
+          }
+        }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingId ? 'Edit Status' : 'New Status'}</DialogTitle>
@@ -243,7 +262,7 @@ export default function StatusesManager() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button variant="outline" onClick={() => guardedClose(() => { setDialogOpen(false); resetForm(); })}>
                 Cancel
               </Button>
               <Button onClick={handleSubmit} disabled={submitting}>
@@ -254,6 +273,25 @@ export default function StatusesManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="Delete this status?"
+        description="Conversations with this status will keep their current status."
+        onConfirm={() => {
+          handleDelete(pendingDeleteId!);
+          setPendingDeleteId(null);
+        }}
+      />
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSubmit}
+        saving={submitting}
+      />
     </div>
   );
 }

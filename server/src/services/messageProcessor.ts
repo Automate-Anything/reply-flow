@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import type { WhapiIncomingMessage } from '../types/webhook.js';
 import { shouldAIRespond, generateAndSendAIReply, sendOutsideHoursReply } from './ai.js';
+import { extractSessionMemories } from './sessionMemory.js';
 
 /**
  * Normalizes a WhatsApp chat_id to a phone number.
@@ -176,6 +177,11 @@ export async function processIncomingMessage(
         .update({ ended_at: new Date().toISOString() })
         .eq('id', activeSession.id);
 
+      // Extract memories from the ended session (async, never blocks)
+      extractSessionMemories(activeSession.id, companyId).catch((err) => {
+        console.error('Memory extraction error:', err);
+      });
+
       // Create a fresh session
       sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, msg.from_name);
     } else {
@@ -200,7 +206,21 @@ export async function processIncomingMessage(
     }
   }
 
-  // 4. Insert the message
+  // 4. Build metadata (media + reply context)
+  const metadata: Record<string, unknown> = {};
+  if (msg.image || msg.document || msg.audio || msg.video) {
+    metadata.media = msg.image || msg.document || msg.audio || msg.video;
+  }
+  if (msg.context?.quoted_id) {
+    metadata.reply = {
+      quoted_message_id: msg.context.quoted_id,
+      quoted_content: msg.context.quoted_content?.body?.slice(0, 200) || null,
+      quoted_sender: msg.context.quoted_author || null,
+      quoted_type: msg.context.quoted_type || null,
+    };
+  }
+
+  // 5. Insert the message
   const { error: messageError } = await supabaseAdmin
     .from('chat_messages')
     .insert({
@@ -216,9 +236,7 @@ export async function processIncomingMessage(
       status: 'received',
       read: false,
       message_ts: messageTs,
-      metadata: msg.image || msg.document || msg.audio || msg.video
-        ? { media: msg.image || msg.document || msg.audio || msg.video }
-        : null,
+      metadata: Object.keys(metadata).length > 0 ? metadata : null,
     });
 
   if (messageError) throw messageError;

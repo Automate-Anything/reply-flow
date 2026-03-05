@@ -178,9 +178,45 @@ export async function logoutChannel(channelToken: string): Promise<void> {
 export async function sendTextMessage(
   channelToken: string,
   to: string,
-  body: string
+  body: string,
+  quoted?: string
 ): Promise<unknown> {
   const gate = gateApi(channelToken);
-  const { data } = await gate.post('/messages/text', { to, body });
+  const payload: Record<string, string> = { to, body };
+  if (quoted) payload.quoted = quoted;
+  const { data } = await gate.post('/messages/text', payload);
+  return data;
+}
+
+// ── Message Actions ──────────────────────────────────────────────────────────
+
+export async function starMessage(channelToken: string, messageId: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.put(`/messages/${messageId}/star`);
+}
+
+export async function unstarMessage(channelToken: string, messageId: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.delete(`/messages/${messageId}/star`);
+}
+
+export async function pinMessage(channelToken: string, messageId: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.post(`/messages/${messageId}/pin`);
+}
+
+export async function unpinMessage(channelToken: string, messageId: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.delete(`/messages/${messageId}/pin`);
+}
+
+export async function reactToMessage(channelToken: string, messageId: string, emoji: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.put(`/messages/${messageId}/react`, { emoji });
+}
+
+export async function forwardMessage(channelToken: string, messageId: string, to: string): Promise<unknown> {
+  const gate = gateApi(channelToken);
+  const { data } = await gate.post(`/messages/${messageId}`, { to });
   return data;
 }

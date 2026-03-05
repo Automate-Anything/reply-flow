@@ -10,10 +10,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { Loader2, List, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ContactList } from '@/hooks/useContactLists';
 import PermissionGate from '@/components/auth/PermissionGate';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 interface ContactListsManagerProps {
   lists: ContactList[];
@@ -21,6 +25,7 @@ interface ContactListsManagerProps {
   onCreateList: (name: string, description?: string, color?: string) => Promise<ContactList>;
   onUpdateList: (listId: string, updates: { name?: string; description?: string; color?: string }) => Promise<void>;
   onDeleteList: (listId: string) => Promise<void>;
+  onSelectList?: (listId: string) => void;
 }
 
 const PRESET_COLORS = [
@@ -34,11 +39,17 @@ export default function ContactListsManager({
   onCreateList,
   onUpdateList,
   onDeleteList,
+  onSelectList,
 }: ContactListsManagerProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', description: '', color: PRESET_COLORS[5] });
+  const [originalForm, setOriginalForm] = useState({ name: '', description: '', color: PRESET_COLORS[5] });
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, dialogOpen ? originalForm : null);
+  useFormDirtyGuard(isDirty);
 
   const resetForm = () => {
     setForm({ name: '', description: '', color: PRESET_COLORS[5] });
@@ -47,11 +58,15 @@ export default function ContactListsManager({
 
   const openCreate = () => {
     resetForm();
+    const defaults = { name: '', description: '', color: PRESET_COLORS[5] };
+    setOriginalForm(defaults);
     setDialogOpen(true);
   };
 
   const openEdit = (list: ContactList) => {
-    setForm({ name: list.name, description: list.description || '', color: list.color });
+    const values = { name: list.name, description: list.description || '', color: list.color };
+    setForm(values);
+    setOriginalForm(values);
     setEditingId(list.id);
     setDialogOpen(true);
   };
@@ -104,10 +119,16 @@ export default function ContactListsManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Create lists to group your contacts.
+          {onSelectList ? 'Click a list to view its contacts.' : 'Create lists to group your contacts.'}
         </p>
         <PermissionGate resource="contact_lists" action="create">
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={(open) => {
+              if (!open) {
+                guardedClose(() => { setDialogOpen(false); resetForm(); });
+              } else {
+                setDialogOpen(true);
+              }
+            }}>
             <DialogTrigger asChild>
               <Button size="sm" className="shrink-0" onClick={openCreate}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -157,7 +178,7 @@ export default function ContactListsManager({
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  <Button variant="outline" onClick={() => guardedClose(() => { setDialogOpen(false); resetForm(); })}>
                     Cancel
                   </Button>
                   <Button onClick={handleSubmit} disabled={submitting}>
@@ -184,7 +205,8 @@ export default function ContactListsManager({
           {lists.map((list, i) => (
             <div
               key={list.id}
-              className={`group flex items-center gap-3 px-3 py-2.5 ${i !== lists.length - 1 ? 'border-b' : ''}`}
+              className={`group flex items-center gap-3 px-3 py-2.5 ${i !== lists.length - 1 ? 'border-b' : ''} ${onSelectList ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+              onClick={() => onSelectList?.(list.id)}
             >
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -203,7 +225,7 @@ export default function ContactListsManager({
                   <p className="truncate text-xs text-muted-foreground">{list.description}</p>
                 )}
               </div>
-              <div className="flex shrink-0 gap-0.5">
+              <div className="flex shrink-0 gap-0.5" onClick={(e) => e.stopPropagation()}>
                 <PermissionGate resource="contact_lists" action="edit">
                   <Button
                     variant="ghost"
@@ -219,7 +241,7 @@ export default function ContactListsManager({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                    onClick={() => handleDelete(list.id)}
+                    onClick={() => setPendingDeleteId(list.id)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -229,6 +251,25 @@ export default function ContactListsManager({
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="Delete this list?"
+        description="The list will be removed. Contacts in this list will not be deleted."
+        onConfirm={() => {
+          handleDelete(pendingDeleteId!);
+          setPendingDeleteId(null);
+        }}
+      />
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSubmit}
+        saving={submitting}
+      />
     </div>
   );
 }

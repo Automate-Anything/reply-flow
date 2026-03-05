@@ -5,6 +5,8 @@ import { buildSystemPrompt, buildClassificationPrompt, buildScenarioResponseProm
 import type { ProfileData, KBEntry, ChannelOverrides } from './promptBuilder.js';
 import { isEmbeddingsAvailable, searchKnowledgeBase } from './embeddings.js';
 import { classifyQuery } from './queryClassifier.js';
+import { getContactContext } from './sessionMemory.js';
+import type { ContactMemory } from './sessionMemory.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -22,6 +24,7 @@ interface AIContext {
   channelOverrides?: ChannelOverrides;
   maxTokens: number;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  contactMemories: ContactMemory[];
 }
 
 export interface ClassificationResult {
@@ -154,7 +157,7 @@ export async function shouldAIRespond(
   // 1. Get session + channel_id
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
-    .select('channel_id, human_takeover, auto_resume_at')
+    .select('channel_id, human_takeover, auto_resume_at, contact_id')
     .eq('id', sessionId)
     .single();
 
@@ -233,9 +236,10 @@ export async function shouldAIRespond(
 
   // 8. Semantic search for relevant KB content (or fall back to loading all)
   let kbData: KBEntry[] = [];
+  let searchQuery = messages[messages.length - 1]?.content || '';
 
   if (isEmbeddingsAvailable()) {
-    const searchQuery = await reformulateQuery(messages);
+    searchQuery = await reformulateQuery(messages);
     const qc = classifyQuery(searchQuery);
     const searchResults = await searchKnowledgeBase(companyId, searchQuery, {
       retrievalMethod: qc.method,
@@ -262,6 +266,12 @@ export async function shouldAIRespond(
     kbData = (kbEntries || []) as KBEntry[];
   }
 
+  // 8b. Load contact memories for returning contacts
+  let contactMemories: ContactMemory[] = [];
+  if (session.contact_id) {
+    contactMemories = await getContactContext(session.contact_id, companyId, searchQuery);
+  }
+
   // 9. Resolve profile_data — prefer agent's profile if assigned
   let profileData = (channelSettings.profile_data || {}) as ProfileData;
 
@@ -283,7 +293,7 @@ export async function shouldAIRespond(
 
   return {
     action: 'respond',
-    context: { profileData, kbEntries: kbData, channelOverrides, maxTokens, messages },
+    context: { profileData, kbEntries: kbData, channelOverrides, maxTokens, messages, contactMemories },
   };
 }
 
@@ -347,6 +357,45 @@ export async function classifyMessage(
   }
 }
 
+// ── Contact memory formatting ─────────────────────
+
+function formatContactMemories(memories: ContactMemory[]): string {
+  const summary = memories.find((m) => m.memory_type === 'summary');
+  const others = memories.filter((m) => m.memory_type !== 'summary');
+
+  const parts: string[] = ['## What You Know About This Contact From Previous Conversations'];
+
+  if (summary) {
+    parts.push(`**Last conversation:** ${summary.content}`);
+  }
+
+  if (others.length > 0) {
+    const grouped: Record<string, string[]> = {};
+    for (const m of others) {
+      if (!grouped[m.memory_type]) grouped[m.memory_type] = [];
+      grouped[m.memory_type].push(m.content);
+    }
+
+    const labels: Record<string, string> = {
+      preference: 'Preferences',
+      fact: 'Key Facts',
+      decision: 'Past Agreements',
+      issue: 'Unresolved Issues',
+    };
+
+    for (const [type, items] of Object.entries(grouped)) {
+      parts.push(`**${labels[type] || type}:**`);
+      parts.push(items.map((item) => `- ${item}`).join('\n'));
+    }
+  }
+
+  parts.push(
+    '\nUse this context naturally — don\'t explicitly mention "your previous conversation" unless the contact brings it up first. If an issue was unresolved, proactively check if it\'s been resolved.'
+  );
+
+  return parts.join('\n');
+}
+
 // ── AI reply generation ────────────────────────────
 
 /**
@@ -360,7 +409,7 @@ export async function generateAndSendAIReply(
 ): Promise<void> {
   if (!anthropic) return;
 
-  const { profileData, kbEntries, channelOverrides, maxTokens, messages } = context;
+  const { profileData, kbEntries, channelOverrides, maxTokens, messages, contactMemories } = context;
   const hasScenarios = !!(profileData.response_flow?.scenarios?.length);
 
   let systemPrompt: string;
@@ -377,6 +426,11 @@ export async function generateAndSendAIReply(
     }
   } else {
     systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+  }
+
+  // Append contact memories from previous sessions
+  if (contactMemories.length > 0) {
+    systemPrompt += '\n\n' + formatContactMemories(contactMemories);
   }
 
   const response = await anthropic.messages.create({

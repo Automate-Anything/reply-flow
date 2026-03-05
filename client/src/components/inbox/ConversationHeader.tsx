@@ -36,6 +36,7 @@ import { cn } from '@/lib/utils';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import AIToggle from '@/components/ai/AIToggle';
 
 interface ConversationHeaderProps {
@@ -117,6 +118,7 @@ export default function ConversationHeader({
   const [allLabels, setAllLabels] = useState<LabelOption[]>([]);
   const [labelLoading, setLabelLoading] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const [patchLoading, setPatchLoading] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [creatingLabel, setCreatingLabel] = useState(false);
@@ -478,7 +480,7 @@ export default function ConversationHeader({
 
             {/* Archive */}
             <DropdownMenuItem
-              onClick={handleArchive}
+              onClick={() => setConfirmArchiveOpen(true)}
               disabled={archiving}
               className="text-destructive focus:text-destructive"
             >
@@ -492,6 +494,16 @@ export default function ConversationHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <ConfirmDialog
+        open={confirmArchiveOpen}
+        onOpenChange={setConfirmArchiveOpen}
+        title="Archive this conversation?"
+        description="Archived conversations can be found in the archived filter."
+        actionLabel="Archive"
+        onConfirm={handleArchive}
+        loading={archiving}
+      />
     </div>
   );
 }

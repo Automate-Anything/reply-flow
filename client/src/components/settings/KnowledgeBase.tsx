@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import {
   Plus, FileText, Upload, Trash2, Loader2, X, ChevronDown, ChevronUp,
   RotateCw, Layers,
@@ -10,6 +12,8 @@ import {
 import { toast } from 'sonner';
 import type { KBEntry, KBChunk } from '@/hooks/useCompanyKB';
 import { cn } from '@/lib/utils';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 interface Props {
   entries: KBEntry[];
@@ -173,7 +177,14 @@ function EntryCard({
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(entry.title);
   const [content, setContent] = useState(entry.content);
+  const [originalValues, setOriginalValues] = useState({ title: entry.title, content: entry.content });
   const [saving, setSaving] = useState(false);
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(
+    { title, content },
+    editing ? originalValues : null,
+  );
+  useFormDirtyGuard(isDirty);
   const [deleting, setDeleting] = useState(false);
   const [reembedding, setReembedding] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
@@ -293,7 +304,7 @@ function EntryCard({
                   {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
                   Save
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setTitle(entry.title); setContent(entry.content); }} className="h-7 text-xs">
+                <Button variant="ghost" size="sm" onClick={() => guardedClose(() => { setEditing(false); setTitle(entry.title); setContent(entry.content); })} className="h-7 text-xs">
                   Cancel
                 </Button>
               </div>
@@ -315,19 +326,24 @@ function EntryCard({
                 </button>
               )}
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-7 text-xs">
+                <Button variant="ghost" size="sm" onClick={() => { setOriginalValues({ title, content }); setEditing(true); }} className="h-7 text-xs">
                   Edit
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                <ConfirmDialog
+                  title="Delete this entry?"
+                  description="This will permanently delete this knowledge base entry."
+                  onConfirm={handleDelete}
                 >
-                  {deleting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Trash2 className="mr-1 h-3 w-3" />}
-                  Delete
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={deleting}
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    {deleting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Trash2 className="mr-1 h-3 w-3" />}
+                    Delete
+                  </Button>
+                </ConfirmDialog>
                 {entry.embedding_status === 'failed' && onReembed && (
                   <Button
                     variant="ghost"
@@ -361,6 +377,14 @@ function EntryCard({
           )}
         </div>
       )}
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSave}
+        saving={saving}
+      />
     </div>
   );
 }

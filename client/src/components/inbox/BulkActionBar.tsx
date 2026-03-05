@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
@@ -226,16 +227,22 @@ export default function BulkActionBar({
       </DropdownMenu>
 
       {/* Archive */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7"
-        disabled={loading}
-        onClick={() => executeBulk('archive', true)}
-        title="Archive"
+      <ConfirmDialog
+        title={`Archive ${selectedIds.length} conversation${selectedIds.length === 1 ? '' : 's'}?`}
+        description="Archived conversations can be found in the archived filter."
+        actionLabel="Archive"
+        onConfirm={() => executeBulk('archive', true)}
       >
-        <Archive className="h-3.5 w-3.5" />
-      </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          disabled={loading}
+          title="Archive"
+        >
+          <Archive className="h-3.5 w-3.5" />
+        </Button>
+      </ConfirmDialog>
 
       {/* Star */}
       <Button

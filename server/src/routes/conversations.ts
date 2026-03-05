@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { extractSessionMemories } from '../services/sessionMemory.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -141,9 +142,28 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       );
     }
 
+    // Get session counts per contact for "returning contact" indicators
+    const contactIds = [...new Set(filteredData.map((s) => s.contact_id).filter(Boolean))];
+    let sessionCountMap: Record<string, number> = {};
+    if (contactIds.length > 0) {
+      const { data: countRows } = await supabaseAdmin
+        .from('chat_sessions')
+        .select('contact_id')
+        .eq('company_id', companyId)
+        .in('contact_id', contactIds)
+        .is('deleted_at', null);
+
+      if (countRows) {
+        for (const row of countRows) {
+          sessionCountMap[row.contact_id] = (sessionCountMap[row.contact_id] || 0) + 1;
+        }
+      }
+    }
+
     const sessions = filteredData.map((s) => ({
       ...s,
       unread_count: unreadMap[s.id] || 0,
+      contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
       labels:
         s.conversation_labels
           ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
@@ -265,7 +285,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
   try {
     const companyId = req.companyId!;
     const { sessionId } = req.params;
-    const { status, assigned_to, priority, is_starred, snoozed_until, marked_unread, pinned_at } = req.body;
+    const { status, assigned_to, priority, is_starred, snoozed_until, marked_unread, pinned_at, draft_message } = req.body;
 
     // Verify session belongs to company
     const { data: session } = await supabaseAdmin
@@ -280,7 +300,8 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       return;
     }
 
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const updates: Record<string, unknown> = {};
+    let sessionClosed = false;
 
     if (status !== undefined) {
       // Look up the status in conversation_statuses for this company
@@ -301,6 +322,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       // Session boundary based on status group
       if (statusRow.group === 'closed') {
         updates.ended_at = new Date().toISOString();
+        sessionClosed = true;
       } else {
         updates.ended_at = null;
       }
@@ -366,6 +388,17 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       }
     }
 
+    if (draft_message !== undefined) {
+      const trimmed = typeof draft_message === 'string' ? draft_message.trim() : null;
+      updates.draft_message = trimmed || null;
+    }
+
+    // Only set updated_at when something meaningful changed (not just draft)
+    const hasMeaningfulUpdate = Object.keys(updates).some((k) => k !== 'draft_message');
+    if (hasMeaningfulUpdate) {
+      updates.updated_at = new Date().toISOString();
+    }
+
     const { data, error } = await supabaseAdmin
       .from('chat_sessions')
       .update(updates)
@@ -397,6 +430,13 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
     };
 
     res.json({ session: result });
+
+    // Extract memories from the ended session (async, after response sent)
+    if (sessionClosed) {
+      extractSessionMemories(sessionId, companyId).catch((err) => {
+        console.error('Memory extraction error:', err);
+      });
+    }
   } catch (err) {
     next(err);
   }

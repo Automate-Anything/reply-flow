@@ -1,13 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash, Clock, Brain, X } from 'lucide-react';
 import api from '@/lib/api';
 import { useContactActivity } from '@/hooks/useContactActivity';
 import { useSingleContactDuplicates } from '@/hooks/useContactDuplicates';
@@ -16,6 +12,26 @@ import MergeContactDialog from './MergeContactDialog';
 import type { Contact } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { CustomFieldValue } from '@/hooks/useCustomFields';
+
+interface ContactSession {
+  id: string;
+  status: string;
+  created_at: string;
+  ended_at: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  channel_id: number | null;
+  message_count: number;
+}
+
+interface ContactMemory {
+  id: string;
+  memory_type: string;
+  content: string;
+  session_id: string;
+  is_active: boolean;
+  created_at: string;
+}
 
 interface ContactDetailProps {
   contact: Contact;
@@ -43,6 +59,37 @@ export default function ContactDetail({
   } = useContactActivity(contact.id);
   const { duplicates } = useSingleContactDuplicates(contact.id);
   const [mergeTarget, setMergeTarget] = useState<Contact | null>(null);
+  const [sessions, setSessions] = useState<ContactSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [memories, setMemories] = useState<ContactMemory[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
+
+  const fetchSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const { data } = await api.get(`/contacts/${contact.id}/sessions`);
+      setSessions(data.sessions || []);
+    } catch { /* ignore */ } finally {
+      setSessionsLoading(false);
+    }
+  }, [contact.id]);
+
+  const fetchMemories = useCallback(async () => {
+    setMemoriesLoading(true);
+    try {
+      const { data } = await api.get(`/contacts/${contact.id}/memories`);
+      setMemories(data.memories || []);
+    } catch { /* ignore */ } finally {
+      setMemoriesLoading(false);
+    }
+  }, [contact.id]);
+
+  // Lazy-load sessions and memories when their tabs are first activated
+  useEffect(() => {
+    if (activeTab === 'sessions' && sessions.length === 0 && !sessionsLoading) fetchSessions();
+    if (activeTab === 'memories' && memories.length === 0 && !memoriesLoading) fetchMemories();
+  }, [activeTab, sessions.length, sessionsLoading, fetchSessions, memories.length, memoriesLoading, fetchMemories]);
 
   const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ')
     || contact.whatsapp_name
@@ -108,36 +155,20 @@ export default function ContactDetail({
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
             <Pencil className="h-4 w-4" />
           </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={deleting}>
-                {deleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will delete the contact and all associated data. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={onDelete}
-                  disabled={deleting}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <ConfirmDialog
+            title={`Delete ${name}?`}
+            description="This will delete the contact and all associated data. This action cannot be undone."
+            onConfirm={onDelete}
+            loading={deleting}
+          >
+            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={deleting}>
+              {deleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
+          </ConfirmDialog>
         </div>
       </div>
 
@@ -179,10 +210,12 @@ export default function ContactDetail({
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="details" className="flex flex-1 flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
         <TabsList className="mx-6 mt-4 w-fit">
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          <TabsTrigger value="memories">Memories</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="flex-1 overflow-auto px-6 py-4">
@@ -254,6 +287,113 @@ export default function ContactDetail({
             onDeleteNote={handleDeleteNote}
           />
         </TabsContent>
+
+        <TabsContent value="sessions" className="flex-1 overflow-auto px-6 py-4">
+          {sessionsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : sessions.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No sessions yet</p>
+          ) : (
+            <div className="space-y-2">
+              {sessions.map((s, i) => {
+                const started = new Date(s.created_at);
+                const ended = s.ended_at ? new Date(s.ended_at) : null;
+                const isActive = !ended;
+                const durationMs = ended ? ended.getTime() - started.getTime() : Date.now() - started.getTime();
+                const durationHours = Math.round(durationMs / (1000 * 60 * 60));
+                const durationLabel = durationHours < 1 ? '< 1h' : durationHours < 24 ? `${durationHours}h` : `${Math.round(durationHours / 24)}d`;
+
+                return (
+                  <div key={s.id} className="rounded-lg border bg-card p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
+                          {isActive ? 'Active' : s.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          #{sessions.length - i}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{s.message_count} msg{s.message_count !== 1 ? 's' : ''}</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {durationLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-1.5 text-xs text-muted-foreground">
+                      {started.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {ended && ` — ${ended.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                      {isActive && ' — now'}
+                    </div>
+                    {s.last_message && (
+                      <p className="mt-1 truncate text-xs text-foreground/70">{s.last_message}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="memories" className="flex-1 overflow-auto px-6 py-4">
+          {memoriesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : memories.length === 0 ? (
+            <div className="py-8 text-center">
+              <Brain className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">No memories yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">Memories are extracted automatically when sessions end.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {memories.map((m) => {
+                const typeConfig: Record<string, { label: string; color: string }> = {
+                  preference: { label: 'Preference', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' },
+                  fact: { label: 'Fact', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
+                  decision: { label: 'Decision', color: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' },
+                  issue: { label: 'Issue', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+                  summary: { label: 'Summary', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' },
+                };
+                const cfg = typeConfig[m.memory_type] || { label: m.memory_type, color: 'bg-gray-100 text-gray-800' };
+                const ago = formatTimeAgo(m.created_at);
+
+                return (
+                  <div key={m.id} className="group flex items-start gap-2 rounded-lg border bg-card p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${cfg.color}`}>
+                          {cfg.label}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{ago}</span>
+                      </div>
+                      <p className="mt-1 text-sm leading-relaxed">{m.content}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
+                      title="Remove memory"
+                      onClick={async () => {
+                        try {
+                          await api.patch(`/contacts/${contact.id}/memories/${m.id}`, { is_active: false });
+                          setMemories((prev) => prev.filter((x) => x.id !== m.id));
+                        } catch { /* ignore */ }
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* Merge dialog */}
@@ -279,6 +419,18 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
       <div className="divide-y">{children}</div>
     </div>
   );
+}
+
+function formatTimeAgo(dateStr: string): string {
+  const ms = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return mins <= 1 ? 'just now' : `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
 }
 
 function DetailField({

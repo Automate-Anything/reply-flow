@@ -14,12 +14,15 @@ import {
 } from '@/components/ui/select';
 import PhoneInput from '@/components/ui/phone-input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { Contact } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { CustomFieldDefinition, CustomFieldValue } from '@/hooks/useCustomFields';
 import TagInput from './TagInput';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 interface ContactFormProps {
   contact?: Contact | null;
@@ -29,6 +32,7 @@ interface ContactFormProps {
   customFieldDefinitions?: CustomFieldDefinition[];
   existingCustomFieldValues?: CustomFieldValue[];
   onCreateTag?: (name: string) => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export default function ContactForm({
@@ -39,8 +43,22 @@ export default function ContactForm({
   customFieldDefinitions = [],
   existingCustomFieldValues = [],
   onCreateTag,
+  onDirtyChange,
 }: ContactFormProps) {
   const [form, setForm] = useState({
+    phone_number: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    company: '',
+    tags: [] as string[],
+    address_street: '',
+    address_city: '',
+    address_state: '',
+    address_postal_code: '',
+    address_country: '',
+  });
+  const [originalForm, setOriginalForm] = useState({
     phone_number: '',
     first_name: '',
     last_name: '',
@@ -58,9 +76,17 @@ export default function ContactForm({
   const [error, setError] = useState('');
   const [phoneError, setPhoneError] = useState('');
 
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, originalForm);
+
+  useFormDirtyGuard(isDirty);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
   useEffect(() => {
     if (contact) {
-      setForm({
+      const values = {
         phone_number: contact.phone_number || '',
         first_name: contact.first_name || '',
         last_name: contact.last_name || '',
@@ -72,7 +98,9 @@ export default function ContactForm({
         address_state: contact.address_state || '',
         address_postal_code: contact.address_postal_code || '',
         address_country: contact.address_country || '',
-      });
+      };
+      setForm(values);
+      setOriginalForm(values);
     }
   }, [contact]);
 
@@ -157,6 +185,7 @@ export default function ContactForm({
   };
 
   return (
+    <>
     <Card className="w-full rounded-none border-0 shadow-none bg-transparent">
       <CardHeader>
         <CardTitle>{contact ? 'Edit Contact' : 'New Contact'}</CardTitle>
@@ -286,13 +315,22 @@ export default function ContactForm({
             <Button type="submit" disabled={saving}>
               {saving ? 'Saving...' : contact ? 'Update' : 'Create'}
             </Button>
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button type="button" variant="outline" onClick={() => guardedClose(onCancel)}>
               Cancel
             </Button>
           </div>
         </form>
       </CardContent>
     </Card>
+
+    <UnsavedChangesDialog
+      open={showDialog}
+      onKeepEditing={handleKeepEditing}
+      onDiscard={handleDiscard}
+      onSave={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+      saving={saving}
+    />
+    </>
   );
 }
 
