@@ -4,6 +4,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import * as whapi from '../services/whapi.js';
+import { checkPlanLimit } from './billing.js';
 
 const router = Router();
 
@@ -16,6 +17,13 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
   const companyId = req.companyId!;
 
   try {
+    // 0. Enforce plan limit
+    const limit = await checkPlanLimit(companyId, 'channels');
+    if (!limit.allowed) {
+      res.status(402).json({ error: 'Channel limit reached', used: limit.used, included: limit.included });
+      return;
+    }
+
     // 1. Create channel on WhAPI
     const channelName = req.body.name?.trim() || `reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`;
     const channel = await whapi.createChannel(channelName);

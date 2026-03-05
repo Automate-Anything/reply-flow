@@ -6,6 +6,36 @@ const router = Router();
 router.use(requireAuth);
 
 // ────────────────────────────────────────────────
+// Shared helper: check if company is within plan limits
+// Returns { allowed, used, included } for 'channels' or 'agents'
+// If no subscription exists, enforcement is skipped (allowed = true)
+// ────────────────────────────────────────────────
+export async function checkPlanLimit(
+  companyId: string,
+  resource: 'channels' | 'agents'
+): Promise<{ allowed: boolean; used: number; included: number }> {
+  const { data: sub } = await supabaseAdmin
+    .from('subscriptions')
+    .select('*, plan:plans(*)')
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (!sub) return { allowed: true, used: 0, included: Infinity };
+
+  const plan = sub.plan as { channels: number; agents: number };
+  const table = resource === 'channels' ? 'whatsapp_channels' : 'ai_agents';
+
+  const { count } = await supabaseAdmin
+    .from(table)
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId);
+
+  const used = count ?? 0;
+  const included = plan[resource];
+  return { allowed: used < included, used, included };
+}
+
+// ────────────────────────────────────────────────
 // GET /api/billing/subscription
 // Returns the company's current subscription + plan
 // ────────────────────────────────────────────────
@@ -119,6 +149,7 @@ router.get('/usage', async (req, res, next) => {
 
     const plan = sub.plan as {
       channels: number;
+      agents: number;
       messages_per_month: number;
       kb_pages: number;
       overage_message_cents: number;
@@ -128,6 +159,12 @@ router.get('/usage', async (req, res, next) => {
     // ── Channels used ──────────────────────────────────
     const { count: channelsUsed } = await supabaseAdmin
       .from('whatsapp_channels')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId);
+
+    // ── Agents used ────────────────────────────────────
+    const { count: agentsUsed } = await supabaseAdmin
+      .from('ai_agents')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId);
 
@@ -169,6 +206,10 @@ router.get('/usage', async (req, res, next) => {
         channels: {
           used: channelsUsed ?? 0,
           included: plan.channels,
+        },
+        agents: {
+          used: agentsUsed ?? 0,
+          included: plan.agents,
         },
         messages: {
           used: messagesUsed ?? 0,

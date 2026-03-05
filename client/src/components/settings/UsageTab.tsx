@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 import { AlertTriangle } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -78,7 +78,12 @@ function UsageBar({
           {used.toLocaleString()}{unit} / {included.toLocaleString()}{unit} included
         </span>
       </div>
-      <Progress value={pct} className={hasOverage ? '[&>div]:bg-destructive' : ''} />
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn('h-full rounded-full transition-all', hasOverage ? 'bg-destructive' : 'bg-primary')}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
       <div className="flex items-center justify-between text-xs">
         <span className={hasOverage ? 'flex items-center gap-1 text-destructive' : 'text-muted-foreground'}>
           {hasOverage ? (
