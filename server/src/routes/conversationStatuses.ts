@@ -78,6 +78,31 @@ router.post('/', requirePermission('conversation_statuses', 'create'), async (re
   }
 });
 
+// Reorder statuses — must be before /:statusId
+router.put('/reorder', requirePermission('conversation_statuses', 'edit'), async (_req, res, next) => {
+  try {
+    const companyId = _req.companyId!;
+    const { statuses } = _req.body;
+
+    if (!Array.isArray(statuses)) {
+      res.status(400).json({ error: 'statuses array is required' });
+      return;
+    }
+
+    for (const s of statuses) {
+      await supabaseAdmin
+        .from('conversation_statuses')
+        .update({ sort_order: s.sort_order, updated_at: new Date().toISOString() })
+        .eq('id', s.id)
+        .eq('company_id', companyId);
+    }
+
+    res.json({ status: 'ok' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Update a status
 router.put('/:statusId', requirePermission('conversation_statuses', 'edit'), async (req, res, next) => {
   try {
@@ -158,31 +183,6 @@ router.put('/:statusId', requirePermission('conversation_statuses', 'edit'), asy
     }
 
     res.json({ status: data });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Reorder statuses
-router.put('/reorder', requirePermission('conversation_statuses', 'edit'), async (_req, res, next) => {
-  try {
-    const companyId = _req.companyId!;
-    const { statuses } = _req.body;
-
-    if (!Array.isArray(statuses)) {
-      res.status(400).json({ error: 'statuses array is required' });
-      return;
-    }
-
-    for (const s of statuses) {
-      await supabaseAdmin
-        .from('conversation_statuses')
-        .update({ sort_order: s.sort_order, updated_at: new Date().toISOString() })
-        .eq('id', s.id)
-        .eq('company_id', companyId);
-    }
-
-    res.json({ status: 'ok' });
   } catch (err) {
     next(err);
   }
