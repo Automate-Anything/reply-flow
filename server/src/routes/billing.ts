@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
+import { extendAllCompanyChannels } from '../services/billingService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -41,7 +42,7 @@ export async function checkPlanLimit(
 
   if (!sub) return { allowed: true, used: 0, included: Infinity };
 
-  const plan = sub.plan as { channels: number; agents: number };
+  const plan = sub.plan as unknown as { channels: number; agents: number };
   const included = sub.status === 'trialing' ? TRIAL_LIMITS[resource] : plan[resource];
 
   const table = resource === 'channels' ? 'whatsapp_channels' : 'ai_agents';
@@ -588,6 +589,172 @@ router.get('/usage', async (req, res, next) => {
   }
 });
 
+// ────────────────────────────────────────────────
+// GET /api/billing/balance
+// Returns the company's prepaid balance and auto top-up configuration.
+// ────────────────────────────────────────────────
+router.get('/balance', async (req, res, next) => {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const [{ data: balanceRow }, { data: sub }] = await Promise.all([
+      supabaseAdmin
+        .from('company_balances')
+        .select('balance_cents, auto_topup_enabled, auto_topup_threshold_cents, auto_topup_amount_cents')
+        .eq('company_id', companyId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('subscriptions')
+        .select('first_paid_at, renewal_failed_at, grace_period_ends_at')
+        .eq('company_id', companyId)
+        .maybeSingle(),
+    ]);
+
+    res.json({
+      balance_cents: balanceRow?.balance_cents ?? 0,
+      auto_topup_enabled: balanceRow?.auto_topup_enabled ?? false,
+      auto_topup_threshold_cents: balanceRow?.auto_topup_threshold_cents ?? null,
+      auto_topup_amount_cents: balanceRow?.auto_topup_amount_cents ?? null,
+      first_paid_at: sub?.first_paid_at ?? null,
+      renewal_failed_at: sub?.renewal_failed_at ?? null,
+      grace_period_ends_at: sub?.grace_period_ends_at ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// POST /api/billing/configure-auto-topup
+// Enables / disables auto top-up and sets threshold + amount.
+// Body: { enabled: boolean, threshold_cents?: number, amount_cents?: number }
+// ────────────────────────────────────────────────
+router.post('/configure-auto-topup', async (req, res, next) => {
+  try {
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const { enabled, threshold_cents, amount_cents } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled must be a boolean' });
+      return;
+    }
+
+    if (enabled) {
+      if (!threshold_cents || threshold_cents < 100) {
+        res.status(400).json({ error: 'threshold_cents must be at least 100 ($1.00)' });
+        return;
+      }
+      if (!amount_cents || amount_cents < 500) {
+        res.status(400).json({ error: 'amount_cents must be at least 500 ($5.00)' });
+        return;
+      }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('company_balances')
+      .upsert(
+        {
+          company_id: companyId,
+          auto_topup_enabled: enabled,
+          auto_topup_threshold_cents: enabled ? threshold_cents : null,
+          auto_topup_amount_cents: enabled ? amount_cents : null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'company_id' }
+      );
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// POST /api/billing/topup
+// Creates a Stripe Checkout session for a one-time balance top-up.
+// Body: { amount_cents: number } — minimum 500 ($5.00)
+// Returns: { url } — redirect the user to this URL
+// ────────────────────────────────────────────────
+router.post('/topup', async (req, res, next) => {
+  try {
+    if (!stripe) {
+      res.status(503).json({ error: 'Stripe is not configured' });
+      return;
+    }
+
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const { amount_cents } = req.body;
+    if (!amount_cents || amount_cents < 500) {
+      res.status(400).json({ error: 'amount_cents must be at least 500 ($5.00)' });
+      return;
+    }
+
+    const { data: sub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_customer_id')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+      mode: 'payment',
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: amount_cents,
+            product_data: {
+              name: 'AI Message Credits',
+              description: `$${(amount_cents / 100).toFixed(2)} balance top-up for AI message overages`,
+            },
+          },
+        },
+      ],
+      payment_intent_data: {
+        metadata: {
+          type: 'balance_topup',
+          topup_source: 'manual',
+          company_id: companyId,
+          amount_cents: String(amount_cents),
+        },
+      },
+      metadata: {
+        type: 'balance_topup',
+        company_id: companyId,
+        amount_cents: String(amount_cents),
+      },
+      success_url: `${env.CLIENT_URL}/settings?tab=billing&topup=success`,
+      cancel_url: `${env.CLIENT_URL}/settings?tab=billing`,
+    };
+
+    if (sub?.stripe_customer_id) {
+      sessionParams.customer = sub.stripe_customer_id;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    res.json({ url: session.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
 
 // ────────────────────────────────────────────────
@@ -619,10 +786,34 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // Handle manual balance top-up checkouts
+        if (session.metadata?.type === 'balance_topup') {
+          const { company_id, amount_cents } = session.metadata;
+          if (!company_id || !amount_cents) break;
+          const credits = parseInt(amount_cents, 10);
+
+          await supabaseAdmin
+            .from('company_balances')
+            .upsert(
+              { company_id, balance_cents: 0 },
+              { onConflict: 'company_id', ignoreDuplicates: true }
+            );
+
+          await supabaseAdmin.rpc('credit_company_balance', {
+            p_company_id: company_id,
+            p_amount_cents: credits,
+            p_type: 'topup_manual',
+            p_description: `Manual top-up: $${(credits / 100).toFixed(2)}`,
+            p_stripe_pi_id: session.payment_intent as string ?? null,
+          });
+          break;
+        }
+
+        // Regular subscription checkout
         const { company_id, plan_id } = session.metadata ?? {};
         if (!company_id || !plan_id) break;
 
-        // Retrieve full subscription from Stripe for status and period dates
         const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string);
         const subItem = stripeSub.items.data[0];
         const periodStart = new Date(subItem.current_period_start * 1000).toISOString().split('T')[0];
@@ -647,6 +838,15 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
             },
             { onConflict: 'company_id' }
           );
+
+        // Extend Whapi channels for companies that already have channels set up
+        if (status === 'trialing' && trialEndsAt) {
+          const msRemaining = new Date(trialEndsAt).getTime() - Date.now();
+          const days = Math.max(1, Math.ceil(msRemaining / 86_400_000));
+          await extendAllCompanyChannels(company_id, days);
+        } else if (status === 'active') {
+          await extendAllCompanyChannels(company_id, 30);
+        }
         break;
       }
 
@@ -654,7 +854,6 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
         const stripeSub = event.data.object as Stripe.Subscription;
         const priceId = stripeSub.items.data[0]?.price?.id;
 
-        // Look up our plan by stripe_price_id
         const { data: plan } = await supabaseAdmin
           .from('plans')
           .select('id')
@@ -689,6 +888,85 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
           .from('subscriptions')
           .update({ status: 'cancelled' })
           .eq('stripe_subscription_id', stripeSub.id);
+        break;
+      }
+
+      case 'invoice.paid': {
+        const invoice = event.data.object as Stripe.Invoice;
+        if (!invoice.customer) break;
+
+        const { data: sub } = await supabaseAdmin
+          .from('subscriptions')
+          .select('id, company_id, first_paid_at')
+          .eq('stripe_customer_id', invoice.customer as string)
+          .maybeSingle();
+
+        if (!sub) break;
+
+        const updates: Record<string, unknown> = {
+          renewal_failed_at: null,
+          grace_period_ends_at: null,
+        };
+        if (!sub.first_paid_at) {
+          updates.first_paid_at = new Date().toISOString();
+        }
+
+        await supabaseAdmin
+          .from('subscriptions')
+          .update(updates)
+          .eq('id', sub.id);
+
+        // Extend all Whapi channels for the new billing period
+        await extendAllCompanyChannels(sub.company_id, 30);
+        break;
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice;
+        if (!invoice.customer) break;
+
+        const { data: sub } = await supabaseAdmin
+          .from('subscriptions')
+          .select('id, first_paid_at')
+          .eq('stripe_customer_id', invoice.customer as string)
+          .maybeSingle();
+
+        if (!sub) break;
+
+        const now = new Date();
+        const updates: Record<string, unknown> = {
+          renewal_failed_at: now.toISOString(),
+        };
+
+        // Only set a grace period if the company has paid at least once before
+        if (sub.first_paid_at) {
+          const gracePeriodEnd = new Date(now.getTime() + 14 * 86_400_000);
+          updates.grace_period_ends_at = gracePeriodEnd.toISOString();
+        }
+
+        await supabaseAdmin
+          .from('subscriptions')
+          .update(updates)
+          .eq('id', sub.id);
+        break;
+      }
+
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        if (pi.metadata?.type !== 'balance_topup') break;
+
+        const { company_id, amount_cents } = pi.metadata;
+        if (!company_id || !amount_cents) break;
+
+        const credits = parseInt(amount_cents, 10);
+
+        await supabaseAdmin.rpc('credit_company_balance', {
+          p_company_id: company_id,
+          p_amount_cents: credits,
+          p_type: pi.metadata.topup_source === 'auto' ? 'topup_auto' : 'topup_manual',
+          p_description: `Balance top-up: $${(credits / 100).toFixed(2)}`,
+          p_stripe_pi_id: pi.id,
+        });
         break;
       }
     }
