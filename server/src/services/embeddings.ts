@@ -52,7 +52,7 @@ const SIZE_SPLIT_TARGET = 2000;    // target size for fallback size-based splitt
 const SIZE_SPLIT_OVERLAP = 200;    // overlap for size-based splitting
 const MIN_CHUNK_SIZE = 100;        // skip tiny fragments
 const EMBEDDING_MODEL = 'text-embedding-3-small' as const;
-const EMBEDDING_BATCH_SIZE = 100;
+const EMBEDDING_BATCH_SIZE = 20;   // keep batches small to stay within token limits
 
 // Semantic chunking
 const SEMANTIC_MIN_SENTENCES = 8;        // minimum sentences to trigger semantic splitting
@@ -412,7 +412,17 @@ export async function chunkDocument(
       }
     }
 
-    for (const chunkText of sectionChunks) {
+    // Safety net: split any oversized chunks that slipped through
+    const safeSectionChunks: string[] = [];
+    for (const c of sectionChunks) {
+      if (c.length > MAX_CHUNK_SIZE) {
+        safeSectionChunks.push(...sizeSplitSection(c));
+      } else {
+        safeSectionChunks.push(c);
+      }
+    }
+
+    for (const chunkText of safeSectionChunks) {
       // Prepend heading context for better embedding quality
       const headingContext = section.headingHierarchy.length > 0
         ? section.headingHierarchy.join(' > ') + '\n\n'
@@ -462,13 +472,39 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 
   const allEmbeddings: number[][] = [];
 
-  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
-    const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
+  // Truncate any text exceeding ~30K chars (~8K tokens) to stay within model limits
+  const safeTexts = texts.map((t) => t.length > 30000 ? t.slice(0, 30000) : t);
+
+  // Batch by estimated token count (~4 chars per token, stay under 8K tokens per request)
+  const MAX_BATCH_TOKENS = 7500;
+  let batch: string[] = [];
+  let batchTokens = 0;
+
+  for (let i = 0; i < safeTexts.length; i++) {
+    const estimatedTokens = Math.ceil(safeTexts[i].length / 4);
+
+    // If single text exceeds limit, send it alone (will be truncated by API or succeed)
+    if (batch.length > 0 && batchTokens + estimatedTokens > MAX_BATCH_TOKENS) {
+      const response = await openai.embeddings.create({
+        model: EMBEDDING_MODEL,
+        input: batch,
+      });
+      const sorted = response.data.sort((a, b) => a.index - b.index);
+      allEmbeddings.push(...sorted.map((d) => d.embedding));
+      batch = [];
+      batchTokens = 0;
+    }
+
+    batch.push(safeTexts[i]);
+    batchTokens += estimatedTokens;
+  }
+
+  // Flush remaining batch
+  if (batch.length > 0) {
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: batch,
     });
-
     const sorted = response.data.sort((a, b) => a.index - b.index);
     allEmbeddings.push(...sorted.map((d) => d.embedding));
   }
