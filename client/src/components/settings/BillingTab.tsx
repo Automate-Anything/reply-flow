@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Check, Zap } from 'lucide-react';
+import { Check, Zap, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { useSearchParams } from 'react-router-dom';
 
 type PlanId = 'starter' | 'pro' | 'scale';
 
@@ -82,15 +83,26 @@ function PlanFeature({ label }: { label: string }) {
 
 export default function BillingTab() {
   const [activePlanId, setActivePlanId] = useState<PlanId | null>(null);
+  const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
   const [selected, setSelected] = useState<PlanId | null>(null);
   const [loading, setLoading] = useState(true);
-  const [subscribing, setSubscribing] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    // Show success toast if returning from Stripe Checkout
+    if (searchParams.get('success') === 'true') {
+      toast.success('Subscription activated! Welcome aboard.');
+      setSearchParams((prev) => { prev.delete('success'); return prev; }, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     api.get('/billing/subscription')
       .then(({ data }) => {
         if (data.subscription) {
           setActivePlanId(data.subscription.plan_id);
+          setHasStripeSubscription(!!data.subscription.stripe_subscription_id);
         }
       })
       .catch(() => {
@@ -99,18 +111,28 @@ export default function BillingTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSubscribe = async () => {
+  // Redirect to Stripe Checkout for new subscribers
+  const handleCheckout = async () => {
     if (!selected) return;
-    setSubscribing(true);
+    setRedirecting(true);
     try {
-      await api.post('/billing/subscribe', { plan_id: selected });
-      setActivePlanId(selected);
-      setSelected(null);
-      toast.success('Plan updated successfully');
+      const { data } = await api.post('/billing/create-checkout-session', { plan_id: selected });
+      window.location.href = data.url;
     } catch {
-      toast.error('Failed to update plan');
-    } finally {
-      setSubscribing(false);
+      toast.error('Failed to start checkout. Please try again.');
+      setRedirecting(false);
+    }
+  };
+
+  // Redirect to Stripe Customer Portal for existing subscribers
+  const handleManageSubscription = async () => {
+    setRedirecting(true);
+    try {
+      const { data } = await api.post('/billing/portal');
+      window.location.href = data.url;
+    } catch {
+      toast.error('Failed to open billing portal. Please try again.');
+      setRedirecting(false);
     }
   };
 
@@ -123,12 +145,25 @@ export default function BillingTab() {
   return (
     <div className="space-y-8">
       {activePlanId && (
-        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          Current plan:{' '}
-          <span className="font-semibold">
-            {PLANS.find((p) => p.id === activePlanId)?.name}
+        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          <span>
+            Current plan:{' '}
+            <span className="font-semibold">
+              {PLANS.find((p) => p.id === activePlanId)?.name}
+            </span>
           </span>
-          {' '}— select a different plan below to switch.
+          {hasStripeSubscription && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManageSubscription}
+              disabled={redirecting}
+              className="gap-1.5"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Manage Subscription
+            </Button>
+          )}
         </div>
       )}
 
@@ -189,11 +224,13 @@ export default function BillingTab() {
               <Button
                 className="mt-auto w-full"
                 variant={plan.popular ? 'default' : 'outline'}
-                disabled={activePlanId === plan.id}
+                disabled={activePlanId === plan.id || (hasStripeSubscription && activePlanId !== null)}
                 onClick={() => setSelected(plan.id)}
               >
                 {activePlanId === plan.id
                   ? 'Current Plan'
+                  : hasStripeSubscription
+                  ? 'Manage via Portal'
                   : selected === plan.id
                   ? 'Selected'
                   : 'Select Plan'}
@@ -202,6 +239,13 @@ export default function BillingTab() {
           </Card>
         ))}
       </div>
+
+      {/* Hint for existing subscribers */}
+      {hasStripeSubscription && (
+        <p className="text-center text-sm text-muted-foreground">
+          To change your plan, click <strong>Manage Subscription</strong> above.
+        </p>
+      )}
 
       {/* Overage Pricing */}
       <Card>
@@ -244,15 +288,15 @@ export default function BillingTab() {
         </CardContent>
       </Card>
 
-      {/* Confirm CTA */}
-      {selected && activePlanId !== selected && (
+      {/* Checkout CTA — only shown for users without a Stripe subscription */}
+      {selected && !hasStripeSubscription && (
         <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
           <p className="text-sm font-medium">
-            {activePlanId ? 'Switch to ' : 'Subscribe to '}
+            Subscribe to{' '}
             <span className="font-semibold">{pendingPlan?.name}</span> — ${pendingPlan?.price}/month
           </p>
-          <Button size="sm" onClick={handleSubscribe} disabled={subscribing}>
-            {subscribing ? 'Saving…' : activePlanId ? 'Confirm Switch' : 'Confirm & Subscribe'}
+          <Button size="sm" onClick={handleCheckout} disabled={redirecting}>
+            {redirecting ? 'Redirecting…' : 'Confirm & Subscribe'}
           </Button>
         </div>
       )}

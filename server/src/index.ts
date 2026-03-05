@@ -21,7 +21,7 @@ import superAdminRouter from './routes/superAdmin.js';
 
 import conversationNotesRouter from './routes/conversationNotes.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
-import billingRouter from './routes/billing.js';
+import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import seedRouter from './routes/seed.js';
 import { startScheduler } from './services/scheduler.js';
 
@@ -34,6 +34,11 @@ app.use(cors({
     : true,
   credentials: true,
 }));
+
+// Stripe webhook must receive the raw body for signature verification —
+// register it BEFORE express.json() parses the body.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+
 app.use(express.json({ limit: '12mb' }));
 app.use(sanitizeBody);
 

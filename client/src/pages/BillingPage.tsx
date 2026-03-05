@@ -1,9 +1,12 @@
-import { useState } from 'react';
-import { CreditCard, Check, Zap } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CreditCard, Check, Zap, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import api from '@/lib/api';
+import { useSearchParams } from 'react-router-dom';
 
 type PlanId = 'starter' | 'pro' | 'scale';
 
@@ -79,22 +82,88 @@ function PlanFeature({ label }: { label: string }) {
 }
 
 export default function BillingPage() {
+  const [activePlanId, setActivePlanId] = useState<PlanId | null>(null);
+  const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
   const [selected, setSelected] = useState<PlanId | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Subscription activated! Welcome aboard.');
+      setSearchParams((prev) => { prev.delete('success'); return prev; }, { replace: true });
+    }
+  }, []);
+
+  useEffect(() => {
+    api.get('/billing/subscription')
+      .then(({ data }) => {
+        if (data.subscription) {
+          setActivePlanId(data.subscription.plan_id);
+          setHasStripeSubscription(!!data.subscription.stripe_subscription_id);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleCheckout = async () => {
+    if (!selected) return;
+    setRedirecting(true);
+    try {
+      const { data } = await api.post('/billing/create-checkout-session', { plan_id: selected });
+      window.location.href = data.url;
+    } catch {
+      toast.error('Failed to start checkout. Please try again.');
+      setRedirecting(false);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    setRedirecting(true);
+    try {
+      const { data } = await api.post('/billing/portal');
+      window.location.href = data.url;
+    } catch {
+      toast.error('Failed to open billing portal. Please try again.');
+      setRedirecting(false);
+    }
+  };
+
+  const pendingPlan = PLANS.find((p) => p.id === selected);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <CreditCard className="h-5 w-5 text-primary" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <CreditCard className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Billing & Plans</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Choose the plan that fits your business.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Billing & Plans</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Choose the plan that fits your business.
-          </p>
-        </div>
+        {hasStripeSubscription && (
+          <Button
+            variant="outline"
+            onClick={handleManageSubscription}
+            disabled={redirecting}
+            className="gap-1.5"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Manage Subscription
+          </Button>
+        )}
       </div>
+
+      {loading && (
+        <div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>
+      )}
 
       {/* Plan Cards */}
       <div className="grid gap-6 sm:grid-cols-3">
@@ -104,7 +173,8 @@ export default function BillingPage() {
             className={cn(
               'relative flex flex-col transition-shadow',
               plan.popular && 'border-primary shadow-md',
-              selected === plan.id && 'ring-2 ring-primary ring-offset-2'
+              activePlanId === plan.id && 'ring-2 ring-primary ring-offset-2',
+              selected === plan.id && activePlanId !== plan.id && 'ring-2 ring-primary/50 ring-offset-2'
             )}
           >
             {plan.popular && (
@@ -124,7 +194,6 @@ export default function BillingPage() {
             </CardHeader>
 
             <CardContent className="flex flex-1 flex-col gap-6">
-              {/* Included */}
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Included
@@ -142,7 +211,6 @@ export default function BillingPage() {
                 </ul>
               </div>
 
-              {/* Capacity */}
               <div className="space-y-3">
                 <div className="rounded-lg bg-muted/50 p-3">
                   <p className="text-xs font-medium text-muted-foreground">Knowledge base capacity</p>
@@ -159,18 +227,30 @@ export default function BillingPage() {
                 </div>
               </div>
 
-              {/* CTA */}
               <Button
                 className="mt-auto w-full"
                 variant={plan.popular ? 'default' : 'outline'}
+                disabled={activePlanId === plan.id || (hasStripeSubscription && activePlanId !== null)}
                 onClick={() => setSelected(plan.id)}
               >
-                {selected === plan.id ? 'Selected' : 'Select Plan'}
+                {activePlanId === plan.id
+                  ? 'Current Plan'
+                  : hasStripeSubscription
+                  ? 'Manage via Portal'
+                  : selected === plan.id
+                  ? 'Selected'
+                  : 'Select Plan'}
               </Button>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {hasStripeSubscription && (
+        <p className="text-center text-sm text-muted-foreground">
+          To change your plan, click <strong>Manage Subscription</strong> above.
+        </p>
+      )}
 
       {/* Overage Pricing */}
       <Card>
@@ -213,17 +293,19 @@ export default function BillingPage() {
         </CardContent>
       </Card>
 
-      {/* Confirm CTA */}
-      {selected && (
+      {/* Checkout CTA */}
+      {selected && !hasStripeSubscription && (
         <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
           <p className="text-sm font-medium">
-            You selected the{' '}
+            Subscribe to{' '}
             <span className="font-semibold">
-              {PLANS.find((p) => p.id === selected)?.name}
+              {pendingPlan?.name}
             </span>{' '}
-            plan.
+            — ${pendingPlan?.price}/month
           </p>
-          <Button size="sm">Confirm & Subscribe</Button>
+          <Button size="sm" onClick={handleCheckout} disabled={redirecting}>
+            {redirecting ? 'Redirecting…' : 'Confirm & Subscribe'}
+          </Button>
         </div>
       )}
     </div>
