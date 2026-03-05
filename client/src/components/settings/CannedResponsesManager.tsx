@@ -84,20 +84,17 @@ export default function CannedResponsesManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Quick Replies</h3>
-          <p className="text-sm text-muted-foreground">
-            Create reusable message templates. Type "/" in the message input to use them.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Type "/" in the message input to use quick replies.
+        </p>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Quick Reply
+            <Button size="sm" className="shrink-0" onClick={openCreate}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add
             </Button>
           </DialogTrigger>
-          <DialogContent>
+            <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingId ? 'Edit Quick Reply' : 'New Quick Reply'}</DialogTitle>
             </DialogHeader>
@@ -154,7 +151,7 @@ export default function CannedResponsesManager() {
                 </Button>
               </div>
             </div>
-          </DialogContent>
+            </DialogContent>
         </Dialog>
       </div>
 
@@ -167,11 +164,11 @@ export default function CannedResponsesManager() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {responses.map((response) => (
+        <div className="rounded-lg border">
+          {responses.map((response, i) => (
             <div
               key={response.id}
-              className="group flex items-start gap-3 rounded-lg border p-3"
+              className={`group flex items-start gap-3 px-3 py-2.5 ${i !== responses.length - 1 ? 'border-b' : ''}`}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -191,11 +188,11 @@ export default function CannedResponsesManager() {
                   {response.content}
                 </p>
               </div>
-              <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="flex shrink-0 gap-0.5">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                   onClick={() => openEdit(response)}
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -203,7 +200,7 @@ export default function CannedResponsesManager() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-destructive"
+                  className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                   onClick={() => handleDelete(response.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

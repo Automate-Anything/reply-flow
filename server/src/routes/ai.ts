@@ -5,8 +5,11 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
-import { buildSystemPrompt } from '../services/promptBuilder.js';
+import { buildSystemPrompt, buildScenarioResponsePrompt } from '../services/promptBuilder.js';
 import type { ProfileData, KBEntry } from '../services/promptBuilder.js';
+import { classifyMessage } from '../services/ai.js';
+import { processDocument, cleanText } from '../services/documentProcessor.js';
+import { processAndEmbedEntry, isEmbeddingsAvailable, searchKnowledgeBase, backfillExistingEntries } from '../services/embeddings.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -133,45 +136,65 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
       }
     }
 
-    // Load all KB entries for the company (prompt builder routes them to scenarios/fallback)
-    const { data: kbEntries } = await supabaseAdmin
-      .from('knowledge_base_entries')
-      .select('id, title, content, knowledge_base_id')
-      .eq('company_id', companyId);
-    const kbData = (kbEntries || []) as KBEntry[];
+    // Load relevant KB entries via semantic search (or fall back to loading all)
+    let kbData: KBEntry[] = [];
+    if (isEmbeddingsAvailable()) {
+      const searchResults = await searchKnowledgeBase(companyId, message.trim());
+      if (searchResults.length > 0) {
+        kbData = searchResults.map((r) => ({
+          title: (r.metadata?.sourceEntryTitle as string) || 'Knowledge Base',
+          content: r.content,
+          knowledge_base_id: r.knowledgeBaseId,
+        }));
+      }
+    }
+    if (kbData.length === 0) {
+      const { data: kbEntries } = await supabaseAdmin
+        .from('knowledge_base_entries')
+        .select('id, title, content, knowledge_base_id')
+        .eq('company_id', companyId);
+      kbData = (kbEntries || []) as KBEntry[];
+    }
 
-    // Build system prompt with classification instruction
-    const basePrompt = buildSystemPrompt(resolvedProfileData, kbData);
-    const classificationInstruction = resolvedProfileData.response_flow?.scenarios?.length
-      ? '\n\nIMPORTANT: Before your response, output on its own line which scenario you matched using the format [SCENARIO: Name] or [SCENARIO: none] if no scenario matched. Then provide your normal response on the next line.'
-      : '';
-    const systemPrompt = basePrompt + classificationInstruction;
+    const hasScenarios = !!(resolvedProfileData.response_flow?.scenarios?.length);
+    const testMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      { role: 'user', content: message.trim() },
+    ];
 
+    let matched_scenario: string | null = null;
+    let confidence: 'high' | 'medium' | 'low' | null = null;
+    let systemPrompt: string;
+
+    if (hasScenarios) {
+      // Step 1: Classify with Haiku
+      const classification = await classifyMessage(resolvedProfileData, testMessages);
+      matched_scenario = classification.scenario_label;
+      confidence = classification.confidence;
+
+      // Step 2: Build targeted response prompt
+      systemPrompt = await buildScenarioResponsePrompt(
+        resolvedProfileData, kbData, matched_scenario,
+      );
+    } else {
+      // Legacy path
+      systemPrompt = await buildSystemPrompt(resolvedProfileData, kbData);
+    }
+
+    // Step 3: Generate response with Sonnet
     const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
       system: systemPrompt,
-      messages: [{ role: 'user', content: message.trim() }],
+      messages: testMessages,
     });
 
-    const fullReply = response.content
+    const responseText = response.content
       .filter((block) => block.type === 'text')
       .map((block) => block.text)
       .join('\n');
 
-    // Parse [SCENARIO: ...] prefix
-    let matched_scenario: string | null = null;
-    let responseText = fullReply;
-
-    const scenarioMatch = fullReply.match(/^\[SCENARIO:\s*(.+?)\]\s*\n?/);
-    if (scenarioMatch) {
-      const scenarioName = scenarioMatch[1].trim();
-      matched_scenario = scenarioName.toLowerCase() === 'none' ? null : scenarioName;
-      responseText = fullReply.slice(scenarioMatch[0].length).trim();
-    }
-
-    res.json({ matched_scenario, response: responseText });
+    res.json({ matched_scenario, confidence, response: responseText });
   } catch (err) {
     next(err);
   }
@@ -305,11 +328,11 @@ router.delete('/kbs/:kbId', requirePermission('knowledge_base', 'delete'), async
 // KB ENTRY ROUTES (scoped under a knowledge base)
 // ────────────────────────────────────────────────
 
-// List entries in a knowledge base
+// List entries in a knowledge base (with chunk counts)
 router.get('/kbs/:kbId/entries', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { kbId } = req.params;
+    const kbId = req.params.kbId as string;
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
@@ -319,7 +342,29 @@ router.get('/kbs/:kbId/entries', requirePermission('knowledge_base', 'view'), as
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json({ entries: data || [] });
+
+    const entries = data || [];
+
+    // Batch-fetch chunk counts for all entries
+    if (entries.length > 0) {
+      const entryIds = entries.map((e: { id: string }) => e.id);
+      const { data: chunks } = await supabaseAdmin
+        .from('kb_chunks')
+        .select('entry_id')
+        .in('entry_id', entryIds);
+
+      if (chunks) {
+        const countMap = new Map<string, number>();
+        for (const chunk of chunks) {
+          countMap.set(chunk.entry_id, (countMap.get(chunk.entry_id) || 0) + 1);
+        }
+        for (const entry of entries) {
+          (entry as Record<string, unknown>).chunk_count = countMap.get(entry.id) || 0;
+        }
+      }
+    }
+
+    res.json({ entries });
   } catch (err) {
     next(err);
   }
@@ -347,13 +392,15 @@ router.get('/kb', requirePermission('knowledge_base', 'view'), async (req, res, 
 router.post('/kbs/:kbId/entries', requirePermission('knowledge_base', 'create'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { kbId } = req.params;
-    const { title, content } = req.body;
+    const kbId = req.params.kbId as string;
+    const { title, content } = req.body as { title: string; content: string };
 
     if (!title || !content) {
       res.status(400).json({ error: 'Title and content are required' });
       return;
     }
+
+    const cleanedContent = cleanText(content);
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
@@ -362,13 +409,19 @@ router.post('/kbs/:kbId/entries', requirePermission('knowledge_base', 'create'),
         created_by: req.userId,
         knowledge_base_id: kbId,
         title,
-        content,
+        content: cleanedContent,
         source_type: 'text',
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    // Generate chunks and embeddings synchronously
+    if (isEmbeddingsAvailable() && data) {
+      await processAndEmbedEntry(data.id, cleanedContent, kbId, companyId, title, null, 'text');
+    }
+
     res.json({ entry: data });
   } catch (err) {
     next(err);
@@ -379,7 +432,7 @@ router.post('/kbs/:kbId/entries', requirePermission('knowledge_base', 'create'),
 router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { kbId } = req.params;
+    const kbId = req.params.kbId as string;
     const file = req.file;
 
     if (!file) {
@@ -387,26 +440,17 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
       return;
     }
 
-    // Extract text from file
-    let extractedText = '';
-    const ext = file.originalname.split('.').pop()?.toLowerCase();
-
-    if (file.mimetype === 'text/plain' || ext === 'txt') {
-      extractedText = file.buffer.toString('utf-8');
-    } else if (file.mimetype === 'application/pdf' || ext === 'pdf') {
-      const pdfParse = (await import('pdf-parse')).default;
-      const result = await pdfParse(file.buffer);
-      extractedText = result.text;
-    } else if (
-      file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      ext === 'docx'
-    ) {
-      const mammoth = await import('mammoth');
-      const result = await mammoth.extractRawText({ buffer: file.buffer });
-      extractedText = result.value;
+    // Process document: extract, clean, structure, extract metadata
+    let processed;
+    try {
+      processed = await processDocument(file.buffer, file.originalname, file.mimetype);
+    } catch (docErr: any) {
+      console.error('Document processing failed:', docErr);
+      res.status(400).json({ error: `Failed to process file: ${docErr.message || 'Unknown error'}` });
+      return;
     }
 
-    if (!extractedText.trim()) {
+    if (!processed.cleanedText.trim()) {
       res.status(400).json({ error: 'Could not extract text from file' });
       return;
     }
@@ -425,7 +469,7 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
     }
 
     const fileUrl = storageError ? null : storagePath;
-    const title = req.body.title || file.originalname.replace(/\.[^.]+$/, '');
+    const title = (req.body.title as string) || file.originalname.replace(/\.[^.]+$/, '');
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
@@ -434,7 +478,7 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
         created_by: req.userId,
         knowledge_base_id: kbId,
         title,
-        content: extractedText,
+        content: processed.cleanedText,
         source_type: 'file',
         file_name: file.originalname,
         file_url: fileUrl,
@@ -443,7 +487,21 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
       .single();
 
     if (error) throw error;
-    res.json({ entry: data });
+
+    // Generate chunks and embeddings from structured text (preserves headings)
+    if (isEmbeddingsAvailable() && data) {
+      await processAndEmbedEntry(
+        data.id,
+        processed.structuredText,
+        kbId,
+        companyId,
+        title,
+        file.originalname,
+        processed.metadata.sourceType,
+      );
+    }
+
+    res.json({ entry: data, warnings: processed.warnings });
   } catch (err) {
     next(err);
   }
@@ -453,12 +511,13 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
 router.put('/kbs/:kbId/entries/:entryId', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { kbId, entryId } = req.params;
-    const { title, content } = req.body;
+    const kbId = req.params.kbId as string;
+    const entryId = req.params.entryId as string;
+    const { title, content } = req.body as { title?: string; content?: string };
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (title !== undefined) updates.title = title;
-    if (content !== undefined) updates.content = content;
+    if (content !== undefined) updates.content = cleanText(content);
 
     const { data, error } = await supabaseAdmin
       .from('knowledge_base_entries')
@@ -470,6 +529,20 @@ router.put('/kbs/:kbId/entries/:entryId', requirePermission('knowledge_base', 'e
       .single();
 
     if (error) throw error;
+
+    // Re-chunk and re-embed if content was updated
+    if (content !== undefined && isEmbeddingsAvailable() && data) {
+      await processAndEmbedEntry(
+        entryId,
+        cleanText(content),
+        kbId,
+        companyId,
+        data.title,
+        data.file_name ?? null,
+        data.source_type || 'text',
+      );
+    }
+
     res.json({ entry: data });
   } catch (err) {
     next(err);
@@ -510,6 +583,117 @@ router.delete('/kbs/:kbId/entries/:entryId', requirePermission('knowledge_base',
 
     if (error) throw error;
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// CHUNK & SEARCH ROUTES
+// ────────────────────────────────────────────────
+
+// Get chunks for a specific entry
+router.get('/kbs/:kbId/entries/:entryId/chunks', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const entryId = req.params.entryId as string;
+
+    const { data, error } = await supabaseAdmin
+      .from('kb_chunks')
+      .select('id, chunk_index, content, metadata, created_at')
+      .eq('entry_id', entryId)
+      .eq('company_id', companyId)
+      .order('chunk_index', { ascending: true });
+
+    if (error) throw error;
+    res.json({ chunks: data || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Re-embed a specific entry
+router.post('/kbs/:kbId/entries/:entryId/reembed', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const kbId = req.params.kbId as string;
+    const entryId = req.params.entryId as string;
+
+    if (!isEmbeddingsAvailable()) {
+      res.status(503).json({ error: 'Embeddings not configured' });
+      return;
+    }
+
+    const { data: entry, error } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('id, title, content, file_name, source_type')
+      .eq('id', entryId)
+      .eq('knowledge_base_id', kbId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (error || !entry) {
+      res.status(404).json({ error: 'Entry not found' });
+      return;
+    }
+
+    await processAndEmbedEntry(
+      entry.id,
+      cleanText(entry.content),
+      kbId,
+      companyId,
+      entry.title,
+      entry.file_name ?? null,
+      entry.source_type || 'text',
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Test search against the knowledge base
+router.post('/kb/search', requirePermission('knowledge_base', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { query, knowledge_base_ids } = req.body as { query: string; knowledge_base_ids?: string[] };
+
+    if (!query?.trim()) {
+      res.status(400).json({ error: 'Query is required' });
+      return;
+    }
+
+    if (!isEmbeddingsAvailable()) {
+      res.status(503).json({ error: 'Embeddings not configured' });
+      return;
+    }
+
+    const results = await searchKnowledgeBase(companyId, query.trim(), {
+      knowledgeBaseIds: knowledge_base_ids,
+      matchCount: 10,
+    });
+
+    res.json({ results });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// EMBEDDINGS BACKFILL
+// ────────────────────────────────────────────────
+
+// Backfill embeddings for all existing entries that don't have them yet
+router.post('/backfill-embeddings', requirePermission('knowledge_base', 'edit'), async (req, res, next) => {
+  try {
+    if (!isEmbeddingsAvailable()) {
+      res.status(503).json({ error: 'Embeddings not configured (missing OPENAI_API_KEY)' });
+      return;
+    }
+
+    const result = await backfillExistingEntries();
+    res.json({ message: 'Backfill completed', ...result });
   } catch (err) {
     next(err);
   }

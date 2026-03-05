@@ -116,17 +116,14 @@ export default function LabelsManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Labels</h3>
-          <p className="text-sm text-muted-foreground">
-            Create labels to organize and categorize conversations.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Organize and categorize conversations.
+        </p>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Label
+            <Button size="sm" className="shrink-0" onClick={openCreate}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -172,7 +169,7 @@ export default function LabelsManager() {
                 </Button>
               </div>
             </div>
-          </DialogContent>
+            </DialogContent>
         </Dialog>
       </div>
 
@@ -185,22 +182,22 @@ export default function LabelsManager() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {labels.map((label) => (
+        <div className="rounded-lg border">
+          {labels.map((label, i) => (
             <div
               key={label.id}
-              className="group flex items-center gap-3 rounded-lg border p-3"
+              className={`group flex items-center gap-3 px-3 py-2.5 ${i !== labels.length - 1 ? 'border-b' : ''}`}
             >
               <span
-                className="h-3 w-3 shrink-0 rounded-full"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: label.color }}
               />
-              <span className="min-w-0 flex-1 text-sm font-medium">{label.name}</span>
-              <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="min-w-0 flex-1 text-sm">{label.name}</span>
+              <div className="flex shrink-0 gap-0.5">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                   onClick={() => openEdit(label)}
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -208,7 +205,7 @@ export default function LabelsManager() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-destructive"
+                  className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                   onClick={() => handleDelete(label.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

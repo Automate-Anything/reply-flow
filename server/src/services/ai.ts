@@ -1,20 +1,31 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
-import { buildSystemPrompt } from './promptBuilder.js';
-import type { ProfileData, KBEntry } from './promptBuilder.js';
+import { buildSystemPrompt, buildClassificationPrompt, buildScenarioResponsePrompt } from './promptBuilder.js';
+import type { ProfileData, KBEntry, ChannelOverrides } from './promptBuilder.js';
+import { isEmbeddingsAvailable, searchKnowledgeBase } from './embeddings.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
   : null;
 
+const CLASSIFICATION_MODEL = 'claude-haiku-4-5-20251001';
+const RESPONSE_MODEL = 'claude-sonnet-4-20250514';
+
 // ── Types ──────────────────────────────────────────
 
 interface AIContext {
-  systemPrompt: string;
+  profileData: ProfileData;
+  kbEntries: KBEntry[];
+  channelOverrides?: ChannelOverrides;
   maxTokens: number;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+export interface ClassificationResult {
+  scenario_label: string | null;
+  confidence: 'high' | 'medium' | 'low';
 }
 
 interface DaySchedule {
@@ -83,6 +94,48 @@ function isWithinSchedule(schedule: BusinessHours, timezone: string): boolean {
   }
 
   return false;
+}
+
+// ── Query reformulation for RAG ──────────────────────
+
+/**
+ * Reformulates a multi-turn conversation query into a standalone search query.
+ * For short conversations, returns the last user message as-is.
+ * For longer conversations, uses Claude to resolve pronouns and add context.
+ */
+async function reformulateQuery(
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Promise<string> {
+  const lastUserMessage = messages[messages.length - 1]?.content || '';
+
+  // Short conversations are likely self-contained
+  if (!anthropic || messages.length <= 3) {
+    return lastUserMessage;
+  }
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 150,
+      system: 'You are a search query reformulator. Given a conversation, rewrite the last user message as a standalone search query that captures the full intent. Return ONLY the reformulated query, nothing else.',
+      messages: [
+        {
+          role: 'user',
+          content: `Conversation:\n${messages.slice(-6).map((m) => `${m.role}: ${m.content}`).join('\n')}\n\nReformulate the last user message into a standalone search query:`,
+        },
+      ],
+    });
+
+    const reformulated = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('')
+      .trim();
+
+    return reformulated || lastUserMessage;
+  } catch {
+    return lastUserMessage;
+  }
 }
 
 // ── Main AI decision function ──────────────────────
@@ -162,14 +215,48 @@ export async function shouldAIRespond(
     }
   }
 
-  // 7. Fetch all KB entries for the company (prompt builder routes them to scenarios/fallback)
-  const { data: kbEntries } = await supabaseAdmin
-    .from('knowledge_base_entries')
-    .select('id, title, content, knowledge_base_id')
-    .eq('company_id', companyId);
-  const kbData = (kbEntries || []) as KBEntry[];
+  // 7. Build message context from last 20 messages (needed for query reformulation)
+  const { data: recentMessages } = await supabaseAdmin
+    .from('chat_messages')
+    .select('message_body, direction, sender_type')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+    .limit(20);
 
-  // 8. Resolve profile_data — prefer agent's profile if assigned
+  if (!recentMessages) return { action: 'skip' };
+
+  const messages = recentMessages.reverse().map((msg) => ({
+    role: (msg.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
+    content: msg.message_body || '',
+  }));
+
+  // 8. Semantic search for relevant KB content (or fall back to loading all)
+  let kbData: KBEntry[] = [];
+
+  if (isEmbeddingsAvailable()) {
+    const searchQuery = await reformulateQuery(messages);
+    const searchResults = await searchKnowledgeBase(companyId, searchQuery);
+
+    if (searchResults.length > 0) {
+      kbData = searchResults.map((r) => ({
+        id: r.id,
+        title: (r.metadata?.sourceEntryTitle as string) || 'Knowledge Base',
+        content: r.content,
+        knowledge_base_id: r.knowledgeBaseId,
+      }));
+    }
+  }
+
+  // Fallback: load all entries if search returned nothing or embeddings unavailable
+  if (kbData.length === 0) {
+    const { data: kbEntries } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('id, title, content, knowledge_base_id')
+      .eq('company_id', companyId);
+    kbData = (kbEntries || []) as KBEntry[];
+  }
+
+  // 9. Resolve profile_data — prefer agent's profile if assigned
   let profileData = (channelSettings.profile_data || {}) as ProfileData;
 
   if (channelSettings.agent_id) {
@@ -185,35 +272,80 @@ export async function shouldAIRespond(
   const channelOverrides = channelSettings.custom_instructions
     ? { custom_instructions: channelSettings.custom_instructions }
     : undefined;
-  const systemPrompt = buildSystemPrompt(profileData, kbData, channelOverrides);
 
   const maxTokens = channelSettings.max_tokens || 500;
 
-  // 9. Build message context from last 20 messages
-  const { data: recentMessages } = await supabaseAdmin
-    .from('chat_messages')
-    .select('message_body, direction, sender_type')
-    .eq('session_id', sessionId)
-    .order('created_at', { ascending: false })
-    .limit(20);
-
-  if (!recentMessages) return { action: 'skip' };
-
-  const messages = recentMessages.reverse().map((msg) => ({
-    role: (msg.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
-    content: msg.message_body || '',
-  }));
-
   return {
     action: 'respond',
-    context: { systemPrompt, maxTokens, messages },
+    context: { profileData, kbEntries: kbData, channelOverrides, maxTokens, messages },
   };
+}
+
+// ── Classification (Haiku) ─────────────────────────
+
+/**
+ * Classifies an incoming message against defined scenarios using Haiku.
+ * Returns the matched scenario label and confidence level.
+ */
+export async function classifyMessage(
+  profileData: ProfileData,
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+): Promise<ClassificationResult> {
+  if (!anthropic) {
+    return { scenario_label: null, confidence: 'low' };
+  }
+
+  const classificationPrompt = buildClassificationPrompt(profileData);
+  if (!classificationPrompt) {
+    return { scenario_label: null, confidence: 'high' };
+  }
+
+  const recentMessages = messages.slice(-6);
+
+  const response = await anthropic.messages.create({
+    model: CLASSIFICATION_MODEL,
+    max_tokens: 100,
+    system: classificationPrompt,
+    messages: recentMessages,
+  });
+
+  const text = response.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
+    .trim()
+    // Strip markdown code fences if present
+    .replace(/^```(?:json)?\s*/, '')
+    .replace(/\s*```$/, '');
+
+  try {
+    const parsed = JSON.parse(text);
+    const label = parsed.scenario_label || null;
+    const confidence: ClassificationResult['confidence'] =
+      ['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low';
+
+    // Validate label exists in known scenarios
+    if (label) {
+      const scenarios = profileData.response_flow?.scenarios || [];
+      const match = scenarios.find((sc) => sc.label.toLowerCase() === label.toLowerCase());
+      if (!match) {
+        return { scenario_label: null, confidence: 'low' };
+      }
+      // Return the canonical label (exact casing from scenario definition)
+      return { scenario_label: match.label, confidence };
+    }
+
+    return { scenario_label: null, confidence };
+  } catch {
+    return { scenario_label: null, confidence: 'low' };
+  }
 }
 
 // ── AI reply generation ────────────────────────────
 
 /**
- * Generates an AI response and sends it via WhatsApp.
+ * Classifies the message (Haiku), then generates a targeted response (Sonnet).
+ * Falls back to the full prompt if classification fails.
  */
 export async function generateAndSendAIReply(
   companyId: string,
@@ -222,11 +354,30 @@ export async function generateAndSendAIReply(
 ): Promise<void> {
   if (!anthropic) return;
 
+  const { profileData, kbEntries, channelOverrides, maxTokens, messages } = context;
+  const hasScenarios = !!(profileData.response_flow?.scenarios?.length);
+
+  let systemPrompt: string;
+
+  if (hasScenarios) {
+    try {
+      const classification = await classifyMessage(profileData, messages);
+      systemPrompt = await buildScenarioResponsePrompt(
+        profileData, kbEntries, classification.scenario_label, channelOverrides,
+      );
+    } catch (err) {
+      console.error('Classification failed, falling back to full prompt:', err);
+      systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+    }
+  } else {
+    systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+  }
+
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: context.maxTokens,
-    system: context.systemPrompt,
-    messages: context.messages,
+    model: RESPONSE_MODEL,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages,
   });
 
   const aiReply = response.content

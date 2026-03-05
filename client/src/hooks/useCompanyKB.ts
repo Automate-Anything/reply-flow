@@ -18,8 +18,38 @@ export interface KBEntry {
   file_name: string | null;
   file_url: string | null;
   knowledge_base_id: string;
+  embedding_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  chunk_count?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface KBChunk {
+  id: string;
+  chunk_index: number;
+  content: string;
+  metadata: {
+    sourceEntryTitle: string;
+    sourceFileName: string | null;
+    sourceType: string;
+    sectionHeading: string | null;
+    sectionHierarchy: string[];
+    chunkIndex: number;
+    totalChunks: number;
+  };
+  created_at: string;
+}
+
+export interface KBSearchResult {
+  id: string;
+  entryId: string;
+  knowledgeBaseId: string;
+  chunkIndex: number;
+  content: string;
+  metadata: Record<string, unknown>;
+  rrfScore: number;
+  vectorRank: number;
+  ftsRank: number;
 }
 
 export function useCompanyKB() {
@@ -118,6 +148,34 @@ export function useCompanyKB() {
     []
   );
 
+  // ── Chunks & Search ──
+
+  const fetchEntryChunks = useCallback(
+    async (kbId: string, entryId: string): Promise<KBChunk[]> => {
+      const { data } = await api.get(`/ai/kbs/${kbId}/entries/${entryId}/chunks`);
+      return data.chunks;
+    },
+    []
+  );
+
+  const reembedEntry = useCallback(
+    async (kbId: string, entryId: string) => {
+      await api.post(`/ai/kbs/${kbId}/entries/${entryId}/reembed`);
+    },
+    []
+  );
+
+  const searchKB = useCallback(
+    async (query: string, knowledgeBaseIds?: string[]): Promise<KBSearchResult[]> => {
+      const { data } = await api.post('/ai/kb/search', {
+        query,
+        knowledge_base_ids: knowledgeBaseIds,
+      });
+      return data.results;
+    },
+    []
+  );
+
   return {
     knowledgeBases,
     loading,
@@ -129,6 +187,9 @@ export function useCompanyKB() {
     uploadKBFile,
     updateKBEntry,
     deleteKBEntry,
+    fetchEntryChunks,
+    reembedEntry,
+    searchKB,
     refetch: fetchKnowledgeBases,
   };
 }

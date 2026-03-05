@@ -27,7 +27,7 @@ router.get('/', async (req, res, next) => {
     // Get user profile
     const { data: profile } = await supabaseAdmin
       .from('users')
-      .select('id, email, full_name, avatar_url, company_id')
+      .select('id, email, full_name, avatar_url, company_id, is_super_admin')
       .eq('id', userId)
       .single();
 
@@ -126,6 +126,7 @@ router.get('/', async (req, res, next) => {
       company: membership ? (membership.companies as any) : null,
       role: membership ? (membership.roles as any) : null,
       permissions,
+      is_super_admin: profile.is_super_admin || false,
     });
   } catch (err) {
     next(err);

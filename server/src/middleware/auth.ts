@@ -2,13 +2,14 @@ import type { Request, Response, NextFunction } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../config/env.js';
 
-// Augment Express Request with userId, companyId, and userRole
+// Augment Express Request with userId, companyId, userRole, and isSuperAdmin
 declare global {
   namespace Express {
     interface Request {
       userId?: string;
       companyId?: string;
       userRole?: string;
+      isSuperAdmin?: boolean;
     }
   }
 }
@@ -35,6 +36,14 @@ export async function requireAuth(
   }
 
   req.userId = data.user.id;
+
+  // Check super admin status
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('is_super_admin')
+    .eq('id', data.user.id)
+    .single();
+  req.isSuperAdmin = userRow?.is_super_admin === true;
 
   // Resolve company membership and role
   const { data: membership } = await supabase

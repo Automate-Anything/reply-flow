@@ -22,6 +22,7 @@ interface Props {
 
 interface TestResult {
   matched_scenario: string | null;
+  confidence: 'high' | 'medium' | 'low' | null;
   response: string;
 }
 
@@ -108,11 +109,19 @@ export default function TestDialog({ open, onOpenChange, profileData, channelId,
 
           {result && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-muted-foreground">Matched:</span>
                 <Badge variant={result.matched_scenario ? 'default' : 'secondary'}>
                   {result.matched_scenario || 'Default (no scenario matched)'}
                 </Badge>
+                {result.confidence && (
+                  <Badge variant={
+                    result.confidence === 'high' ? 'default' :
+                    result.confidence === 'medium' ? 'secondary' : 'destructive'
+                  }>
+                    {result.confidence} confidence
+                  </Badge>
+                )}
               </div>
               <div className="rounded-md border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground mb-1">AI Response:</p>
