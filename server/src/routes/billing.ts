@@ -238,6 +238,175 @@ router.post('/subscribe', async (req, res, next) => {
 });
 
 // ────────────────────────────────────────────────
+// POST /api/billing/change-plan
+// Upgrades or downgrades an existing Stripe subscription immediately with proration.
+// Body: { plan_id: 'starter' | 'pro' | 'scale' }
+// ────────────────────────────────────────────────
+router.post('/change-plan', async (req, res, next) => {
+  try {
+    if (!stripe) {
+      res.status(503).json({ error: 'Stripe is not configured' });
+      return;
+    }
+
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const { plan_id } = req.body;
+    if (!plan_id) {
+      res.status(400).json({ error: 'plan_id is required' });
+      return;
+    }
+
+    const { data: sub, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_subscription_id, plan_id')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    if (subError) throw subError;
+    if (!sub?.stripe_subscription_id) {
+      res.status(400).json({ error: 'No active Stripe subscription found.' });
+      return;
+    }
+
+    if (sub.plan_id === plan_id) {
+      res.status(400).json({ error: 'You are already on this plan.' });
+      return;
+    }
+
+    const { data: plan, error: planError } = await supabaseAdmin
+      .from('plans')
+      .select('id, stripe_price_id')
+      .eq('id', plan_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (planError) throw planError;
+    if (!plan?.stripe_price_id) {
+      res.status(400).json({ error: 'Invalid plan or plan not connected to Stripe.' });
+      return;
+    }
+
+    // Retrieve the current subscription to find the subscription item ID
+    const stripeSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id);
+    const itemId = stripeSub.items.data[0]?.id;
+    if (!itemId) {
+      res.status(500).json({ error: 'Could not find subscription item.' });
+      return;
+    }
+
+    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+      items: [{ id: itemId, price: plan.stripe_price_id }],
+      proration_behavior: 'create_prorations',
+      cancel_at_period_end: false, // Clear any pending cancellation on plan change
+    });
+
+    // Optimistically update plan_id and clear cancel_at_period_end in DB now.
+    // The webhook (customer.subscription.updated) will also sync shortly.
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({ plan_id, cancel_at_period_end: false })
+      .eq('company_id', companyId);
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// POST /api/billing/cancel
+// Schedules the subscription to cancel at the end of the current billing period.
+// ────────────────────────────────────────────────
+router.post('/cancel', async (req, res, next) => {
+  try {
+    if (!stripe) {
+      res.status(503).json({ error: 'Stripe is not configured' });
+      return;
+    }
+
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const { data: sub, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_subscription_id')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    if (subError) throw subError;
+    if (!sub?.stripe_subscription_id) {
+      res.status(400).json({ error: 'No active Stripe subscription found.' });
+      return;
+    }
+
+    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+      cancel_at_period_end: true,
+    });
+
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({ cancel_at_period_end: true })
+      .eq('company_id', companyId);
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// POST /api/billing/reactivate
+// Cancels a scheduled cancellation, keeping the subscription active.
+// ────────────────────────────────────────────────
+router.post('/reactivate', async (req, res, next) => {
+  try {
+    if (!stripe) {
+      res.status(503).json({ error: 'Stripe is not configured' });
+      return;
+    }
+
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const { data: sub, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_subscription_id')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    if (subError) throw subError;
+    if (!sub?.stripe_subscription_id) {
+      res.status(400).json({ error: 'No active Stripe subscription found.' });
+      return;
+    }
+
+    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+      cancel_at_period_end: false,
+    });
+
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({ cancel_at_period_end: false })
+      .eq('company_id', companyId);
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
 // GET /api/billing/usage
 // Returns usage stats for the current billing period
 // ────────────────────────────────────────────────
@@ -421,6 +590,7 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
             status,
             current_period_start: periodStart,
             current_period_end: periodEnd,
+            cancel_at_period_end: stripeSub.cancel_at_period_end,
           })
           .eq('stripe_subscription_id', stripeSub.id);
         break;
