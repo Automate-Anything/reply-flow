@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { buildSystemPrompt, buildClassificationPrompt, buildScenarioResponsePrompt } from './promptBuilder.js';
 import type { ProfileData, KBEntry, ChannelOverrides } from './promptBuilder.js';
 import { isEmbeddingsAvailable, searchKnowledgeBase } from './embeddings.js';
+import { classifyQuery } from './queryClassifier.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -235,7 +236,12 @@ export async function shouldAIRespond(
 
   if (isEmbeddingsAvailable()) {
     const searchQuery = await reformulateQuery(messages);
-    const searchResults = await searchKnowledgeBase(companyId, searchQuery);
+    const qc = classifyQuery(searchQuery);
+    const searchResults = await searchKnowledgeBase(companyId, searchQuery, {
+      retrievalMethod: qc.method,
+      vectorWeight: qc.vectorWeight,
+      ftsWeight: qc.ftsWeight,
+    });
 
     if (searchResults.length > 0) {
       kbData = searchResults.map((r) => ({
@@ -295,7 +301,7 @@ export async function classifyMessage(
     return { scenario_label: null, confidence: 'low' };
   }
 
-  const classificationPrompt = buildClassificationPrompt(profileData);
+  const classificationPrompt = await buildClassificationPrompt(profileData);
   if (!classificationPrompt) {
     return { scenario_label: null, confidence: 'high' };
   }

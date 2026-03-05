@@ -23,7 +23,7 @@ interface Props {
   initialOpen?: boolean;
 }
 
-const ACCEPTED_TYPES = '.pdf,.docx,.txt';
+const ACCEPTED_TYPES = '.pdf,.docx,.txt,.md,.markdown,.mdx,.html,.htm,.csv,.tsv,.json,.jsonl,.xlsx,.xls,.ts,.tsx,.js,.jsx,.py,.go,.java,.rb,.php,.c,.cpp,.h,.rs,.swift,.kt,.cs,.sh,.sql,.r,.yaml,.yml,.toml,.ini,.xml,.env';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 function formatFileSize(bytes: number): string {
@@ -550,7 +550,7 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
                   <Upload className="h-5 w-5 text-muted-foreground" />
                   <div className="text-center">
                     <p className="text-sm font-medium">Click to upload a file</p>
-                    <p className="text-xs text-muted-foreground">PDF, DOCX, or TXT (max 10MB)</p>
+                    <p className="text-xs text-muted-foreground">Any text-based file (max 10MB)</p>
                   </div>
                 </button>
               )}

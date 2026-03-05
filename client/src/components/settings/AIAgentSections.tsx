@@ -66,7 +66,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
   ) : null;
 
   return (
-    <Tabs defaultValue="response-flow">
+    <Tabs defaultValue="identity">
       <TabsList className="w-full">
         <TabsTrigger value="identity" className="flex-1">Identity</TabsTrigger>
         <TabsTrigger value="response-flow" className="flex-1">Response Flow</TabsTrigger>

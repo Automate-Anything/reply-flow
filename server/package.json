@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "openai": "^4.103.0",
     "@supabase/supabase-js": "^2.97.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
@@ -28,8 +27,10 @@
     "libphonenumber-js": "^1.12.37",
     "mammoth": "^1.11.0",
     "multer": "^2.0.2",
+    "openai": "^4.103.0",
     "pdf-parse": "^1.1.1",
     "typescript": "^5.9.3",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   }
 }

@@ -2,11 +2,20 @@
  * Document Processing Pipeline for RAG
  *
  * Handles format-specific text extraction, cleaning, metadata extraction,
- * and structure preservation for PDF, DOCX, and TXT files.
+ * and structure preservation for any supported file type.
+ *
+ * Uses a content classifier to detect file type and route to the
+ * appropriate processor (prose, markdown, HTML, CSV, JSON, XLSX, code, config).
  *
  * Returns both cleaned text (for storage) and structured markdown text
  * (for section-aware chunking in the embeddings service).
  */
+
+import { classifyContent, type ContentType, type ProcessingStrategy } from './contentClassifier.js';
+import {
+  extractMarkdown, extractHtml, extractCsv, extractJson,
+  extractSpreadsheet, extractCode, extractConfig,
+} from './contentProcessors.js';
 
 // ── Types ──────────────────────────────────────────
 
@@ -26,7 +35,12 @@ export interface DocumentMetadata {
   author: string | null;
   createdDate: string | null;
   pageCount: number | null;
-  sourceType: 'pdf' | 'docx' | 'txt';
+  sourceType: string;
+  contentType?: ContentType;
+  strategy?: ProcessingStrategy;
+  schema?: Record<string, string>;
+  rowCount?: number;
+  language?: string | null;
 }
 
 interface PageText {
@@ -326,22 +340,50 @@ export async function processDocument(
   fileName: string,
   mimeType: string,
 ): Promise<ProcessedDocument> {
-  const ext = fileName.split('.').pop()?.toLowerCase();
+  // Classify content to determine the right processing strategy
+  const classification = classifyContent(buffer, fileName, mimeType);
 
-  if (mimeType === 'application/pdf' || ext === 'pdf') {
-    return extractPdf(buffer);
+  switch (classification.strategy) {
+    case 'document_pipeline': {
+      // Existing prose extractors (PDF, DOCX)
+      if (classification.contentType === 'prose') {
+        const ext = fileName.split('.').pop()?.toLowerCase();
+        if (mimeType === 'application/pdf' || ext === 'pdf') {
+          return extractPdf(buffer);
+        }
+        if (
+          mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          ext === 'docx'
+        ) {
+          return extractDocx(buffer);
+        }
+      }
+      return extractTxt(buffer);
+    }
+
+    case 'markdown_pipeline':
+      return extractMarkdown(buffer, fileName);
+
+    case 'html_pipeline':
+      return extractHtml(buffer, fileName);
+
+    case 'structured_data':
+      return extractJson(buffer, fileName);
+
+    case 'tabular_pipeline':
+      if (classification.contentType === 'spreadsheet') {
+        return extractSpreadsheet(buffer, fileName);
+      }
+      return extractCsv(buffer, fileName);
+
+    case 'code_pipeline':
+      if (classification.contentType === 'config') {
+        return extractConfig(buffer, fileName);
+      }
+      return extractCode(buffer, fileName);
+
+    case 'text_fallback':
+    default:
+      return extractTxt(buffer);
   }
-
-  if (
-    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    ext === 'docx'
-  ) {
-    return extractDocx(buffer);
-  }
-
-  if (mimeType === 'text/plain' || ext === 'txt') {
-    return extractTxt(buffer);
-  }
-
-  throw new Error(`Unsupported file type: ${mimeType} (${ext})`);
 }

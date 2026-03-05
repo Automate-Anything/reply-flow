@@ -1,9 +1,17 @@
+import { useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Plus, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Contact } from '@/hooks/useContacts';
+import type { Contact, ContactFilters as FilterState } from '@/hooks/useContacts';
+import type { ContactTag } from '@/hooks/useContactTags';
+import type { ContactList as ContactListType } from '@/hooks/useContactLists';
+import type { CustomFieldDefinition } from '@/hooks/useCustomFields';
+import ContactFilters from './ContactFilters';
+import ContactListSelector from './ContactListSelector';
+import ContactBulkActionBar from './ContactBulkActionBar';
 
 interface ContactListProps {
   contacts: Contact[];
@@ -13,6 +21,20 @@ interface ContactListProps {
   onAdd: () => void;
   search: string;
   onSearchChange: (value: string) => void;
+  headerActions?: React.ReactNode;
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  availableTags: ContactTag[];
+  availableLists: ContactListType[];
+  selectedIds: string[];
+  onToggleSelect: (id: string) => void;
+  onRangeSelect: (fromIndex: number, toIndex: number) => void;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
+  onBulkActionComplete: () => void;
+  activeListId: string | null;
+  onSelectList: (listId: string | null) => void;
+  customFieldDefinitions?: CustomFieldDefinition[];
 }
 
 export default function ContactList({
@@ -23,7 +45,46 @@ export default function ContactList({
   onAdd,
   search,
   onSearchChange,
+  headerActions,
+  filters,
+  onFiltersChange,
+  availableTags,
+  availableLists,
+  selectedIds,
+  onToggleSelect,
+  onRangeSelect,
+  onSelectAll,
+  onClearSelection,
+  onBulkActionComplete,
+  activeListId,
+  onSelectList,
+  customFieldDefinitions,
 }: ContactListProps) {
+  const lastClickedIndex = useRef<number | null>(null);
+  const hasSelection = selectedIds.length > 0;
+
+  const handleItemClick = (contact: Contact, index: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastClickedIndex.current !== null) {
+      // Shift+click: range select
+      e.preventDefault();
+      const from = Math.min(lastClickedIndex.current, index);
+      const to = Math.max(lastClickedIndex.current, index);
+      onRangeSelect(from, to);
+    } else if (hasSelection) {
+      // Already selecting: toggle this item
+      onToggleSelect(contact.id);
+      lastClickedIndex.current = index;
+    } else {
+      // Normal click: open detail
+      onSelect(contact);
+    }
+  };
+
+  const handleCheckboxChange = (contact: Contact, index: number) => {
+    onToggleSelect(contact.id);
+    lastClickedIndex.current = index;
+  };
+
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
       <div className="flex items-center gap-2 border-b p-3">
@@ -36,10 +97,40 @@ export default function ContactList({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
+        <ContactFilters
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+          availableTags={availableTags}
+          availableLists={availableLists}
+          customFieldDefinitions={customFieldDefinitions}
+        />
         <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={onAdd}>
           <Plus className="h-4 w-4" />
         </Button>
+        {headerActions}
       </div>
+
+      <ContactListSelector
+        lists={availableLists}
+        activeListId={activeListId}
+        onSelectList={onSelectList}
+      />
+
+      {/* Select all bar — shown when any items are selected */}
+      {hasSelection && contacts.length > 0 && (
+        <div className="flex items-center gap-2 border-b px-3 py-1.5">
+          <Checkbox
+            checked={selectedIds.length === contacts.length && contacts.length > 0}
+            onCheckedChange={(checked) => {
+              if (checked) onSelectAll();
+              else onClearSelection();
+            }}
+          />
+          <span className="text-xs text-muted-foreground">
+            {selectedIds.length === contacts.length ? 'Deselect all' : 'Select all'}
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-1">
         {loading ? (
@@ -60,21 +151,39 @@ export default function ContactList({
             {search ? 'No contacts match your search' : 'No contacts yet'}
           </div>
         ) : (
-          contacts.map((contact) => {
+          contacts.map((contact, index) => {
             const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ')
               || contact.whatsapp_name
               || contact.phone_number;
+            const isSelected = selectedIds.includes(contact.id);
 
             return (
               <button
                 key={contact.id}
-                onClick={() => onSelect(contact)}
+                onClick={(e) => handleItemClick(contact, index, e)}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors',
+                  'group flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors',
                   'hover:bg-accent',
-                  activeId === contact.id && 'bg-accent'
+                  activeId === contact.id && !hasSelection && 'bg-accent',
+                  isSelected && 'bg-accent'
                 )}
               >
+                {/* Checkbox — always takes space, fades in on hover */}
+                <div
+                  className={cn(
+                    'flex w-5 shrink-0 items-center justify-center transition-opacity duration-300 ease-in-out',
+                    hasSelection
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100'
+                  )}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => handleCheckboxChange(contact, index)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                {/* Avatar */}
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
                   {(contact.first_name?.[0] || contact.phone_number[0] || '?').toUpperCase()}
                 </div>
@@ -87,6 +196,17 @@ export default function ContactList({
           })
         )}
       </div>
+
+      {/* Bulk Action Bar */}
+      {hasSelection && (
+        <ContactBulkActionBar
+          selectedIds={selectedIds}
+          onClearSelection={onClearSelection}
+          onActionComplete={onBulkActionComplete}
+          availableTags={availableTags}
+          availableLists={availableLists}
+        />
+      )}
     </div>
   );
 }

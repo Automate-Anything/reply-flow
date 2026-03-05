@@ -120,6 +120,46 @@ const DEFAULT_CORE_RULES = `## Core Rules
 - Never share sensitive business information like internal processes, pricing strategies, or employee details unless explicitly covered in the knowledge base.
 - If a conversation requires human attention (complaints, complex issues, urgent matters), politely let the customer know that a team member will follow up.`;
 
+const DEFAULT_IDENTITY: Record<string, string> = {
+  business: 'You are an AI assistant for {name}. You help manage WhatsApp conversations on behalf of this business.',
+  organization: 'You are an AI assistant for {name}. You help manage WhatsApp conversations on behalf of this organization.',
+  personal: 'You are a personal AI assistant managing WhatsApp conversations.',
+  default: 'You are a helpful AI assistant managing WhatsApp conversations. Respond professionally and concisely.',
+};
+
+const DEFAULT_LANGUAGE: Record<string, string> = {
+  match_customer: 'Always respond in the same language the customer uses.',
+  specific: 'Respond in {language}.',
+};
+
+const DEFAULT_KB_CONTEXT = 'The following is the most relevant information retrieved from the knowledge base for this query. Use it to answer questions accurately. If a question isn\'t covered by this information, say so honestly.';
+
+const DEFAULT_GREETING = 'When this is the first message from a new contact, greet them with: "{greeting_message}"';
+
+const DEFAULT_TOPICS_TO_AVOID_PREFIX = 'Never discuss or share information about the following:';
+
+const DEFAULT_SCENARIO: Record<string, string> = {
+  header: 'When you receive a message, identify which scenario best matches and apply its specific rules.\nIf multiple scenarios could match, choose the most specific one.',
+  fallback_respond: 'Respond using your default communication style and the knowledge base.',
+  fallback_human: 'Do not respond. A human team member will handle this conversation.',
+  fallback_human_phone: 'Politely let the customer know that a human team member will assist them and provide this contact number: {human_phone}',
+  fallback_human_followup: 'Politely let the customer know that a human team member will follow up with them shortly.',
+};
+
+const DEFAULT_CLASSIFIER = `You are a message classifier{business_context}. Given a customer message and conversation context, determine which scenario best matches.
+
+## Available Scenarios
+{scenario_list}
+
+## Instructions
+- Analyze the customer's latest message in the context of the conversation.
+- Choose the single best matching scenario, or null if no scenario fits.
+- Consider follow-up messages: if the conversation is continuing a previous topic, classify according to that topic.
+- If multiple scenarios could match, choose the most specific one.
+
+Respond with JSON only, no other text:
+{"scenario_label": "<exact label or null>", "confidence": "high|medium|low"}`;
+
 // ── DB-backed template cache ────────────────────────
 
 export interface PromptTemplateCache {
@@ -127,11 +167,35 @@ export interface PromptTemplateCache {
   length: Record<string, string>;
   emoji: Record<string, string>;
   coreRules: string;
+  identity: Record<string, string>;
+  language: Record<string, string>;
+  kbContext: string;
+  greeting: string;
+  topicsToAvoidPrefix: string;
+  scenario: Record<string, string>;
+  classifier: string;
   loadedAt: number;
 }
 
 let templateCache: PromptTemplateCache | null = null;
 const CACHE_TTL = 60_000; // 60 seconds
+
+function buildDefaultCache(): PromptTemplateCache {
+  return {
+    tone: { ...DEFAULT_TONE_DESCRIPTIONS },
+    length: { ...DEFAULT_LENGTH_DESCRIPTIONS },
+    emoji: { ...DEFAULT_EMOJI_DESCRIPTIONS },
+    coreRules: DEFAULT_CORE_RULES,
+    identity: { ...DEFAULT_IDENTITY },
+    language: { ...DEFAULT_LANGUAGE },
+    kbContext: DEFAULT_KB_CONTEXT,
+    greeting: DEFAULT_GREETING,
+    topicsToAvoidPrefix: DEFAULT_TOPICS_TO_AVOID_PREFIX,
+    scenario: { ...DEFAULT_SCENARIO },
+    classifier: DEFAULT_CLASSIFIER,
+    loadedAt: Date.now(),
+  };
+}
 
 export async function getPromptTemplates(): Promise<PromptTemplateCache> {
   if (templateCache && Date.now() - templateCache.loadedAt < CACHE_TTL) {
@@ -143,30 +207,30 @@ export async function getPromptTemplates(): Promise<PromptTemplateCache> {
       .from('prompt_templates')
       .select('key, category, content');
 
-    const tone: Record<string, string> = { ...DEFAULT_TONE_DESCRIPTIONS };
-    const length: Record<string, string> = { ...DEFAULT_LENGTH_DESCRIPTIONS };
-    const emoji: Record<string, string> = { ...DEFAULT_EMOJI_DESCRIPTIONS };
-    let coreRules = DEFAULT_CORE_RULES;
+    const cache = buildDefaultCache();
 
     for (const row of data || []) {
       const subKey = row.key.split('.')[1];
-      if (row.category === 'tone' && subKey) tone[subKey] = row.content;
-      else if (row.category === 'length' && subKey) length[subKey] = row.content;
-      else if (row.category === 'emoji' && subKey) emoji[subKey] = row.content;
-      else if (row.category === 'core_rules') coreRules = row.content;
+      switch (row.category) {
+        case 'tone': if (subKey) cache.tone[subKey] = row.content; break;
+        case 'length': if (subKey) cache.length[subKey] = row.content; break;
+        case 'emoji': if (subKey) cache.emoji[subKey] = row.content; break;
+        case 'core_rules': cache.coreRules = row.content; break;
+        case 'identity': if (subKey) cache.identity[subKey] = row.content; break;
+        case 'language': if (subKey) cache.language[subKey] = row.content; break;
+        case 'kb_context': cache.kbContext = row.content; break;
+        case 'greeting': cache.greeting = row.content; break;
+        case 'topics_to_avoid': cache.topicsToAvoidPrefix = row.content; break;
+        case 'scenario': if (subKey) cache.scenario[subKey] = row.content; break;
+        case 'classifier': cache.classifier = row.content; break;
+      }
     }
 
-    templateCache = { tone, length, emoji, coreRules, loadedAt: Date.now() };
+    templateCache = cache;
     return templateCache;
   } catch (err) {
     console.error('Failed to load prompt templates from DB, using defaults:', err);
-    return {
-      tone: DEFAULT_TONE_DESCRIPTIONS,
-      length: DEFAULT_LENGTH_DESCRIPTIONS,
-      emoji: DEFAULT_EMOJI_DESCRIPTIONS,
-      coreRules: DEFAULT_CORE_RULES,
-      loadedAt: Date.now(),
-    };
+    return buildDefaultCache();
   }
 }
 
@@ -189,49 +253,49 @@ function buildAudienceSection(profile: ProfileData): string | null {
   return null;
 }
 
-function buildIdentitySection(profile: ProfileData): string {
+function buildIdentitySection(profile: ProfileData, t: PromptTemplateCache): string {
   const sections: string[] = [];
 
   switch (profile.use_case) {
     case 'business': {
       const name = profile.business_name || 'the business';
-      sections.push(`You are an AI assistant for ${name}. You help manage WhatsApp conversations on behalf of this business.`);
+      sections.push(t.identity.business.replace('{name}', name));
       if (profile.business_description) sections.push(`## About the Business\n${profile.business_description}`);
       if (profile.business_type) sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
       break;
     }
     case 'organization': {
       const name = profile.business_name || 'the organization';
-      sections.push(`You are an AI assistant for ${name}. You help manage WhatsApp conversations on behalf of this organization.`);
+      sections.push(t.identity.organization.replace('{name}', name));
       if (profile.business_description) sections.push(`## About the Organization\n${profile.business_description}`);
       break;
     }
     case 'personal':
-      sections.push('You are a personal AI assistant managing WhatsApp conversations.');
+      sections.push(t.identity.personal);
       if (profile.business_description) sections.push(`## Context\n${profile.business_description}`);
       break;
     default:
-      sections.push('You are a helpful AI assistant managing WhatsApp conversations. Respond professionally and concisely.');
+      sections.push(t.identity.default);
       break;
   }
 
   return sections.join('\n\n');
 }
 
-function buildLanguageSection(profile: ProfileData): string | null {
+function buildLanguageSection(profile: ProfileData, t: PromptTemplateCache): string | null {
   if (!profile.language_preference) return null;
   if (profile.language_preference === 'match_customer') {
-    return '## Language\nAlways respond in the same language the customer uses.';
+    return `## Language\n${t.language.match_customer}`;
   }
-  return `## Language\nRespond in ${profile.language_preference}.`;
+  return `## Language\n${t.language.specific.replace('{language}', profile.language_preference)}`;
 }
 
-function buildKBSection(kbEntries: KBEntry[]): string | null {
+function buildKBSection(kbEntries: KBEntry[], t: PromptTemplateCache): string | null {
   if (kbEntries.length === 0) return null;
   const kbSection = kbEntries
     .map((entry) => `### ${entry.title}\n${entry.content}`)
     .join('\n\n---\n\n');
-  return `## Relevant Knowledge Base Context\nThe following is the most relevant information retrieved from the knowledge base for this query. Use it to answer questions accurately. If a question isn't covered by this information, say so honestly.\n\n${kbSection}`;
+  return `## Relevant Knowledge Base Context\n${t.kbContext}\n\n${kbSection}`;
 }
 
 // ── New: Scenario-based prompt builder ──────────────
@@ -260,7 +324,17 @@ function resolveScenarioStyle(scenario: Scenario, defaults: CommunicationStyle):
   };
 }
 
-function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = []): string | null {
+function buildFallbackText(flow: ResponseFlow, t: PromptTemplateCache): string {
+  if (flow.fallback_mode === 'respond_basics') {
+    return t.scenario.fallback_respond;
+  }
+  if (flow.human_phone) {
+    return t.scenario.fallback_human_phone.replace('{human_phone}', flow.human_phone);
+  }
+  return t.scenario.fallback_human;
+}
+
+function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = [], t: PromptTemplateCache): string | null {
   if (flow.scenarios.length === 0) return null;
 
   const entriesByKBId = groupEntriesByKBId(kbEntries);
@@ -300,16 +374,9 @@ function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = []): s
     return lines.join('\n');
   });
 
-  let fallbackText: string;
-  if (flow.fallback_mode === 'respond_basics') {
-    fallbackText = 'Respond using your default communication style and the knowledge base.';
-  } else {
-    fallbackText = flow.human_phone
-      ? `Politely let the customer know that a human team member will assist them and provide this contact number: ${flow.human_phone}`
-      : 'Do not respond. A human team member will handle this conversation.';
-  }
+  const fallbackText = buildFallbackText(flow, t);
 
-  return `## Scenarios\nWhen you receive a message, identify which scenario best matches and apply its specific rules.\nIf multiple scenarios could match, choose the most specific one.\n\n${scenarioBlocks.join('\n\n')}\n\n### Messages that don't match any scenario\n${fallbackText}`;
+  return `## Scenarios\n${t.scenario.header}\n\n${scenarioBlocks.join('\n\n')}\n\n### Messages that don't match any scenario\n${fallbackText}`;
 }
 
 function buildResponseFlowPrompt(
@@ -322,10 +389,10 @@ function buildResponseFlowPrompt(
   const parts: string[] = [];
 
   // Identity
-  parts.push(buildIdentitySection(profile));
+  parts.push(buildIdentitySection(profile, t));
 
   // Language
-  const lang = buildLanguageSection(profile);
+  const lang = buildLanguageSection(profile, t);
   if (lang) parts.push(lang);
 
   // Default communication style
@@ -334,7 +401,7 @@ function buildResponseFlowPrompt(
 
   // Greeting
   if (flow.greeting_message) {
-    parts.push(`## First Contact Greeting\nWhen this is the first message from a new contact, greet them with: "${flow.greeting_message}"`);
+    parts.push(`## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
   }
 
   // General response rules
@@ -344,11 +411,11 @@ function buildResponseFlowPrompt(
 
   // Topics to avoid
   if (flow.topics_to_avoid) {
-    parts.push(`## Topics to Avoid\nNever discuss or share information about the following:\n${flow.topics_to_avoid}`);
+    parts.push(`## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
   }
 
   // Scenarios (pass KB entries so per-scenario attachments are inlined)
-  const scenarios = buildScenariosSection(flow, kbEntries);
+  const scenarios = buildScenariosSection(flow, kbEntries, t);
   if (scenarios) parts.push(scenarios);
 
   // Fallback knowledge base (from fallback_kb_attachments)
@@ -358,7 +425,7 @@ function buildResponseFlowPrompt(
       const entries = kbEntries.filter((e) => e.knowledge_base_id === att.kb_id);
       fallbackEntries.push(...entries);
     }
-    const kb = buildKBSection(fallbackEntries);
+    const kb = buildKBSection(fallbackEntries, t);
     if (kb) parts.push(kb);
   }
 
@@ -375,31 +442,32 @@ function buildResponseFlowPrompt(
 
 // ── Legacy flat prompt builder ──────────────────────
 
-function buildBusinessPrompt(profile: ProfileData): string {
+function buildLegacyIdentitySection(profile: ProfileData, t: PromptTemplateCache): string {
   const sections: string[] = [];
-  const name = profile.business_name || 'the business';
-  sections.push(`You are an AI assistant for ${name}. You help manage WhatsApp conversations on behalf of this business.`);
-  if (profile.business_description) sections.push(`## About the Business\n${profile.business_description}`);
-  if (profile.business_type) sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
-  const audience = buildAudienceSection(profile);
-  if (audience) sections.push(audience);
-  return sections.join('\n\n');
-}
 
-function buildPersonalPrompt(profile: ProfileData): string {
-  const sections: string[] = [];
-  sections.push('You are a personal AI assistant managing WhatsApp conversations.');
-  if (profile.business_description) sections.push(`## Context\n${profile.business_description}`);
-  const audience = buildAudienceSection(profile);
-  if (audience) sections.push(audience);
-  return sections.join('\n\n');
-}
+  switch (profile.use_case) {
+    case 'business': {
+      const name = profile.business_name || 'the business';
+      sections.push(t.identity.business.replace('{name}', name));
+      if (profile.business_description) sections.push(`## About the Business\n${profile.business_description}`);
+      if (profile.business_type) sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
+      break;
+    }
+    case 'organization': {
+      const name = profile.business_name || 'the organization';
+      sections.push(t.identity.organization.replace('{name}', name));
+      if (profile.business_description) sections.push(`## About the Organization\n${profile.business_description}`);
+      break;
+    }
+    case 'personal':
+      sections.push(t.identity.personal);
+      if (profile.business_description) sections.push(`## Context\n${profile.business_description}`);
+      break;
+    default:
+      sections.push(t.identity.default);
+      break;
+  }
 
-function buildOrganizationPrompt(profile: ProfileData): string {
-  const sections: string[] = [];
-  const name = profile.business_name || 'the organization';
-  sections.push(`You are an AI assistant for ${name}. You help manage WhatsApp conversations on behalf of this organization.`);
-  if (profile.business_description) sections.push(`## About the Organization\n${profile.business_description}`);
   const audience = buildAudienceSection(profile);
   if (audience) sections.push(audience);
   return sections.join('\n\n');
@@ -414,20 +482,7 @@ function buildLegacyPrompt(
   const parts: string[] = [];
 
   // Identity
-  switch (profile.use_case) {
-    case 'business':
-      parts.push(buildBusinessPrompt(profile));
-      break;
-    case 'organization':
-      parts.push(buildOrganizationPrompt(profile));
-      break;
-    case 'personal':
-      parts.push(buildPersonalPrompt(profile));
-      break;
-    default:
-      parts.push('You are a helpful AI assistant managing WhatsApp conversations. Respond professionally and concisely.');
-      break;
-  }
+  parts.push(buildLegacyIdentitySection(profile, t));
 
   // Communication style
   const styleRules: string[] = [];
@@ -436,19 +491,19 @@ function buildLegacyPrompt(
   if (profile.emoji_usage && t.emoji[profile.emoji_usage]) styleRules.push(t.emoji[profile.emoji_usage]);
   if (profile.language_preference) {
     if (profile.language_preference === 'match_customer') {
-      styleRules.push('Always respond in the same language the customer uses.');
+      styleRules.push(t.language.match_customer);
     } else {
-      styleRules.push(`Respond in ${profile.language_preference}.`);
+      styleRules.push(t.language.specific.replace('{language}', profile.language_preference));
     }
   }
   if (styleRules.length > 0) parts.push(`## Communication Style\n${styleRules.join('\n')}`);
 
   if (profile.response_rules) parts.push(`## Response Guidelines\n${profile.response_rules}`);
-  if (profile.topics_to_avoid) parts.push(`## Topics to Avoid\nNever discuss or share information about the following:\n${profile.topics_to_avoid}`);
+  if (profile.topics_to_avoid) parts.push(`## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${profile.topics_to_avoid}`);
   if (profile.escalation_rules) parts.push(`## Escalation Guidelines\n${profile.escalation_rules}`);
-  if (profile.greeting_message) parts.push(`## First Contact Greeting\nWhen this is the first message from a new contact, greet them with: "${profile.greeting_message}"`);
+  if (profile.greeting_message) parts.push(`## First Contact Greeting\n${t.greeting.replace('{greeting_message}', profile.greeting_message)}`);
 
-  const kb = buildKBSection(kbEntries);
+  const kb = buildKBSection(kbEntries, t);
   if (kb) parts.push(kb);
 
   if (channelOverrides?.custom_instructions) {
@@ -475,9 +530,11 @@ function groupEntriesByKBId(kbEntries: KBEntry[]): Map<string, KBEntry[]> {
 
 // ── Classification prompt (lightweight, for Haiku) ──
 
-export function buildClassificationPrompt(profile: ProfileData): string | null {
+export async function buildClassificationPrompt(profile: ProfileData): Promise<string | null> {
   const flow = profile.response_flow;
   if (!flow || flow.scenarios.length === 0) return null;
+
+  const t = await getPromptTemplates();
 
   const businessCtx = profile.business_name
     ? ` for ${profile.business_name}${profile.business_type ? ` (${profile.business_type})` : ''}`
@@ -487,19 +544,9 @@ export function buildClassificationPrompt(profile: ProfileData): string | null {
     .map((sc, i) => `${i + 1}. "${sc.label}" — ${sc.detection_criteria}`)
     .join('\n');
 
-  return `You are a message classifier${businessCtx}. Given a customer message and conversation context, determine which scenario best matches.
-
-## Available Scenarios
-${scenarioList}
-
-## Instructions
-- Analyze the customer's latest message in the context of the conversation.
-- Choose the single best matching scenario, or null if no scenario fits.
-- Consider follow-up messages: if the conversation is continuing a previous topic, classify according to that topic.
-- If multiple scenarios could match, choose the most specific one.
-
-Respond with JSON only, no other text:
-{"scenario_label": "<exact label or null>", "confidence": "high|medium|low"}`;
+  return t.classifier
+    .replace('{business_context}', businessCtx)
+    .replace('{scenario_list}', scenarioList);
 }
 
 // ── Targeted response prompt (single matched scenario) ──
@@ -515,15 +562,15 @@ export async function buildScenarioResponsePrompt(
   const parts: string[] = [];
 
   // Identity
-  parts.push(buildIdentitySection(profile));
+  parts.push(buildIdentitySection(profile, t));
 
   // Language
-  const lang = buildLanguageSection(profile);
+  const lang = buildLanguageSection(profile, t);
   if (lang) parts.push(lang);
 
   // Greeting
   if (flow.greeting_message) {
-    parts.push(`## First Contact Greeting\nWhen this is the first message from a new contact, greet them with: "${flow.greeting_message}"`);
+    parts.push(`## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
   }
 
   // General response rules
@@ -533,7 +580,7 @@ export async function buildScenarioResponsePrompt(
 
   // Topics to avoid
   if (flow.topics_to_avoid) {
-    parts.push(`## Topics to Avoid\nNever discuss or share information about the following:\n${flow.topics_to_avoid}`);
+    parts.push(`## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
   }
 
   // Find matched scenario
@@ -591,8 +638,8 @@ export async function buildScenarioResponsePrompt(
 
     if (flow.fallback_mode === 'human_handle') {
       const fallbackMsg = flow.human_phone
-        ? `Politely let the customer know that a human team member will assist them and provide this contact number: ${flow.human_phone}`
-        : 'Politely let the customer know that a human team member will follow up with them shortly.';
+        ? t.scenario.fallback_human_phone.replace('{human_phone}', flow.human_phone)
+        : t.scenario.fallback_human_followup;
       parts.push(`## Important\n${fallbackMsg}`);
     }
 
@@ -602,7 +649,7 @@ export async function buildScenarioResponsePrompt(
       for (const att of flow.fallback_kb_attachments) {
         fallbackEntries.push(...kbEntries.filter((e) => e.knowledge_base_id === att.kb_id));
       }
-      const kb = buildKBSection(fallbackEntries);
+      const kb = buildKBSection(fallbackEntries, t);
       if (kb) parts.push(kb);
     }
   }

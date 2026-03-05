@@ -10,26 +10,16 @@ import type { ProfileData, KBEntry } from '../services/promptBuilder.js';
 import { classifyMessage } from '../services/ai.js';
 import { processDocument, cleanText } from '../services/documentProcessor.js';
 import { processAndEmbedEntry, isEmbeddingsAvailable, searchKnowledgeBase, backfillExistingEntries } from '../services/embeddings.js';
+import { classifyQuery } from '../services/queryClassifier.js';
 
 const router = Router();
 router.use(requireAuth);
 
-// Multer: memory storage, 10MB limit, accept pdf/docx/txt
+// Multer: memory storage, 10MB limit, accept all text-based files
+// Content classifier determines processing strategy per file type
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-    ];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF, DOCX, and TXT files are allowed'));
-    }
-  },
 });
 
 // ────────────────────────────────────────────────
@@ -136,10 +126,15 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
       }
     }
 
-    // Load relevant KB entries via semantic search (or fall back to loading all)
+    // Load relevant KB entries via smart search (or fall back to loading all)
     let kbData: KBEntry[] = [];
     if (isEmbeddingsAvailable()) {
-      const searchResults = await searchKnowledgeBase(companyId, message.trim());
+      const qc = classifyQuery(message.trim());
+      const searchResults = await searchKnowledgeBase(companyId, message.trim(), {
+        retrievalMethod: qc.method,
+        vectorWeight: qc.vectorWeight,
+        ftsWeight: qc.ftsWeight,
+      });
       if (searchResults.length > 0) {
         kbData = searchResults.map((r) => ({
           title: (r.metadata?.sourceEntryTitle as string) || 'Knowledge Base',
@@ -488,7 +483,7 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
 
     if (error) throw error;
 
-    // Generate chunks and embeddings from structured text (preserves headings)
+    // Generate chunks and embeddings from structured text (content-aware)
     if (isEmbeddingsAvailable() && data) {
       await processAndEmbedEntry(
         data.id,
@@ -498,6 +493,8 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
         title,
         file.originalname,
         processed.metadata.sourceType,
+        processed.metadata.contentType,
+        processed.metadata.strategy,
       );
     }
 
@@ -669,12 +666,17 @@ router.post('/kb/search', requirePermission('knowledge_base', 'view'), async (re
       return;
     }
 
+    const classification = classifyQuery(query.trim());
+
     const results = await searchKnowledgeBase(companyId, query.trim(), {
       knowledgeBaseIds: knowledge_base_ids,
       matchCount: 10,
+      retrievalMethod: classification.method,
+      vectorWeight: classification.vectorWeight,
+      ftsWeight: classification.ftsWeight,
     });
 
-    res.json({ results });
+    res.json({ results, queryClassification: { method: classification.method, reasoning: classification.reasoning } });
   } catch (err) {
     next(err);
   }

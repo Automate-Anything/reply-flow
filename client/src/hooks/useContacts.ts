@@ -1,6 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
 
+export interface ContactFilters {
+  tags?: string[];
+  listId?: string;
+  company?: string;
+  city?: string;
+  country?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  sortBy?: 'name' | 'created_at' | 'updated_at' | 'company';
+  sortOrder?: 'asc' | 'desc';
+  customFields?: Record<string, string>;
+}
+
 export interface Contact {
   id: string;
   phone_number: string;
@@ -11,6 +24,11 @@ export interface Contact {
   notes: string | null;
   tags: string[];
   whatsapp_name: string | null;
+  address_street: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_postal_code: string | null;
+  address_country: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -23,7 +41,7 @@ export interface ContactNote {
   updated_at: string;
 }
 
-export function useContacts(search?: string) {
+export function useContacts(search?: string, filters?: ContactFilters) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,6 +49,20 @@ export function useContacts(search?: string) {
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
+      if (filters?.tags?.length) params.set('tags', filters.tags.join(','));
+      if (filters?.listId) params.set('listId', filters.listId);
+      if (filters?.company) params.set('company', filters.company);
+      if (filters?.city) params.set('city', filters.city);
+      if (filters?.country) params.set('country', filters.country);
+      if (filters?.createdAfter) params.set('createdAfter', filters.createdAfter);
+      if (filters?.createdBefore) params.set('createdBefore', filters.createdBefore);
+      if (filters?.sortBy) params.set('sortBy', filters.sortBy);
+      if (filters?.sortOrder) params.set('sortOrder', filters.sortOrder);
+      if (filters?.customFields) {
+        for (const [defId, value] of Object.entries(filters.customFields)) {
+          if (value) params.set(`cf[${defId}]`, value);
+        }
+      }
       const { data } = await api.get(`/contacts?${params}`);
       setContacts(data.contacts || []);
     } catch (err) {
@@ -38,7 +70,7 @@ export function useContacts(search?: string) {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, filters?.tags?.join(','), filters?.listId, filters?.company, filters?.city, filters?.country, filters?.createdAfter, filters?.createdBefore, filters?.sortBy, filters?.sortOrder, JSON.stringify(filters?.customFields)]);
 
   useEffect(() => {
     fetchContacts();

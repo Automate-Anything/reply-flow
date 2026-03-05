@@ -278,6 +278,13 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
         return;
       }
       updates.status = status;
+
+      // Session boundary: end session when resolved/closed, reopen when open/pending
+      if (status === 'resolved' || status === 'closed') {
+        updates.ended_at = new Date().toISOString();
+      } else {
+        updates.ended_at = null;
+      }
     }
 
     if (assigned_to !== undefined) {
@@ -323,7 +330,16 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       )
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // Unique constraint violation: tried to reopen but a newer active session exists
+      if (error.code === '23505') {
+        res.status(409).json({
+          error: 'Cannot reopen this session because a newer active session already exists for this contact.',
+        });
+        return;
+      }
+      throw error;
+    }
 
     const result = {
       ...data,
@@ -382,9 +398,19 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
           res.status(400).json({ error: 'Invalid status' });
           return;
         }
+        const statusUpdate: Record<string, unknown> = {
+          status: value,
+          updated_at: new Date().toISOString(),
+        };
+        // Session boundary: end sessions when bulk-resolving/closing
+        if (value === 'resolved' || value === 'closed') {
+          statusUpdate.ended_at = new Date().toISOString();
+        } else {
+          statusUpdate.ended_at = null;
+        }
         await supabaseAdmin
           .from('chat_sessions')
-          .update({ status: value, updated_at: new Date().toISOString() })
+          .update(statusUpdate)
           .in('id', validIds);
         break;
       }

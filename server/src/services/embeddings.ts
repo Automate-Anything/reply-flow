@@ -16,6 +16,7 @@ export interface ChunkMetadata {
   sourceEntryTitle: string;
   sourceFileName: string | null;
   sourceType: string;
+  contentType?: string;
   sectionHeading: string | null;
   sectionHierarchy: string[];
   pageNumbers: number[];
@@ -43,6 +44,9 @@ export interface SearchResult {
 export interface SearchOptions {
   knowledgeBaseIds?: string[];
   matchCount?: number;
+  retrievalMethod?: 'vector' | 'fts' | 'hybrid';
+  vectorWeight?: number;
+  ftsWeight?: number;
 }
 
 // ── Constants ──────────────────────────────────────
@@ -387,8 +391,24 @@ export async function chunkDocument(
     entryTitle: string;
     fileName: string | null;
     sourceType: string;
+    contentType?: string;
+    strategy?: string;
   },
 ): Promise<DocumentChunk[]> {
+  const strategy = documentMeta.strategy;
+
+  // For structured/tabular data: the processors already produce pre-chunked text
+  // separated by "---". Skip semantic splitting, just validate sizes.
+  if (strategy === 'structured_data' || strategy === 'tabular_pipeline') {
+    return chunkPreStructured(structuredText, documentMeta);
+  }
+
+  // For code: skip semantic splitting, use size-based only as safety net
+  if (strategy === 'code_pipeline') {
+    return chunkPreStructured(structuredText, documentMeta);
+  }
+
+  // For prose, markdown, html, and default: use section-aware semantic chunking
   const sections = parseMarkdownSections(structuredText);
   const chunks: DocumentChunk[] = [];
   let chunkIndex = 0;
@@ -434,6 +454,7 @@ export async function chunkDocument(
           sourceEntryTitle: documentMeta.entryTitle,
           sourceFileName: documentMeta.fileName,
           sourceType: documentMeta.sourceType,
+          contentType: documentMeta.contentType,
           sectionHeading: section.heading,
           sectionHierarchy: section.headingHierarchy,
           pageNumbers: [],
@@ -451,6 +472,46 @@ export async function chunkDocument(
   }
 
   return chunks;
+}
+
+/** Chunk pre-structured text (structured data, tabular, code).
+ *  These processors output text with "---" separators between logical chunks. */
+function chunkPreStructured(
+  structuredText: string,
+  documentMeta: { entryTitle: string; fileName: string | null; sourceType: string; contentType?: string },
+): DocumentChunk[] {
+  // Split by "---" separators (used by CSV/JSON/XLSX processors)
+  let rawChunks = structuredText.split(/\n---\n/).map((c) => c.trim()).filter((c) => c.length >= MIN_CHUNK_SIZE);
+
+  // If no separators found, fall back to section-based or size-based splitting
+  if (rawChunks.length === 0 && structuredText.trim().length >= MIN_CHUNK_SIZE) {
+    rawChunks = [structuredText.trim()];
+  }
+
+  // Safety net: split oversized chunks
+  const safeChunks: string[] = [];
+  for (const c of rawChunks) {
+    if (c.length > MAX_CHUNK_SIZE) {
+      safeChunks.push(...sizeSplitSection(c));
+    } else {
+      safeChunks.push(c);
+    }
+  }
+
+  return safeChunks.map((content, i) => ({
+    content,
+    metadata: {
+      sourceEntryTitle: documentMeta.entryTitle,
+      sourceFileName: documentMeta.fileName,
+      sourceType: documentMeta.sourceType,
+      contentType: documentMeta.contentType,
+      sectionHeading: null,
+      sectionHierarchy: [],
+      pageNumbers: [],
+      chunkIndex: i,
+      totalChunks: safeChunks.length,
+    },
+  }));
 }
 
 // ── Embedding Generation ───────────────────────────
@@ -529,6 +590,8 @@ export async function processAndEmbedEntry(
   entryTitle: string,
   fileName?: string | null,
   sourceType?: string,
+  contentType?: string,
+  strategy?: string,
 ): Promise<void> {
   if (!openai) {
     console.warn('Embeddings skipped: OPENAI_API_KEY not configured');
@@ -548,11 +611,13 @@ export async function processAndEmbedEntry(
       .delete()
       .eq('entry_id', entryId);
 
-    // 2. Chunk the text (semantic splitting when possible, size-based fallback)
+    // 2. Chunk the text (content-aware: semantic for prose, pre-structured for tabular/code)
     const chunks = await chunkDocument(structuredText, {
       entryTitle,
       fileName: fileName ?? null,
       sourceType: sourceType ?? 'text',
+      contentType,
+      strategy,
     });
 
     if (chunks.length === 0) {
@@ -600,26 +665,40 @@ export async function processAndEmbedEntry(
   }
 }
 
-// ── Hybrid Search ──────────────────────────────────
+// ── Adaptive Search ───────────────────────────────
 
 export async function searchKnowledgeBase(
   companyId: string,
   query: string,
   options?: SearchOptions,
 ): Promise<SearchResult[]> {
-  if (!openai) {
-    return [];
-  }
+  const method = options?.retrievalMethod ?? 'hybrid';
+  const matchCount = options?.matchCount ?? 5;
+  const kbIds = options?.knowledgeBaseIds ?? null;
 
   try {
+    // FTS-only: no embedding needed — fast keyword search
+    if (method === 'fts') {
+      return await ftsOnlySearch(companyId, query, kbIds, matchCount);
+    }
+
+    // Vector and hybrid both need an embedding
+    if (!openai) return [];
     const queryEmbedding = await generateEmbedding(query);
 
+    if (method === 'vector') {
+      return await vectorOnlySearch(companyId, queryEmbedding, kbIds, matchCount);
+    }
+
+    // Hybrid with configurable weights
     const { data, error } = await supabaseAdmin.rpc('hybrid_search', {
       p_query_embedding: JSON.stringify(queryEmbedding),
       p_query_text: query,
       p_company_id: companyId,
-      p_knowledge_base_ids: options?.knowledgeBaseIds ?? null,
-      p_match_count: options?.matchCount ?? 5,
+      p_knowledge_base_ids: kbIds,
+      p_match_count: matchCount,
+      p_vector_weight: options?.vectorWeight ?? 1.0,
+      p_fts_weight: options?.ftsWeight ?? 1.0,
     });
 
     if (error) throw error;
@@ -636,9 +715,65 @@ export async function searchKnowledgeBase(
       rrfScore: row.rrf_score as number,
     }));
   } catch (error) {
-    console.error('Hybrid search failed:', error);
+    console.error(`Search failed (method=${method}):`, error);
     return [];
   }
+}
+
+async function vectorOnlySearch(
+  companyId: string,
+  queryEmbedding: number[],
+  kbIds: string[] | null,
+  matchCount: number,
+): Promise<SearchResult[]> {
+  const { data, error } = await supabaseAdmin.rpc('vector_search', {
+    p_query_embedding: JSON.stringify(queryEmbedding),
+    p_company_id: companyId,
+    p_knowledge_base_ids: kbIds,
+    p_match_count: matchCount,
+  });
+
+  if (error) throw error;
+
+  return (data || []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    entryId: row.entry_id as string,
+    knowledgeBaseId: row.knowledge_base_id as string,
+    chunkIndex: row.chunk_index as number,
+    content: row.content as string,
+    metadata: (row.metadata as Record<string, unknown>) || {},
+    vectorRank: 0,
+    ftsRank: 0,
+    rrfScore: row.similarity as number,
+  }));
+}
+
+async function ftsOnlySearch(
+  companyId: string,
+  query: string,
+  kbIds: string[] | null,
+  matchCount: number,
+): Promise<SearchResult[]> {
+  const { data, error } = await supabaseAdmin.rpc('fts_search', {
+    p_query_text: query,
+    p_company_id: companyId,
+    p_knowledge_base_ids: kbIds,
+    p_match_count: matchCount,
+  });
+
+  if (error) throw error;
+
+  return (data || []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    entryId: row.entry_id as string,
+    knowledgeBaseId: row.knowledge_base_id as string,
+    chunkIndex: row.chunk_index as number,
+    content: row.content as string,
+    metadata: (row.metadata as Record<string, unknown>) || {},
+    vectorRank: 0,
+    ftsRank: 0,
+    rrfScore: row.fts_rank as number,
+  }));
 }
 
 // ── Backfill ───────────────────────────────────────

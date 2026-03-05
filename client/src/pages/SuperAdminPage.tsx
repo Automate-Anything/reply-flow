@@ -166,7 +166,7 @@ export default function SuperAdminPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full">
           <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
-          <TabsTrigger value="templates" className="flex-1">Prompt Templates</TabsTrigger>
+          <TabsTrigger value="templates" className="flex-1">Prompt Building Blocks</TabsTrigger>
           <TabsTrigger value="preview" className="flex-1">Prompt Preview</TabsTrigger>
           <TabsTrigger value="knowledge-bases" className="flex-1">Knowledge Bases</TabsTrigger>
         </TabsList>
@@ -298,18 +298,38 @@ function TemplatesTab() {
   if (loading) return <Skeleton className="h-64" />;
 
   const categoryLabels: Record<string, string> = {
+    identity: 'Identity Intros',
     tone: 'Tone Descriptions',
     length: 'Response Length Descriptions',
     emoji: 'Emoji Usage Descriptions',
+    language: 'Language Instructions',
+    greeting: 'Greeting Format',
+    kb_context: 'Knowledge Base Context',
+    topics_to_avoid: 'Topics to Avoid',
+    scenario: 'Scenario Instructions',
+    classifier: 'Message Classifier',
     core_rules: 'Core Rules',
   };
 
-  const categoryOrder = ['tone', 'length', 'emoji', 'core_rules'];
+  const categoryDescriptions: Record<string, string> = {
+    identity: 'Opening intro sentences for each use case. Use {name} as placeholder for the business/org name.',
+    language: 'Language instructions. Use {language} as placeholder for the specific language name.',
+    greeting: 'Format for first-contact greeting. Use {greeting_message} as placeholder.',
+    kb_context: 'Introduction text shown before knowledge base context is injected into the prompt.',
+    topics_to_avoid: 'Prefix text shown before the list of topics the agent should avoid.',
+    scenario: 'Headers and fallback messages for the scenario system. Use {human_phone} as placeholder in phone fallback.',
+    classifier: 'Full prompt sent to the classifier model. Use {business_context} and {scenario_list} as placeholders.',
+  };
+
+  // Categories that need larger textareas
+  const largeCategories = new Set(['core_rules', 'classifier', 'scenario']);
+
+  const categoryOrder = ['identity', 'tone', 'length', 'emoji', 'language', 'greeting', 'kb_context', 'topics_to_avoid', 'scenario', 'classifier', 'core_rules'];
 
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        These templates control how AI prompts are built. Changes take effect within 60 seconds.
+        These building blocks control how AI prompts are assembled. Changes take effect within 60 seconds.
       </p>
       {categoryOrder.map((category) => {
         const group = templates[category];
@@ -318,6 +338,9 @@ function TemplatesTab() {
           <Card key={category}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">{categoryLabels[category] || category}</CardTitle>
+              {categoryDescriptions[category] && (
+                <p className="text-xs text-muted-foreground mt-1">{categoryDescriptions[category]}</p>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               {group.map((t) => (
@@ -328,7 +351,7 @@ function TemplatesTab() {
                   </div>
                   <textarea
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    rows={category === 'core_rules' ? 8 : 3}
+                    rows={largeCategories.has(category) ? 8 : 3}
                     value={editValues[t.key] || ''}
                     onChange={(e) => setEditValues((prev) => ({ ...prev, [t.key]: e.target.value }))}
                   />
