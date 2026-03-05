@@ -5,9 +5,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   Plus, FileText, Upload, Trash2, Loader2, X, ChevronDown, ChevronUp,
+  RotateCw, Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { KBEntry } from '@/hooks/useCompanyKB';
+import type { KBEntry, KBChunk } from '@/hooks/useCompanyKB';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
   onUpload: (file: File, title?: string) => Promise<unknown>;
   onUpdate: (entryId: string, updates: { title?: string; content?: string }) => Promise<unknown>;
   onDelete: (entryId: string) => Promise<unknown>;
+  onFetchChunks?: (entryId: string) => Promise<KBChunk[]>;
+  onReembed?: (entryId: string) => Promise<unknown>;
   loading: boolean;
   initialOpen?: boolean;
 }
@@ -29,14 +32,142 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function EmbeddingStatus({
+  status,
+  chunkCount,
+  onRetry,
+}: {
+  status?: string;
+  chunkCount?: number;
+  onRetry?: () => void;
+}) {
+  if (!status) return null;
+
+  switch (status) {
+    case 'completed':
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+          {chunkCount ? `${chunkCount} chunks` : 'Embedded'}
+        </span>
+      );
+    case 'processing':
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin text-yellow-500" />
+          Processing
+        </span>
+      );
+    case 'failed':
+      return (
+        <span className="flex items-center gap-1 text-xs">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+          <span className="text-red-500">Failed</span>
+          {onRetry && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onRetry(); }}
+              className="ml-0.5 text-xs text-muted-foreground underline hover:text-foreground"
+            >
+              Retry
+            </button>
+          )}
+        </span>
+      );
+    case 'pending':
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+          Pending
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
+function ChunkViewer({
+  chunks,
+  loading,
+}: {
+  chunks: KBChunk[];
+  loading: boolean;
+}) {
+  const [expandedChunk, setExpandedChunk] = useState<number | null>(null);
+
+  if (loading) {
+    return (
+      <div className="space-y-2 pt-2">
+        <div className="h-12 animate-pulse rounded bg-muted" />
+        <div className="h-12 animate-pulse rounded bg-muted" />
+      </div>
+    );
+  }
+
+  if (chunks.length === 0) {
+    return (
+      <p className="pt-2 text-xs text-muted-foreground">No chunks found.</p>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5 pt-2">
+      {chunks.map((chunk) => {
+        const isExpanded = expandedChunk === chunk.chunk_index;
+        return (
+          <div key={chunk.id} className="rounded border bg-muted/30">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+              onClick={() => setExpandedChunk(isExpanded ? null : chunk.chunk_index)}
+            >
+              <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
+                #{chunk.chunk_index + 1}
+              </Badge>
+              {chunk.metadata.sectionHeading && (
+                <span className="truncate text-[11px] font-medium text-muted-foreground">
+                  {chunk.metadata.sectionHeading}
+                </span>
+              )}
+              <span className="ml-auto truncate text-[11px] text-muted-foreground max-w-[200px]">
+                {chunk.content.slice(0, 80)}...
+              </span>
+              {isExpanded ? (
+                <ChevronUp className="h-3 w-3 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+            {isExpanded && (
+              <div className="border-t px-2.5 py-2">
+                {chunk.metadata.sectionHierarchy.length > 0 && (
+                  <p className="mb-1.5 text-[10px] font-medium text-primary">
+                    {chunk.metadata.sectionHierarchy.join(' > ')}
+                  </p>
+                )}
+                <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
+                  {chunk.content}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function EntryCard({
   entry,
   onUpdate,
   onDelete,
+  onFetchChunks,
+  onReembed,
 }: {
   entry: KBEntry;
   onUpdate: (updates: { title?: string; content?: string }) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
+  onFetchChunks?: () => Promise<KBChunk[]>;
+  onReembed?: () => Promise<unknown>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -44,12 +175,20 @@ function EntryCard({
   const [content, setContent] = useState(entry.content);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reembedding, setReembedding] = useState(false);
+
+  // Chunk viewer state
+  const [showChunks, setShowChunks] = useState(false);
+  const [chunks, setChunks] = useState<KBChunk[] | null>(null);
+  const [loadingChunks, setLoadingChunks] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await onUpdate({ title, content });
       setEditing(false);
+      setChunks(null); // Reset chunks since content may have changed
+      setShowChunks(false);
       toast.success('Entry updated');
     } catch {
       toast.error('Failed to update entry');
@@ -70,6 +209,38 @@ function EntryCard({
     }
   };
 
+  const handleReembed = async () => {
+    if (!onReembed) return;
+    setReembedding(true);
+    try {
+      await onReembed();
+      toast.success('Re-embedding started');
+    } catch {
+      toast.error('Failed to re-embed');
+    } finally {
+      setReembedding(false);
+    }
+  };
+
+  const handleToggleChunks = async () => {
+    if (showChunks) {
+      setShowChunks(false);
+      return;
+    }
+    setShowChunks(true);
+    if (!chunks && onFetchChunks) {
+      setLoadingChunks(true);
+      try {
+        const result = await onFetchChunks();
+        setChunks(result);
+      } catch {
+        toast.error('Failed to load chunks');
+      } finally {
+        setLoadingChunks(false);
+      }
+    }
+  };
+
   return (
     <div className="rounded-lg border">
       <div
@@ -80,6 +251,11 @@ function EntryCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{entry.title}</p>
         </div>
+        <EmbeddingStatus
+          status={entry.embedding_status}
+          chunkCount={entry.chunk_count}
+          onRetry={onReembed ? handleReembed : undefined}
+        />
         <Badge variant="outline" className="shrink-0 text-xs">
           {entry.source_type === 'file' ? entry.file_name?.split('.').pop()?.toUpperCase() || 'FILE' : 'TEXT'}
         </Badge>
@@ -126,7 +302,7 @@ function EntryCard({
               <div className="max-h-32 overflow-y-auto rounded bg-muted/50 p-2">
                 <p className="whitespace-pre-wrap text-xs text-muted-foreground">{entry.content.slice(0, 500)}{entry.content.length > 500 ? '...' : ''}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-7 text-xs">
                   Edit
                 </Button>
@@ -140,7 +316,35 @@ function EntryCard({
                   {deleting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Trash2 className="mr-1 h-3 w-3" />}
                   Delete
                 </Button>
+                {entry.embedding_status === 'failed' && onReembed && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleReembed}
+                    disabled={reembedding}
+                    className="h-7 text-xs"
+                  >
+                    {reembedding ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCw className="mr-1 h-3 w-3" />}
+                    Re-embed
+                  </Button>
+                )}
+                {entry.embedding_status === 'completed' && onFetchChunks && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleToggleChunks}
+                    className="ml-auto h-7 text-xs"
+                  >
+                    <Layers className="mr-1 h-3 w-3" />
+                    {showChunks ? 'Hide Chunks' : `View ${entry.chunk_count || ''} Chunks`}
+                  </Button>
+                )}
               </div>
+
+              {/* Chunk viewer */}
+              {showChunks && (
+                <ChunkViewer chunks={chunks || []} loading={loadingChunks} />
+              )}
             </>
           )}
         </div>
@@ -149,7 +353,7 @@ function EntryCard({
   );
 }
 
-export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, loading, initialOpen }: Props) {
+export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, onFetchChunks, onReembed, loading, initialOpen }: Props) {
   const [showAddForm, setShowAddForm] = useState(!!initialOpen);
   const [addMode, setAddMode] = useState<'text' | 'file'>('text');
   const [title, setTitle] = useState('');
@@ -359,6 +563,8 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
               entry={entry}
               onUpdate={(updates) => onUpdate(entry.id, updates)}
               onDelete={() => onDelete(entry.id)}
+              onFetchChunks={onFetchChunks ? () => onFetchChunks(entry.id) : undefined}
+              onReembed={onReembed ? () => onReembed(entry.id) : undefined}
             />
           ))}
         </div>

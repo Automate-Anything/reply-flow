@@ -19,6 +19,7 @@ import ChannelsPage from '@/pages/ChannelsPage';
 import ChannelDetailPage from '@/components/settings/ChannelDetailView';
 import AIAgentsPage from '@/pages/AIAgentsPage';
 import AgentDetailPage from '@/pages/AgentDetailPage';
+import SuperAdminPage from '@/pages/SuperAdminPage';
 
 
 function App() {
@@ -45,6 +46,7 @@ function App() {
 
                   <Route path="settings" element={<SettingsPage />} />
                   <Route path="profile" element={<ProfileSettingsPage />} />
+                  <Route path="super-admin" element={<SuperAdminPage />} />
                 </Route>
               </Route>
             </Routes>

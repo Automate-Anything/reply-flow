@@ -5,10 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   ArrowLeft, Plus, ChevronDown, ChevronUp, Pencil, Trash2, Loader2, BookOpen, X,
+  Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
-import type { KBEntry } from '@/hooks/useCompanyKB';
+import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
 
 export default function KnowledgeBasePage() {
@@ -21,6 +22,7 @@ export default function KnowledgeBasePage() {
     knowledgeBases, loading,
     createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase,
     fetchKBEntries, addKBEntry, uploadKBFile, updateKBEntry, deleteKBEntry,
+    fetchEntryChunks, reembedEntry, searchKB,
   } = useCompanyKB();
 
   // Create KB form
@@ -43,6 +45,12 @@ export default function KnowledgeBasePage() {
   // Delete KB
   const [deletingKbId, setDeletingKbId] = useState<string | null>(null);
 
+  // Search test panel
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<KBSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+
   const handleCreate = async () => {
     if (!newName.trim()) {
       toast.error('Name is required');
@@ -50,10 +58,12 @@ export default function KnowledgeBasePage() {
     }
     setCreating(true);
     try {
-      await createKnowledgeBase(newName.trim(), newDescription.trim() || undefined);
+      const newKb = await createKnowledgeBase(newName.trim(), newDescription.trim() || undefined);
       setNewName('');
       setNewDescription('');
       setShowCreateForm(false);
+      setExpandedKbId(newKb.id);
+      setKbEntries((prev) => ({ ...prev, [newKb.id]: [] }));
       toast.success('Knowledge base created');
     } catch {
       toast.error('Failed to create knowledge base');
@@ -158,6 +168,35 @@ export default function KnowledgeBasePage() {
     },
     [deleteKBEntry]
   );
+
+  const handleFetchChunks = useCallback(
+    (kbId: string) => async (entryId: string) => {
+      return fetchEntryChunks(kbId, entryId);
+    },
+    [fetchEntryChunks]
+  );
+
+  const handleReembed = useCallback(
+    (kbId: string) => async (entryId: string) => {
+      await reembedEntry(kbId, entryId);
+    },
+    [reembedEntry]
+  );
+
+  const handleSearch = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSearching(true);
+    setSearchResults([]);
+    try {
+      const results = await searchKB(q);
+      setSearchResults(results);
+    } catch {
+      toast.error('Search failed');
+    } finally {
+      setSearching(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -317,6 +356,8 @@ export default function KnowledgeBasePage() {
                       onUpload={handleUploadFile(kb.id)}
                       onUpdate={handleUpdateEntry(kb.id)}
                       onDelete={handleDeleteEntry(kb.id)}
+                      onFetchChunks={handleFetchChunks(kb.id)}
+                      onReembed={handleReembed(kb.id)}
                       loading={isLoadingEntries}
                     />
                   </div>
@@ -346,6 +387,85 @@ export default function KnowledgeBasePage() {
             </Button>
           </div>
         )
+      )}
+
+      {/* Search test panel */}
+      {knowledgeBases.length > 0 && (
+        <div className="rounded-lg border">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+            onClick={() => setShowSearch(!showSearch)}
+          >
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm font-medium">Test Search</span>
+            <span className="text-xs text-muted-foreground">Query your knowledge bases</span>
+            {showSearch ? (
+              <ChevronUp className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            )}
+          </button>
+
+          {showSearch && (
+            <div className="border-t px-4 py-3 space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Type a query to test knowledge base search..."
+                  className="h-8 text-sm"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSearch}
+                  disabled={searching || !searchQuery.trim()}
+                  className="h-8 shrink-0 gap-1.5 text-xs"
+                >
+                  {searching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                  Search
+                </Button>
+              </div>
+
+              {searching && (
+                <div className="space-y-2">
+                  <div className="h-16 animate-pulse rounded bg-muted" />
+                  <div className="h-16 animate-pulse rounded bg-muted" />
+                </div>
+              )}
+
+              {!searching && searchResults.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">{searchResults.length} results</p>
+                  {searchResults.map((result, i) => (
+                    <div key={result.id} className="rounded border bg-muted/30 p-2.5 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">#{i + 1}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          RRF: {result.rrfScore.toFixed(4)}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          Vector: #{result.vectorRank}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          FTS: #{result.ftsRank}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
+                        {result.content.slice(0, 300)}{result.content.length > 300 ? '...' : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!searching && searchResults.length === 0 && searchQuery.trim() && (
+                <p className="text-xs text-muted-foreground">No results. Try a different query.</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

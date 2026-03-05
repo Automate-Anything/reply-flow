@@ -16,6 +16,7 @@ interface MeResponse {
   company: { id: string; name: string; slug: string | null; logo_url: string | null } | null;
   role: { id: string; name: string; hierarchy_level: number } | null;
   permissions: string[];
+  is_super_admin?: boolean;
 }
 
 interface SessionContextType {
@@ -30,6 +31,7 @@ interface SessionContextType {
   role: string | null;
   permissions: Set<string>;
   hasPermission: (resource: string, action: string) => boolean;
+  isSuperAdmin: boolean;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -57,6 +59,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
   const hasPermission = useCallback(
@@ -76,6 +79,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setCompanyName(data.company?.name ?? null);
       setRole(data.role?.name ?? null);
       setPermissions(new Set(data.permissions));
+      setIsSuperAdmin(data.is_super_admin || false);
     } catch {
       // User may not have a company yet (invitation flow)
       setProfileFullName(null);
@@ -84,6 +88,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setCompanyName(null);
       setRole(null);
       setPermissions(new Set());
+      setIsSuperAdmin(false);
     }
   }, []);
 
@@ -99,6 +104,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setCompanyName(null);
       setRole(null);
       setPermissions(new Set());
+      setIsSuperAdmin(false);
     }
   }, []);
 
@@ -172,6 +178,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     role,
     permissions,
     hasPermission,
+    isSuperAdmin,
     loading,
     error,
     refresh,
