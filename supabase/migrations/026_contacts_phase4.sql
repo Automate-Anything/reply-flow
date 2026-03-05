@@ -10,16 +10,16 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- Trigram indexes for name similarity queries
-CREATE INDEX idx_contacts_first_name_trgm
+CREATE INDEX IF NOT EXISTS idx_contacts_first_name_trgm
   ON public.contacts USING GIN(first_name gin_trgm_ops)
   WHERE is_deleted = false;
 
-CREATE INDEX idx_contacts_last_name_trgm
+CREATE INDEX IF NOT EXISTS idx_contacts_last_name_trgm
   ON public.contacts USING GIN(last_name gin_trgm_ops)
   WHERE is_deleted = false;
 
 -- Email index for exact-match duplicate detection
-CREATE INDEX idx_contacts_email
+CREATE INDEX IF NOT EXISTS idx_contacts_email
   ON public.contacts(email)
   WHERE is_deleted = false AND email IS NOT NULL;
 
@@ -27,7 +27,7 @@ CREATE INDEX idx_contacts_email
 -- STEP 2: contact_activity_log table
 -- ============================================================
 
-CREATE TABLE public.contact_activity_log (
+CREATE TABLE IF NOT EXISTS public.contact_activity_log (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   contact_id   UUID NOT NULL REFERENCES public.contacts(id) ON DELETE CASCADE,
   company_id   UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
@@ -45,27 +45,32 @@ CREATE TABLE public.contact_activity_log (
 
 ALTER TABLE public.contact_activity_log ENABLE ROW LEVEL SECURITY;
 
-CREATE INDEX idx_contact_activity_log_contact
+CREATE INDEX IF NOT EXISTS idx_contact_activity_log_contact
   ON public.contact_activity_log(contact_id);
-CREATE INDEX idx_contact_activity_log_company
+CREATE INDEX IF NOT EXISTS idx_contact_activity_log_company
   ON public.contact_activity_log(company_id);
-CREATE INDEX idx_contact_activity_log_created
+CREATE INDEX IF NOT EXISTS idx_contact_activity_log_created
   ON public.contact_activity_log(created_at DESC);
 
-CREATE POLICY "Company members can view contact activity log"
-  ON public.contact_activity_log FOR SELECT
-  USING (company_id = public.get_user_company_id());
-
-CREATE POLICY "Authorized users can create contact activity log"
-  ON public.contact_activity_log FOR INSERT
-  WITH CHECK (company_id = public.get_user_company_id());
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Company members can view contact activity log') THEN
+    CREATE POLICY "Company members can view contact activity log"
+      ON public.contact_activity_log FOR SELECT
+      USING (company_id = public.get_user_company_id());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Authorized users can create contact activity log') THEN
+    CREATE POLICY "Authorized users can create contact activity log"
+      ON public.contact_activity_log FOR INSERT
+      WITH CHECK (company_id = public.get_user_company_id());
+  END IF;
+END $$;
 
 -- ============================================================
 -- STEP 3: Add merged_into column to contacts
 -- ============================================================
 
 ALTER TABLE public.contacts
-  ADD COLUMN merged_into UUID REFERENCES public.contacts(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS merged_into UUID REFERENCES public.contacts(id) ON DELETE SET NULL;
 
 -- ============================================================
 -- STEP 4: Retroactively insert "created" events for existing contacts
@@ -75,7 +80,11 @@ INSERT INTO public.contact_activity_log (contact_id, company_id, user_id, action
 SELECT
   id, company_id, created_by, 'created', '{}', created_at
 FROM public.contacts
-WHERE is_deleted = false;
+WHERE is_deleted = false
+  AND NOT EXISTS (
+    SELECT 1 FROM public.contact_activity_log cal
+    WHERE cal.contact_id = contacts.id AND cal.action = 'created'
+  );
 
 -- ============================================================
 -- STEP 5: find_duplicate_contacts function

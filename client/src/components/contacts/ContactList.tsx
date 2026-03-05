@@ -17,6 +17,7 @@ import type { CustomFieldDefinition } from '@/hooks/useCustomFields';
 import ContactFilters from './ContactFilters';
 import ContactListSelector from './ContactListSelector';
 import ContactBulkActionBar from './ContactBulkActionBar';
+import ContactContextMenu from './ContactContextMenu';
 
 interface ContactListProps {
   contacts: Contact[];
@@ -40,6 +41,8 @@ interface ContactListProps {
   activeListId: string | null;
   onSelectList: (listId: string | null) => void;
   customFieldDefinitions?: CustomFieldDefinition[];
+  onEditContact?: (contact: Contact) => void;
+  onRefresh?: () => void;
 }
 
 export default function ContactList({
@@ -64,6 +67,8 @@ export default function ContactList({
   activeListId,
   onSelectList,
   customFieldDefinitions,
+  onEditContact,
+  onRefresh,
 }: ContactListProps) {
   const lastClickedIndex = useRef<number | null>(null);
   const hasSelection = selectedIds.length > 0;
@@ -89,6 +94,8 @@ export default function ContactList({
     onToggleSelect(contact.id);
     lastClickedIndex.current = index;
   };
+
+  const isDateSort = !filters.sortBy || filters.sortBy === 'updated_at' || filters.sortBy === 'created_at';
 
   return (
     <div className="flex h-full w-full flex-col border-r md:w-[320px]">
@@ -153,10 +160,10 @@ export default function ContactList({
                 Order
               </span>
               <div className="mt-1 space-y-0.5">
-                {([
-                  ['desc', 'Newest first'],
-                  ['asc', 'Oldest first'],
-                ] as const).map(([value, label]) => (
+                {(isDateSort
+                  ? ([['desc', 'Newest first'], ['asc', 'Oldest first']] as const)
+                  : ([['asc', 'A → Z'], ['desc', 'Z → A']] as const)
+                ).map(([value, label]) => (
                   <button
                     key={value}
                     className={cn(
@@ -226,7 +233,7 @@ export default function ContactList({
               || contact.phone_number;
             const isSelected = selectedIds.includes(contact.id);
 
-            return (
+            const item = (
               <button
                 key={contact.id}
                 onClick={(e) => handleItemClick(contact, index, e)}
@@ -262,6 +269,23 @@ export default function ContactList({
                 </div>
               </button>
             );
+
+            if (onEditContact && onRefresh) {
+              return (
+                <ContactContextMenu
+                  key={contact.id}
+                  contact={contact}
+                  availableTags={availableTags}
+                  availableLists={availableLists}
+                  onEdit={onEditContact}
+                  onRefresh={onRefresh}
+                >
+                  {item}
+                </ContactContextMenu>
+              );
+            }
+
+            return item;
           })
         )}
       </div>

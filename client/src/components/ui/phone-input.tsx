@@ -114,13 +114,24 @@ export default function PhoneInput({ value, onChange, error, disabled }: PhoneIn
 
   const placeholder = useMemo(() => getPlaceholder(country), [country]);
 
+  // Max national digits for the selected country (derived from example number)
+  const maxNationalDigits = useMemo(() => {
+    const example = getExampleNumber(country, examples);
+    if (!example) return 15; // ITU-T E.164 max
+    return example.nationalNumber.length;
+  }, [country]);
+
   const handleNationalChange = (raw: string) => {
     // Allow only digits, spaces, dashes, parens
     const cleaned = raw.replace(/[^\d\s\-()/]/g, '');
+    const digitsOnly = cleaned.replace(/\D/g, '');
+
+    // Enforce max digit length for the country
+    if (digitsOnly.length > maxNationalDigits) return;
+
     setNationalNumber(cleaned);
 
     // Format as-you-type and emit E.164
-    const digitsOnly = cleaned.replace(/\D/g, '');
     if (!digitsOnly) {
       onChange('');
       return;

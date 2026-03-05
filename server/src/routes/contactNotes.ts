@@ -6,15 +6,27 @@ import { supabaseAdmin } from '../config/supabase.js';
 const router = Router();
 router.use(requireAuth);
 
-// List notes for a contact
+// Helper: find session_id for a contact
+async function findSessionForContact(contactId: string, companyId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('chat_sessions')
+    .select('id')
+    .eq('contact_id', contactId)
+    .eq('company_id', companyId)
+    .limit(1)
+    .single();
+  return data?.id || null;
+}
+
+// List notes for a contact (reads from unified conversation_notes table)
 router.get('/:contactId', requirePermission('contact_notes', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
     const { contactId } = req.params;
 
     const { data, error } = await supabaseAdmin
-      .from('contact_notes')
-      .select('*')
+      .from('conversation_notes')
+      .select('*, author:created_by(id, full_name, avatar_url)')
       .eq('contact_id', contactId)
       .eq('company_id', companyId)
       .eq('is_deleted', false)
@@ -27,7 +39,7 @@ router.get('/:contactId', requirePermission('contact_notes', 'view'), async (req
   }
 });
 
-// Create a note
+// Create a note for a contact (writes to unified conversation_notes table)
 router.post('/:contactId', requirePermission('contact_notes', 'create'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
@@ -52,10 +64,19 @@ router.post('/:contactId', requirePermission('contact_notes', 'create'), async (
       return;
     }
 
+    // Find matching session if one exists
+    const sessionId = await findSessionForContact(String(contactId), companyId);
+
     const { data, error } = await supabaseAdmin
-      .from('contact_notes')
-      .insert({ contact_id: contactId, company_id: companyId, created_by: req.userId, content })
-      .select()
+      .from('conversation_notes')
+      .insert({
+        session_id: sessionId,
+        contact_id: contactId,
+        company_id: companyId,
+        created_by: req.userId,
+        content,
+      })
+      .select('*, author:created_by(id, full_name, avatar_url)')
       .single();
 
     if (error) throw error;
@@ -73,11 +94,11 @@ router.put('/:contactId/:noteId', requirePermission('contact_notes', 'edit'), as
     const { content } = req.body;
 
     const { data, error } = await supabaseAdmin
-      .from('contact_notes')
+      .from('conversation_notes')
       .update({ content, updated_at: new Date().toISOString() })
       .eq('id', noteId)
       .eq('company_id', companyId)
-      .select()
+      .select('*, author:created_by(id, full_name, avatar_url)')
       .single();
 
     if (error) throw error;
@@ -94,7 +115,7 @@ router.delete('/:contactId/:noteId', requirePermission('contact_notes', 'delete'
     const { noteId } = req.params;
 
     await supabaseAdmin
-      .from('contact_notes')
+      .from('conversation_notes')
       .update({ is_deleted: true, updated_at: new Date().toISOString() })
       .eq('id', noteId)
       .eq('company_id', companyId);

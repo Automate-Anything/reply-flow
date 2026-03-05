@@ -179,7 +179,9 @@ function cleanPages(pages: PageText[]): PageText[] {
 
 /** Extract text from PDF with per-page tracking and metadata */
 async function extractPdf(buffer: Buffer): Promise<ProcessedDocument> {
-  const pdfParse = (await import('pdf-parse')).default;
+  // Import internal module directly to avoid pdf-parse's test file loading bug
+  // (it tries to read test/data/05-versions-space.pdf on default import)
+  const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
 
   const pages: PageText[] = [];
   let pageNum = 0;

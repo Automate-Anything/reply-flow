@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MessageSquare, Search, Settings } from 'lucide-react';
 import ConversationItem from './ConversationItem';
+import ConversationContextMenu from './ConversationContextMenu';
 import ConversationFiltersPopover from './ConversationFilters';
 import BulkActionBar from './BulkActionBar';
 import type { Conversation, ConversationFilters } from '@/hooks/useConversations';
@@ -31,6 +32,7 @@ interface ConversationListProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   onBulkActionComplete: () => void;
+  onRefresh: () => void;
   teamMembers: TeamMember[];
   labels: LabelOption[];
   onLabelsCreated?: () => void;
@@ -52,6 +54,7 @@ export default function ConversationList({
   onSelectAll,
   onClearSelection,
   onBulkActionComplete,
+  onRefresh,
   teamMembers,
   labels,
   onLabelsCreated,
@@ -130,17 +133,40 @@ export default function ConversationList({
             </div>
           </div>
         ) : (
-          conversations.map((conv) => (
-            <ConversationItem
-              key={conv.id}
-              conversation={conv}
-              isActive={conv.id === activeId}
-              onClick={() => onSelect(conv)}
-              selectable={selectionMode}
-              selected={selectedIds.includes(conv.id)}
-              onToggleSelect={() => onToggleSelect(conv.id)}
-            />
-          ))
+          (() => {
+            const pinnedConvs = conversations.filter((c) => c.pinned_at);
+            const unpinnedConvs = conversations.filter((c) => !c.pinned_at);
+            const renderItem = (conv: Conversation) => (
+              <ConversationContextMenu
+                key={conv.id}
+                conversation={conv}
+                teamMembers={teamMembers}
+                onUpdate={onRefresh}
+              >
+                <ConversationItem
+                  conversation={conv}
+                  isActive={conv.id === activeId}
+                  onClick={() => onSelect(conv)}
+                  selectable={selectionMode}
+                  selected={selectedIds.includes(conv.id)}
+                  onToggleSelect={() => onToggleSelect(conv.id)}
+                />
+              </ConversationContextMenu>
+            );
+            return (
+              <>
+                {pinnedConvs.map(renderItem)}
+                {pinnedConvs.length > 0 && unpinnedConvs.length > 0 && (
+                  <div className="mx-3 my-1 flex items-center gap-2">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[10px] font-medium text-muted-foreground">Pinned</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                )}
+                {unpinnedConvs.map(renderItem)}
+              </>
+            );
+          })()
         )}
       </div>
 

@@ -425,18 +425,20 @@ router.post('/kbs/:kbId/entries', requirePermission('knowledge_base', 'create'),
 
 // Upload file entry to a knowledge base
 router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
+  console.log('[UPLOAD-DEBUG] Route handler entered, file present:', !!req.file);
   try {
     const companyId = req.companyId!;
     const kbId = req.params.kbId as string;
     const file = req.file;
 
     if (!file) {
+      console.log('[UPLOAD-DEBUG] No file in request');
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
 
     // Process document: extract, clean, structure, extract metadata
-    console.log('[upload] Processing file:', file.originalname, 'MIME:', file.mimetype, 'Size:', file.buffer.length);
+    console.log('[UPLOAD-DEBUG] Processing file:', file.originalname, 'MIME:', file.mimetype, 'Size:', file.buffer.length);
     let processed;
     try {
       processed = await processDocument(file.buffer, file.originalname, file.mimetype);

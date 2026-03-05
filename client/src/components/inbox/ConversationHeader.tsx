@@ -20,7 +20,9 @@ import {
   Clock,
   Flag,
   Loader2,
+  Mail,
   MoreHorizontal,
+  Pin,
   Plus,
   Star,
   StickyNote,
@@ -178,8 +180,8 @@ export default function ConversationHeader({
       const { data } = await api.patch(`/conversations/${conversation.id}`, updates);
       onConversationUpdate?.(data.session);
       onLabelsChange();
-    } catch {
-      toast.error('Failed to update conversation');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to update conversation');
     } finally {
       setPatchLoading(false);
     }
@@ -340,9 +342,12 @@ export default function ConversationHeader({
                 key={m.user_id}
                 onClick={() => patchConversation({ assigned_to: m.user_id })}
               >
-                {m.full_name}
+                <div className="flex flex-col">
+                  <span>{m.full_name}</span>
+                  <span className="text-xs text-muted-foreground">{m.email}</span>
+                </div>
                 {conversation.assigned_to === m.user_id && (
-                  <Check className="ml-auto h-3 w-3" />
+                  <Check className="ml-auto h-3 w-3 shrink-0" />
                 )}
               </DropdownMenuItem>
             ))}
@@ -396,6 +401,31 @@ export default function ConversationHeader({
                 )}
               />
               {conversation.is_starred ? 'Unstar' : 'Star'}
+            </DropdownMenuItem>
+
+            {/* Pin / Unpin */}
+            <DropdownMenuItem
+              onClick={() =>
+                patchConversation({ pinned_at: conversation.pinned_at ? null : new Date().toISOString() })
+              }
+              disabled={patchLoading}
+            >
+              <Pin
+                className={cn(
+                  'mr-2 h-3.5 w-3.5',
+                  conversation.pinned_at && 'text-primary'
+                )}
+              />
+              {conversation.pinned_at ? 'Unpin' : 'Pin'}
+            </DropdownMenuItem>
+
+            {/* Mark as unread */}
+            <DropdownMenuItem
+              onClick={() => patchConversation({ marked_unread: true })}
+              disabled={patchLoading}
+            >
+              <Mail className="mr-2 h-3.5 w-3.5" />
+              Mark as unread
             </DropdownMenuItem>
 
             {/* Notes */}

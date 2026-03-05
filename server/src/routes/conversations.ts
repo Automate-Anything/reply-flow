@@ -19,6 +19,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       priority,
       starred,
       snoozed,
+      unread,
       labelId,
       sort = 'newest',
       limit = '50',
@@ -97,7 +98,9 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       );
     }
 
-    // Sort
+    // Sort — pinned conversations always appear first
+    query = query.order('pinned_at', { ascending: true, nullsFirst: false });
+
     if (sort === 'oldest') {
       query = query.order('last_message_at', { ascending: true, nullsFirst: false });
     } else {
@@ -130,7 +133,15 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
-    const sessions = (data || []).map((s) => ({
+    // Post-filter for unread: sessions with marked_unread OR actual unread messages
+    let filteredData = data || [];
+    if (unread === 'true') {
+      filteredData = filteredData.filter(
+        (s) => s.marked_unread === true || (unreadMap[s.id] || 0) > 0
+      );
+    }
+
+    const sessions = filteredData.map((s) => ({
       ...s,
       unread_count: unreadMap[s.id] || 0,
       labels:
@@ -254,7 +265,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
   try {
     const companyId = req.companyId!;
     const { sessionId } = req.params;
-    const { status, assigned_to, priority, is_starred, snoozed_until } = req.body;
+    const { status, assigned_to, priority, is_starred, snoozed_until, marked_unread, pinned_at } = req.body;
 
     // Verify session belongs to company
     const { data: session } = await supabaseAdmin
@@ -318,6 +329,33 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
 
     if (snoozed_until !== undefined) {
       updates.snoozed_until = snoozed_until;
+    }
+
+    if (marked_unread !== undefined) {
+      updates.marked_unread = !!marked_unread;
+      if (!marked_unread) {
+        updates.last_read_at = new Date().toISOString();
+      }
+    }
+
+    if (pinned_at !== undefined) {
+      if (pinned_at !== null) {
+        // Enforce max 3 pinned conversations per company
+        const { count: pinnedCount } = await supabaseAdmin
+          .from('chat_sessions')
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', companyId)
+          .not('pinned_at', 'is', null)
+          .neq('id', sessionId);
+
+        if ((pinnedCount || 0) >= 3) {
+          res.status(400).json({ error: 'Maximum 3 pinned conversations allowed. Unpin one first.' });
+          return;
+        }
+        updates.pinned_at = new Date().toISOString();
+      } else {
+        updates.pinned_at = null;
+      }
     }
 
     const { data, error } = await supabaseAdmin
@@ -450,6 +488,64 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
           .in('session_id', validIds)
           .eq('label_id', value);
         break;
+      case 'mark_read':
+        await supabaseAdmin
+          .from('chat_messages')
+          .update({ read: true })
+          .in('session_id', validIds)
+          .eq('direction', 'inbound')
+          .eq('read', false);
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({
+            marked_unread: false,
+            last_read_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', validIds);
+        break;
+      case 'mark_unread':
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({ marked_unread: true, updated_at: new Date().toISOString() })
+          .in('id', validIds);
+        break;
+      case 'pin': {
+        if (value === true) {
+          // Enforce max 3 pinned per company
+          const { count: currentPinned } = await supabaseAdmin
+            .from('chat_sessions')
+            .select('id', { count: 'exact', head: true })
+            .eq('company_id', companyId)
+            .not('pinned_at', 'is', null);
+
+          const { count: alreadyPinned } = await supabaseAdmin
+            .from('chat_sessions')
+            .select('id', { count: 'exact', head: true })
+            .in('id', validIds)
+            .not('pinned_at', 'is', null);
+
+          const newPins = validIds.length - (alreadyPinned || 0);
+          if ((currentPinned || 0) + newPins > 3) {
+            res.status(400).json({
+              error: `Cannot pin ${newPins} more conversations. Maximum is 3 pinned total (currently ${currentPinned}).`,
+            });
+            return;
+          }
+
+          await supabaseAdmin
+            .from('chat_sessions')
+            .update({ pinned_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .in('id', validIds)
+            .is('pinned_at', null);
+        } else {
+          await supabaseAdmin
+            .from('chat_sessions')
+            .update({ pinned_at: null, updated_at: new Date().toISOString() })
+            .in('id', validIds);
+        }
+        break;
+      }
       default:
         res.status(400).json({ error: 'Invalid action' });
         return;

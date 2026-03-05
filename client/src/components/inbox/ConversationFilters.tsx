@@ -12,7 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { ArrowDownUp, CircleDot, Filter, Flag, Star, User } from 'lucide-react';
+import { ArrowDownUp, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationFilters as FilterState } from '@/hooks/useConversations';
 
@@ -39,6 +39,7 @@ export default function ConversationFilters({
     isPriorityActive,
     filters.starred,
     filters.snoozed,
+    filters.unread,
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
@@ -159,6 +160,27 @@ export default function ConversationFilters({
               >
                 <Star
                   className={cn('h-3 w-3', filters.starred && 'fill-current')}
+                />
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between pt-0.5">
+              <div className="flex items-center gap-2">
+                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs">Unread only</span>
+              </div>
+              <Button
+                variant={filters.unread ? 'secondary' : 'ghost'}
+                size="icon"
+                className={cn(
+                  'h-6 w-6 rounded-full',
+                  filters.unread &&
+                    'bg-blue-50 text-blue-500 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20'
+                )}
+                onClick={() => updateFilter('unread', !filters.unread)}
+              >
+                <Mail
+                  className={cn('h-3 w-3', filters.unread && 'fill-current')}
                 />
               </Button>
             </div>

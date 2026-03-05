@@ -280,9 +280,17 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
                     {notes.map((note: ContactNote) => (
                       <div
                         key={note.id}
-                        className="group rounded-md border p-2"
+                        className="group rounded-md border bg-muted/30 p-2"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Avatar className="h-5 w-5">
+                            <AvatarFallback className="text-[9px]">
+                              {(note.author?.full_name?.[0] || '?').toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-[11px] font-medium">
+                            {note.author?.full_name || 'Unknown'}
+                          </span>
                           <span className="text-[10px] text-muted-foreground">
                             {new Date(note.created_at).toLocaleDateString([], {
                               month: 'short',
@@ -294,7 +302,7 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                            className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100"
                             onClick={() => handleDeleteNote(note.id)}
                           >
                             <Trash2 className="h-3 w-3 text-muted-foreground" />

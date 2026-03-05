@@ -33,6 +33,7 @@ export interface Conversation {
   assigned_user: AssignedUser | null;
   human_takeover: boolean;
   marked_unread: boolean;
+  pinned_at: string | null;
   unread_count: number;
   labels: ConversationLabel[];
   created_at: string;
@@ -44,6 +45,7 @@ export interface ConversationFilters {
   priority?: string;
   starred?: boolean;
   snoozed?: boolean;
+  unread?: boolean;
   sort?: 'newest' | 'oldest';
   labelId?: string;
 }
@@ -70,6 +72,7 @@ export function useConversations(
       if (filters?.priority && filters.priority !== 'all') params.set('priority', filters.priority);
       if (filters?.starred) params.set('starred', 'true');
       if (filters?.snoozed) params.set('snoozed', 'true');
+      if (filters?.unread) params.set('unread', 'true');
       if (filters?.sort) params.set('sort', filters.sort);
       if (filters?.labelId) params.set('labelId', filters.labelId);
       const { data } = await api.get(`/conversations?${params}`);

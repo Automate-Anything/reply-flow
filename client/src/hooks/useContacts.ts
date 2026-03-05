@@ -37,6 +37,11 @@ export interface ContactNote {
   id: string;
   contact_id: string;
   content: string;
+  author: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+  } | null;
   created_at: string;
   updated_at: string;
 }

@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Clock, Star } from 'lucide-react';
+import { Clock, Pin, Star } from 'lucide-react';
 import type { Conversation } from '@/hooks/useConversations';
 
 interface ConversationItemProps {
@@ -62,7 +62,7 @@ export default function ConversationItem({
   selected,
   onToggleSelect,
 }: ConversationItemProps) {
-  const hasUnread = conversation.unread_count > 0;
+  const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const name = conversation.contact_name || conversation.phone_number;
   const initial = (name[0] || '?').toUpperCase();
   const priorityColor = PRIORITY_COLORS[conversation.priority];
@@ -124,6 +124,9 @@ export default function ConversationItem({
             {name}
           </span>
           <div className="flex shrink-0 items-center gap-1">
+            {conversation.pinned_at && (
+              <Pin className="h-3 w-3 text-muted-foreground" />
+            )}
             {conversation.is_starred && (
               <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
             )}
@@ -149,9 +152,13 @@ export default function ConversationItem({
             {conversation.last_message || 'No messages yet'}
           </span>
           {hasUnread && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
-              {conversation.unread_count}
-            </span>
+            conversation.unread_count > 0 ? (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+                {conversation.unread_count}
+              </span>
+            ) : (
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+            )
           )}
         </div>
 

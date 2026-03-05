@@ -252,7 +252,7 @@ router.post('/bulk', requirePermission('contacts', 'edit'), async (req, res, nex
 
     // Log activity for bulk actions
     if (['tag_add', 'tag_remove', 'list_add', 'list_remove'].includes(action)) {
-      const actionMap: Record<string, string> = {
+      const actionMap: Record<string, 'tag_added' | 'tag_removed' | 'list_added' | 'list_removed'> = {
         tag_add: 'tag_added',
         tag_remove: 'tag_removed',
         list_add: 'list_added',
@@ -264,15 +264,18 @@ router.post('/bulk', requirePermission('contacts', 'edit'), async (req, res, nex
         list_add: { list_id: value },
         list_remove: { list_id: value },
       };
-      await logContactActivitiesBulk(
-        validIds.map((cid) => ({
-          contactId: cid,
-          companyId,
-          userId: req.userId!,
-          action: actionMap[action],
-          metadata: metadataMap[action],
-        }))
-      );
+      const logAction = actionMap[action as string];
+      if (logAction) {
+        await logContactActivitiesBulk(
+          validIds.map((cid) => ({
+            contactId: cid,
+            companyId,
+            userId: req.userId!,
+            action: logAction,
+            metadata: metadataMap[action as string],
+          }))
+        );
+      }
     }
 
     res.json({ updated: validIds.length });
@@ -427,9 +430,9 @@ router.post(
 
       if (updateError) throw updateError;
 
-      // 2. Transfer contact_notes
+      // 2. Transfer notes (unified in conversation_notes)
       await supabaseAdmin
-        .from('contact_notes')
+        .from('conversation_notes')
         .update({ contact_id: keepContactId })
         .eq('contact_id', mergeContactId);
 
@@ -624,7 +627,7 @@ router.post('/', requirePermission('contacts', 'create'), async (req, res, next)
 router.put('/:contactId', requirePermission('contacts', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { contactId } = req.params;
+    const contactId = req.params.contactId as string;
     const {
       first_name, last_name, email, company, notes, tags, phone_number,
       address_street, address_city, address_state, address_postal_code, address_country,
@@ -848,8 +851,8 @@ router.get('/:contactId/activity', requirePermission('contacts', 'view'), async 
       .limit(lim);
 
     let notesQuery = supabaseAdmin
-      .from('contact_notes')
-      .select('*')
+      .from('conversation_notes')
+      .select('*, author:created_by(id, full_name, avatar_url)')
       .eq('contact_id', contactId)
       .eq('is_deleted', false)
       .order('created_at', { ascending: false })
@@ -939,7 +942,7 @@ router.get('/:contactId/messages', requirePermission('contacts', 'view'), async 
       .limit(Number(limit));
 
     if (before) {
-      query = query.lt('created_at', before);
+      query = query.lt('created_at', String(before));
     }
 
     const { data: messages, error } = await query;

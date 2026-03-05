@@ -242,6 +242,8 @@ export default function ContactsPage() {
           activeListId={activeListId}
           onSelectList={setActiveListId}
           customFieldDefinitions={definitions}
+          onEditContact={(contact) => { setActiveContact(contact); setView('edit'); }}
+          onRefresh={refetch}
           headerActions={
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>

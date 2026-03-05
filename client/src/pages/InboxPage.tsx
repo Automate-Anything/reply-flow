@@ -70,7 +70,7 @@ export default function InboxPage() {
 
   const handleSelectConversation = (conv: Conversation) => {
     setActiveConversation(conv);
-    if (conv.unread_count > 0) {
+    if (conv.unread_count > 0 || conv.marked_unread) {
       api.post(`/conversations/${conv.id}/read`).then(() => refetchConvs());
     }
   };
@@ -171,6 +171,7 @@ export default function InboxPage() {
             onSelectAll={handleSelectAll}
             onClearSelection={handleClearSelection}
             onBulkActionComplete={handleBulkActionComplete}
+            onRefresh={refetchConvs}
             teamMembers={teamMembers}
             labels={allLabels}
             onLabelsCreated={refreshLabels}
