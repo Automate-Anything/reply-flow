@@ -22,6 +22,14 @@ CREATE TABLE public.plans (
   created_at             TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.plans ENABLE ROW LEVEL SECURITY;
+
+-- Plans are a global lookup table; any authenticated user may read them.
+-- Writes are handled exclusively via service_role (migrations/admin).
+CREATE POLICY "Authenticated users can read plans"
+  ON public.plans FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
 -- Seed the three plans
 INSERT INTO public.plans (id, name, price_monthly_cents, channels, agents, knowledge_bases, kb_pages, messages_per_month, overage_message_cents, overage_page_cents) VALUES
   ('starter', 'Starter',  2900, 1, 1,  1,   5,  500, 3, 5),
@@ -60,4 +68,7 @@ CREATE POLICY "Company members can view their subscription"
 
 CREATE POLICY "Company owners and admins can manage subscription"
   ON public.subscriptions FOR ALL
-  USING (company_id = public.get_user_company_id());
+  USING (
+    company_id = public.get_user_company_id()
+    AND public.get_user_role_name() IN ('owner', 'admin')
+  );

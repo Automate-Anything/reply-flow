@@ -16,6 +16,7 @@ interface UsageMetric {
 
 interface UsageData {
   channels: UsageMetric;
+  agents: UsageMetric;
   messages: UsageMetric;
   kb_pages: UsageMetric;
 }
@@ -165,6 +166,11 @@ export default function UsageTab() {
             label="WhatsApp Channels"
             used={u.channels.used}
             included={u.channels.included}
+          />
+          <UsageBar
+            label="AI Agents"
+            used={u.agents.used}
+            included={u.agents.included}
           />
           <UsageBar
             label="Messages"
