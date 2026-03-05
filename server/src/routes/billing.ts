@@ -107,15 +107,15 @@ router.post('/create-checkout-session', async (req, res, next) => {
       return;
     }
 
-    // Trials are one-per-company: if a subscription already exists (any status),
-    // don't allow starting another trial via this flag.
+    // Trials are one-per-company: check the permanent has_used_trial flag on
+    // the company so this survives subscription cancellations / replacements.
     if (with_trial) {
-      const { data: existing } = await supabaseAdmin
-        .from('subscriptions')
-        .select('id')
-        .eq('company_id', companyId)
+      const { data: company } = await supabaseAdmin
+        .from('companies')
+        .select('has_used_trial')
+        .eq('id', companyId)
         .maybeSingle();
-      if (existing) {
+      if (company?.has_used_trial) {
         res.status(400).json({ error: 'Free trial has already been used for this account.' });
         return;
       }
@@ -838,6 +838,14 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
             },
             { onConflict: 'company_id' }
           );
+
+        // Permanently record that this company has used their free trial
+        if (status === 'trialing') {
+          await supabaseAdmin
+            .from('companies')
+            .update({ has_used_trial: true })
+            .eq('id', company_id);
+        }
 
         // Extend Whapi channels for companies that already have channels set up
         if (status === 'trialing' && trialEndsAt) {
