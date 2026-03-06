@@ -433,7 +433,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
 
     // Extract memories from the ended session (async, after response sent)
     if (sessionClosed) {
-      extractSessionMemories(sessionId, companyId).catch((err) => {
+      extractSessionMemories(sessionId as string, companyId).catch((err) => {
         console.error('Memory extraction error:', err);
       });
     }

@@ -126,7 +126,7 @@ export default function CustomFieldsManager({
     setSubmitting(true);
     try {
       if (editingId) {
-        await onUpdate(editingId, form);
+        await onUpdate(editingId, form as Partial<CustomFieldDefinition>);
         toast.success('Field updated');
       } else {
         await onCreate(form);

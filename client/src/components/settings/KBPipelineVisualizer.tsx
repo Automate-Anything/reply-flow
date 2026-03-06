@@ -183,13 +183,13 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 function ClassificationDetail({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="space-y-1.5">
-      {data.fileName && <DetailRow label="File" value={String(data.fileName)} />}
+      {!!data.fileName && <DetailRow label="File" value={String(data.fileName)} />}
       {data.fileSize != null && <DetailRow label="Size" value={formatBytes(Number(data.fileSize))} />}
-      {data.mimeType && <DetailRow label="MIME Type" value={String(data.mimeType)} />}
-      {data.extension && <DetailRow label="Extension" value={String(data.extension)} />}
-      {data.strategy && <DetailRow label="Strategy" value={<Badge variant="blue">{String(data.strategy)}</Badge>} />}
-      {data.contentType && <DetailRow label="Content Type" value={<Badge variant="purple">{String(data.contentType)}</Badge>} />}
-      {data.confidence && <DetailRow label="Confidence" value={
+      {!!data.mimeType && <DetailRow label="MIME Type" value={String(data.mimeType)} />}
+      {!!data.extension && <DetailRow label="Extension" value={String(data.extension)} />}
+      {!!data.strategy && <DetailRow label="Strategy" value={<Badge variant="blue">{String(data.strategy)}</Badge>} />}
+      {!!data.contentType && <DetailRow label="Content Type" value={<Badge variant="purple">{String(data.contentType)}</Badge>} />}
+      {!!data.confidence && <DetailRow label="Confidence" value={
         <Badge variant={data.confidence === 'high' ? 'green' : 'yellow'}>
           {String(data.confidence)}
         </Badge>
@@ -205,7 +205,7 @@ function ExtractionDetail({ data }: { data: Record<string, unknown> }) {
 
   return (
     <div className="space-y-2">
-      {data.extractor && <DetailRow label="Extractor" value={<Badge variant="blue">{String(data.extractor)}</Badge>} />}
+      {!!data.extractor && <DetailRow label="Extractor" value={<Badge variant="blue">{String(data.extractor)}</Badge>} />}
       {data.cleanedLength != null && <DetailRow label="Cleaned Text" value={`${Number(data.cleanedLength).toLocaleString()} chars`} />}
       {data.structuredLength != null && <DetailRow label="Structured Text" value={`${Number(data.structuredLength).toLocaleString()} chars`} />}
 
@@ -213,13 +213,13 @@ function ExtractionDetail({ data }: { data: Record<string, unknown> }) {
         <div className="mt-1.5 space-y-1">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Metadata</p>
           <div className="bg-muted/50 rounded p-2 space-y-1">
-            {metadata.title && <DetailRow label="Title" value={String(metadata.title)} />}
-            {metadata.author && <DetailRow label="Author" value={String(metadata.author)} />}
+            {!!metadata.title && <DetailRow label="Title" value={String(metadata.title)} />}
+            {!!metadata.author && <DetailRow label="Author" value={String(metadata.author)} />}
             {metadata.pageCount != null && <DetailRow label="Pages" value={String(metadata.pageCount)} />}
-            {metadata.sourceType && <DetailRow label="Source Type" value={String(metadata.sourceType)} />}
+            {!!metadata.sourceType && <DetailRow label="Source Type" value={String(metadata.sourceType)} />}
             {metadata.rowCount != null && <DetailRow label="Rows" value={String(metadata.rowCount)} />}
-            {metadata.language && <DetailRow label="Language" value={String(metadata.language)} />}
-            {metadata.schema && (
+            {!!metadata.language && <DetailRow label="Language" value={String(metadata.language)} />}
+            {!!metadata.schema && (
               <DetailRow label="Schema" value={
                 <span className="font-mono text-[10px]">{JSON.stringify(metadata.schema)}</span>
               } />
@@ -262,9 +262,9 @@ function CleaningDetail({ data }: { data: Record<string, unknown> }) {
         <div className="mt-1.5">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Document Info</p>
           <div className="bg-muted/50 rounded p-2 space-y-1">
-            {metadata.sourceType && <DetailRow label="Source Type" value={String(metadata.sourceType)} />}
-            {metadata.contentType && <DetailRow label="Content Type" value={String(metadata.contentType)} />}
-            {metadata.strategy && <DetailRow label="Strategy" value={String(metadata.strategy)} />}
+            {!!metadata.sourceType && <DetailRow label="Source Type" value={String(metadata.sourceType)} />}
+            {!!metadata.contentType && <DetailRow label="Content Type" value={String(metadata.contentType)} />}
+            {!!metadata.strategy && <DetailRow label="Strategy" value={String(metadata.strategy)} />}
           </div>
         </div>
       )}
@@ -384,7 +384,7 @@ function EmbeddingDetail({ data }: { data: Record<string, unknown> }) {
   return (
     <div className="space-y-1.5">
       {data.embeddedCount != null && <DetailRow label="Embeddings" value={String(data.embeddedCount)} />}
-      {data.model && <DetailRow label="Model" value={<Badge variant="blue">{String(data.model)}</Badge>} />}
+      {!!data.model && <DetailRow label="Model" value={<Badge variant="blue">{String(data.model)}</Badge>} />}
       {data.dimensions != null && <DetailRow label="Dimensions" value={String(data.dimensions)} />}
       {data.estimatedTokens != null && <DetailRow label="Est. Tokens" value={`~${Number(data.estimatedTokens).toLocaleString()}`} />}
     </div>
@@ -396,10 +396,10 @@ function StoringDetail({ data }: { data: Record<string, unknown> }) {
     <div className="space-y-1.5">
       {data.rowCount != null && <DetailRow label="Rows" value={String(data.rowCount)} />}
       {data.totalContentSize != null && <DetailRow label="Total Size" value={`${Number(data.totalContentSize).toLocaleString()} chars`} />}
-      {data.entryId && <DetailRow label="Entry ID" value={
+      {!!data.entryId && <DetailRow label="Entry ID" value={
         <span className="font-mono text-[10px]">{String(data.entryId).slice(0, 12)}...</span>
       } />}
-      {data.knowledgeBaseId && <DetailRow label="KB ID" value={
+      {!!data.knowledgeBaseId && <DetailRow label="KB ID" value={
         <span className="font-mono text-[10px]">{String(data.knowledgeBaseId).slice(0, 12)}...</span>
       } />}
     </div>
@@ -438,7 +438,7 @@ interface MergedStepState extends PipelineStepState {
   mergedData?: Record<string, unknown>;
 }
 
-export default function KBPipelineVisualizer({ events, isComplete, error: externalError }: KBPipelineVisualizerProps) {
+export default function KBPipelineVisualizer({ events, isComplete, error: _externalError }: KBPipelineVisualizerProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const prevActiveStepRef = useRef<string | null>(null);
 

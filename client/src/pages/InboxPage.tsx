@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { CalendarClock, Clock, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { useConversations, type Conversation, type ConversationFilters } from '@/hooks/useConversations';
 import { useMessages, type Message } from '@/hooks/useMessages';
+import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { useConversationStatuses } from '@/hooks/useConversationStatuses';
@@ -14,9 +16,13 @@ import ConversationNotes from '@/components/inbox/ConversationNotes';
 import ContactPanel from '@/components/inbox/ContactPanel';
 import InboxToolsPanel from '@/components/inbox/InboxToolsPanel';
 import ForwardMessageModal from '@/components/inbox/ForwardMessageModal';
+import ScheduledMessagesList from '@/components/inbox/ScheduledMessagesList';
 import { useDebugMode } from '@/hooks/useDebugMode';
 
+type InboxTab = 'all' | 'snoozed' | 'scheduled';
+
 export default function InboxPage() {
+  const [activeTab, setActiveTab] = useState<InboxTab>('all');
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ConversationFilters>({});
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -34,11 +40,23 @@ export default function InboxPage() {
   const draftRef = useRef<string>('');
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Merge snoozed filter when on snoozed tab
+  const effectiveFilters = useMemo(() => {
+    if (activeTab === 'snoozed') return { ...filters, snoozed: true };
+    return filters;
+  }, [activeTab, filters]);
+
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
-    useConversations(search, filters);
+    useConversations(search, effectiveFilters);
   const { messages, setMessages, loading: msgsLoading, sendMessage, scheduleMessage, cancelScheduledMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );
+  const {
+    scheduledMessages,
+    loading: scheduledLoading,
+    updateMessage: updateScheduledMessage,
+    cancelMessage: cancelScheduledMsg,
+  } = useScheduledMessages();
   const { members: teamMembers } = useTeamMembers();
   const { statuses: conversationStatuses } = useConversationStatuses();
 
@@ -238,40 +256,78 @@ export default function InboxPage() {
     );
   };
 
+  const showConversationList = activeTab !== 'scheduled';
+
   return (
     <div className="flex h-full" data-component="InboxPage">
-      {/* Conversation list / Inbox tools */}
-      <div className={`${activeConversation ? 'hidden md:flex' : 'flex'} h-full w-full md:w-auto`}>
-        {inboxToolsOpen ? (
-          <InboxToolsPanel onClose={() => setInboxToolsOpen(false)} />
-        ) : (
-          <ConversationList
-            conversations={conversations}
-            loading={convsLoading}
-            activeId={activeConversation?.id ?? null}
-            onSelect={handleSelectConversation}
-            search={search}
-            onSearchChange={setSearch}
-            filters={filters}
-            onFiltersChange={setFilters}
-            selectionMode={selectionMode}
-            onToggleSelectionMode={handleToggleSelectionMode}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onSelectAll={handleSelectAll}
-            onClearSelection={handleClearSelection}
-            onBulkActionComplete={handleBulkActionComplete}
-            onRefresh={refetchConvs}
-            teamMembers={teamMembers}
-            labels={allLabels}
-            onLabelsCreated={refreshLabels}
-            onOpenInboxTools={() => setInboxToolsOpen(true)}
-            statuses={conversationStatuses}
-          />
-        )}
+      {/* Left panel: tabs + list */}
+      <div className={`${activeConversation && showConversationList ? 'hidden md:flex' : 'flex'} h-full w-full flex-col border-r md:w-[320px]`}>
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 border-b px-3 py-1.5">
+          {([
+            { key: 'all', label: 'All', icon: MessageSquare },
+            { key: 'snoozed', label: 'Snoozed', icon: Clock },
+            { key: 'scheduled', label: 'Scheduled', icon: CalendarClock },
+          ] as const).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => {
+                setActiveTab(key);
+                if (key === 'scheduled') setActiveConversation(null);
+              }}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                activeTab === key
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* List content based on active tab */}
+        <div className="min-h-0 flex-1">
+          {activeTab === 'scheduled' ? (
+            <ScheduledMessagesList
+              messages={scheduledMessages}
+              loading={scheduledLoading}
+              onUpdate={updateScheduledMessage}
+              onCancel={cancelScheduledMsg}
+            />
+          ) : inboxToolsOpen ? (
+            <InboxToolsPanel onClose={() => setInboxToolsOpen(false)} />
+          ) : (
+            <ConversationList
+              conversations={conversations}
+              loading={convsLoading}
+              activeId={activeConversation?.id ?? null}
+              onSelect={handleSelectConversation}
+              search={search}
+              onSearchChange={setSearch}
+              filters={filters}
+              onFiltersChange={setFilters}
+              selectionMode={selectionMode}
+              onToggleSelectionMode={handleToggleSelectionMode}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onSelectAll={handleSelectAll}
+              onClearSelection={handleClearSelection}
+              onBulkActionComplete={handleBulkActionComplete}
+              onRefresh={refetchConvs}
+              teamMembers={teamMembers}
+              labels={allLabels}
+              onLabelsCreated={refreshLabels}
+              onOpenInboxTools={() => setInboxToolsOpen(true)}
+              statuses={conversationStatuses}
+            />
+          )}
+        </div>
       </div>
 
-      {/* Message thread + notes panel */}
+      {/* Right panel: message thread + notes */}
       {activeConversation ? (
         <>
           <div className={`${activeConversation ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
@@ -334,11 +390,23 @@ export default function InboxPage() {
       ) : (
         <div className="hidden flex-1 flex-col items-center justify-center gap-3 text-muted-foreground md:flex">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-            <MessageSquare className="h-7 w-7 opacity-40" />
+            {activeTab === 'scheduled' ? (
+              <CalendarClock className="h-7 w-7 opacity-40" />
+            ) : (
+              <MessageSquare className="h-7 w-7 opacity-40" />
+            )}
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium">Select a conversation</p>
-            <p className="mt-0.5 text-xs">Choose from the list to start messaging</p>
+            <p className="text-sm font-medium">
+              {activeTab === 'scheduled'
+                ? 'Manage scheduled messages'
+                : 'Select a conversation'}
+            </p>
+            <p className="mt-0.5 text-xs">
+              {activeTab === 'scheduled'
+                ? 'Edit or cancel messages from the list'
+                : 'Choose from the list to start messaging'}
+            </p>
           </div>
         </div>
       )}

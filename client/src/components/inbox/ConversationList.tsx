@@ -64,7 +64,7 @@ export default function ConversationList({
   statuses = [],
 }: ConversationListProps) {
   return (
-    <div className="flex h-full w-full flex-col border-r md:w-[320px]" data-component="ConversationList">
+    <div className="flex h-full w-full flex-col" data-component="ConversationList">
       <div className="border-b p-3">
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1">

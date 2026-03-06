@@ -188,6 +188,79 @@ router.post('/schedule', requirePermission('messages', 'create'), async (req, re
   }
 });
 
+// List all scheduled messages for the company
+router.get('/scheduled', requirePermission('messages', 'create'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+
+    const { data: messages, error } = await supabaseAdmin
+      .from('chat_messages')
+      .select('*, session:session_id(contact_name, phone_number)')
+      .eq('company_id', companyId)
+      .eq('status', 'scheduled')
+      .not('scheduled_for', 'is', null)
+      .order('scheduled_for', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ messages: messages || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update a scheduled message (body and/or time)
+router.patch('/scheduled/:messageId', requirePermission('messages', 'create'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { messageId } = req.params;
+    const { body, scheduledFor } = req.body;
+
+    if (!body && !scheduledFor) {
+      res.status(400).json({ error: 'body or scheduledFor is required' });
+      return;
+    }
+
+    // Verify the message exists and is still scheduled
+    const { data: existing } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id')
+      .eq('id', messageId)
+      .eq('company_id', companyId)
+      .eq('status', 'scheduled')
+      .single();
+
+    if (!existing) {
+      res.status(404).json({ error: 'Scheduled message not found' });
+      return;
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (body) updates.message_body = body;
+    if (scheduledFor) {
+      const scheduledDate = new Date(scheduledFor);
+      if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+        res.status(400).json({ error: 'scheduledFor must be a valid future timestamp' });
+        return;
+      }
+      updates.scheduled_for = scheduledDate.toISOString();
+    }
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('chat_messages')
+      .update(updates)
+      .eq('id', messageId)
+      .select('*, session:session_id(contact_name, phone_number)')
+      .single();
+
+    if (error) throw error;
+
+    res.json({ message: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Cancel a scheduled message
 router.delete('/scheduled/:messageId', requirePermission('messages', 'create'), async (req, res, next) => {
   try {

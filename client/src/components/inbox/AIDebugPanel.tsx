@@ -60,28 +60,6 @@ function confidenceBadgeClass(confidence: string): string {
   }
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
-      title="Copy to clipboard"
-    >
-      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-      {copied ? 'Copied' : 'Copy'}
-    </button>
-  );
-}
-
 function PromptBuilderView({ sections, fullPrompt }: { sections: Array<{ name: string; content: string }>; fullPrompt: string }) {
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -129,7 +107,6 @@ function PromptBuilderView({ sections, fullPrompt }: { sections: Array<{ name: s
   // Build highlighted prompt: split full prompt into segments with section markers
   const buildHighlightedPrompt = () => {
     const segments: Array<{ text: string; sectionIndex: number | null }> = [];
-    let remaining = fullPrompt;
     let pos = 0;
 
     // Find each section's position in the full prompt
