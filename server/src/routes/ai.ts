@@ -92,16 +92,76 @@ router.put('/profile', requirePermission('ai_settings', 'edit'), async (req, res
 });
 
 // ────────────────────────────────────────────────
+// PROMPT PREVIEW (debug mode — build prompt without sending)
+// ────────────────────────────────────────────────
+
+router.post('/preview-prompt', requirePermission('ai_settings', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { profile_data, agentId, matched_scenario } = req.body as {
+      profile_data?: ProfileData;
+      agentId?: string;
+      matched_scenario?: string | null;
+    };
+
+    // Resolve profile data
+    let resolvedProfileData: ProfileData = profile_data || {};
+    if (agentId) {
+      const { data: agent } = await supabaseAdmin
+        .from('ai_agents')
+        .select('profile_data')
+        .eq('id', agentId)
+        .eq('company_id', companyId)
+        .single();
+      if (agent) {
+        resolvedProfileData = (agent.profile_data || {}) as ProfileData;
+      }
+    }
+
+    // Load KB entries for context
+    let kbData: KBEntry[] = [];
+    const { data: kbEntries } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .select('id, title, content, knowledge_base_id')
+      .eq('company_id', companyId)
+      .limit(20);
+    kbData = (kbEntries || []) as KBEntry[];
+
+    // Build prompt with section tracking
+    const sections: { name: string; content: string }[] = [];
+    const onSection = (section: { name: string; content: string }) => {
+      sections.push(section);
+    };
+
+    const hasScenarios = !!(resolvedProfileData.response_flow?.scenarios?.length);
+    let systemPrompt: string;
+
+    if (hasScenarios && matched_scenario !== undefined) {
+      systemPrompt = await buildScenarioResponsePrompt(
+        resolvedProfileData, kbData, matched_scenario ?? null, undefined, onSection,
+      );
+    } else {
+      systemPrompt = await buildSystemPrompt(resolvedProfileData, kbData, undefined, onSection);
+    }
+
+    res.json({ sections, systemPrompt, kbEntryCount: kbData.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
 // TEST REPLY (dry-run AI classification + response)
 // ────────────────────────────────────────────────
 
 router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { profile_data, message, agentId } = req.body as {
+    const { profile_data, message, agentId, include_debug } = req.body as {
       profile_data?: ProfileData;
       message: string;
       agentId?: string;
+      include_debug?: boolean;
     };
 
     if (!message?.trim()) {
@@ -162,6 +222,12 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
     let confidence: 'high' | 'medium' | 'low' | null = null;
     let systemPrompt: string;
 
+    // Track prompt sections when debug is requested
+    const promptSections: { name: string; content: string }[] = [];
+    const onSection = include_debug
+      ? (section: { name: string; content: string }) => { promptSections.push(section); }
+      : undefined;
+
     if (hasScenarios) {
       // Step 1: Classify with Haiku
       const classification = await classifyMessage(resolvedProfileData, testMessages);
@@ -170,14 +236,15 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
 
       // Step 2: Build targeted response prompt
       systemPrompt = await buildScenarioResponsePrompt(
-        resolvedProfileData, kbData, matched_scenario,
+        resolvedProfileData, kbData, matched_scenario, undefined, onSection,
       );
     } else {
       // Legacy path
-      systemPrompt = await buildSystemPrompt(resolvedProfileData, kbData);
+      systemPrompt = await buildSystemPrompt(resolvedProfileData, kbData, undefined, onSection);
     }
 
     // Step 3: Generate response with Sonnet
+    const startTime = Date.now();
     const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -185,13 +252,28 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
       system: systemPrompt,
       messages: testMessages,
     });
+    const responseTimeMs = Date.now() - startTime;
 
     const responseText = response.content
       .filter((block) => block.type === 'text')
       .map((block) => block.text)
       .join('\n');
 
-    res.json({ matched_scenario, confidence, response: responseText });
+    const result: Record<string, unknown> = { matched_scenario, confidence, response: responseText };
+
+    if (include_debug) {
+      result.debug = {
+        promptSections,
+        systemPrompt,
+        tokens: { input: response.usage?.input_tokens, output: response.usage?.output_tokens },
+        responseTimeMs,
+        model: response.model,
+        stopReason: response.stop_reason,
+        kbEntriesUsed: kbData.length,
+      };
+    }
+
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -417,6 +499,7 @@ router.post('/kbs/:kbId/entries', requirePermission('knowledge_base', 'create'),
     // Generate chunks and embeddings synchronously
     if (isEmbeddingsAvailable() && data) {
       await processAndEmbedEntry(data.id, cleanedContent, kbId, companyId, title, null, 'text');
+      data.embedding_status = 'completed';
     }
 
     res.json({ entry: data });
@@ -468,6 +551,7 @@ router.post('/kbs/:kbId/entries/stream', requirePermission('knowledge_base', 'cr
 
     if (isEmbeddingsAvailable() && data) {
       await processAndEmbedEntry(data.id, cleanedContent, kbId, companyId, title, null, 'text', undefined, undefined, onProgress);
+      data.embedding_status = 'completed';
     }
 
     sseWrite(res, { step: 'complete', status: 'completed', data: { entry: data }, timestamp: Date.now() });
@@ -551,6 +635,7 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
         processed.metadata.contentType,
         processed.metadata.strategy,
       );
+      data.embedding_status = 'completed';
     }
 
     res.json({ entry: data, warnings: processed.warnings });
@@ -592,7 +677,9 @@ router.post('/kbs/:kbId/entries/upload/stream', requirePermission('knowledge_bas
       data: {
         cleanedLength: processed.cleanedText.length,
         structuredLength: processed.structuredText.length,
-        warnings: processed.warnings.length,
+        warningCount: processed.warnings.length,
+        warningTexts: processed.warnings,
+        metadata: processed.metadata,
       },
       timestamp: Date.now(),
     });
@@ -639,6 +726,7 @@ router.post('/kbs/:kbId/entries/upload/stream', requirePermission('knowledge_bas
         processed.metadata.contentType, processed.metadata.strategy,
         onProgress,
       );
+      data.embedding_status = 'completed';
     }
 
     sseWrite(res, { step: 'complete', status: 'completed', data: { entry: data, warnings: processed.warnings }, timestamp: Date.now() });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, Check, Zap, ExternalLink } from 'lucide-react';
+import { CreditCard, Check, Zap, ExternalLink, Lock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useSearchParams } from 'react-router-dom';
+import { useSession } from '@/contexts/SessionContext';
 
 type PlanId = 'starter' | 'pro' | 'scale';
 
@@ -88,6 +89,8 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const { hasPermission } = useSession();
+  const canManage = hasPermission('billing', 'manage');
 
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
@@ -148,7 +151,7 @@ export default function BillingPage() {
             </p>
           </div>
         </div>
-        {hasStripeSubscription && (
+        {hasStripeSubscription && canManage && (
           <Button
             variant="outline"
             onClick={handleManageSubscription}
@@ -230,10 +233,12 @@ export default function BillingPage() {
               <Button
                 className="mt-auto w-full"
                 variant={plan.popular ? 'default' : 'outline'}
-                disabled={activePlanId === plan.id || (hasStripeSubscription && activePlanId !== null)}
+                disabled={!canManage || activePlanId === plan.id || (hasStripeSubscription && activePlanId !== null)}
                 onClick={() => setSelected(plan.id)}
               >
-                {activePlanId === plan.id
+                {!canManage ? (
+                  <><Lock className="mr-1.5 h-3.5 w-3.5" /> Owner / Admin Only</>
+                ) : activePlanId === plan.id
                   ? 'Current Plan'
                   : hasStripeSubscription
                   ? 'Manage via Portal'
@@ -294,7 +299,7 @@ export default function BillingPage() {
       </Card>
 
       {/* Checkout CTA */}
-      {selected && !hasStripeSubscription && (
+      {selected && !hasStripeSubscription && canManage && (
         <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
           <p className="text-sm font-medium">
             Subscribe to{' '}

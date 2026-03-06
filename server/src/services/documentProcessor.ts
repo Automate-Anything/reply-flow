@@ -345,23 +345,43 @@ export async function processDocument(
   mimeType: string,
   onProgress?: PipelineProgressCallback,
 ): Promise<ProcessedDocument> {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+
   // Classify content to determine the right processing strategy
-  emitStarted(onProgress, 'classification');
+  emitStarted(onProgress, 'classification', { fileName, fileSize: buffer.length, mimeType });
   const classification = classifyContent(buffer, fileName, mimeType);
   emitCompleted(onProgress, 'classification', {
     strategy: classification.strategy,
     contentType: classification.contentType,
     confidence: classification.confidence,
+    fileName,
+    fileSize: buffer.length,
+    mimeType,
+    extension: ext ? `.${ext}` : null,
   });
 
-  emitStarted(onProgress, 'extraction', { strategy: classification.strategy, contentType: classification.contentType });
+  // Determine which extractor will be used
+  let extractorName = 'text';
+  if (classification.strategy === 'document_pipeline' && classification.contentType === 'prose') {
+    if (mimeType === 'application/pdf' || ext === 'pdf') extractorName = 'pdf';
+    else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === 'docx') extractorName = 'docx';
+  } else if (classification.strategy === 'markdown_pipeline') extractorName = 'markdown';
+  else if (classification.strategy === 'html_pipeline') extractorName = 'html';
+  else if (classification.strategy === 'structured_data') extractorName = 'json';
+  else if (classification.strategy === 'tabular_pipeline') extractorName = classification.contentType === 'spreadsheet' ? 'spreadsheet' : 'csv';
+  else if (classification.strategy === 'code_pipeline') extractorName = classification.contentType === 'config' ? 'config' : 'code';
+
+  emitStarted(onProgress, 'extraction', {
+    strategy: classification.strategy,
+    contentType: classification.contentType,
+    extractor: extractorName,
+  });
 
   let result: ProcessedDocument;
   switch (classification.strategy) {
     case 'document_pipeline': {
       // Existing prose extractors (PDF, DOCX)
       if (classification.contentType === 'prose') {
-        const ext = fileName.split('.').pop()?.toLowerCase();
         if (mimeType === 'application/pdf' || ext === 'pdf') {
           result = await extractPdf(buffer);
           break;
@@ -413,9 +433,14 @@ export async function processDocument(
   }
 
   emitCompleted(onProgress, 'extraction', {
+    extractor: extractorName,
     cleanedLength: result.cleanedText.length,
     structuredLength: result.structuredText.length,
-    warnings: result.warnings,
+    metadata: result.metadata,
+    warningTexts: result.warnings,
+    warningCount: result.warnings.length,
+    contentPreview: result.cleanedText.slice(0, 500),
+    structuredPreview: result.structuredText.slice(0, 500),
   });
 
   return result;

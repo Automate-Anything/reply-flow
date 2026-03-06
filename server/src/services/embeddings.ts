@@ -629,7 +629,10 @@ export async function processAndEmbedEntry(
       .eq('entry_id', entryId);
 
     // 2. Chunk the text (content-aware: semantic for prose, pre-structured for tabular/code)
-    emitStarted(onProgress, 'chunking', { strategy: strategy ?? 'default' });
+    emitStarted(onProgress, 'chunking', {
+      strategy: strategy ?? 'default',
+      inputLength: structuredText.length,
+    });
     const chunks = await chunkDocument(structuredText, {
       entryTitle,
       fileName: fileName ?? null,
@@ -638,10 +641,32 @@ export async function processAndEmbedEntry(
       strategy,
     });
 
+    const chunkSizes = chunks.map((c) => c.content.length);
     const avgChunkSize = chunks.length > 0
-      ? Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / chunks.length)
+      ? Math.round(chunkSizes.reduce((sum, s) => sum + s, 0) / chunks.length)
       : 0;
-    emitCompleted(onProgress, 'chunking', { chunkCount: chunks.length, avgChunkSize });
+    const minChunkSize = chunks.length > 0 ? Math.min(...chunkSizes) : 0;
+    const maxChunkSize = chunks.length > 0 ? Math.max(...chunkSizes) : 0;
+
+    // Collect section headings and chunk previews for debug display
+    const sectionHeadings = [...new Set(chunks.map((c) => c.metadata.sectionHeading).filter(Boolean))];
+    const chunkPreviews = chunks.map((c, i) => ({
+      index: i,
+      size: c.content.length,
+      sectionHeading: c.metadata.sectionHeading,
+      sectionHierarchy: c.metadata.sectionHierarchy,
+      preview: c.content.slice(0, 200),
+    }));
+
+    emitCompleted(onProgress, 'chunking', {
+      chunkCount: chunks.length,
+      avgChunkSize,
+      minChunkSize,
+      maxChunkSize,
+      chunkSizes,
+      sectionHeadings,
+      chunkPreviews,
+    });
 
     if (chunks.length === 0) {
       await supabaseAdmin
@@ -653,9 +678,21 @@ export async function processAndEmbedEntry(
     }
 
     // 3. Generate embeddings for all chunks
-    emitStarted(onProgress, 'embedding', { totalChunks: chunks.length });
+    const totalChars = chunks.reduce((sum, c) => sum + c.content.length, 0);
+    const estimatedTokens = Math.ceil(totalChars / 4);
+    emitStarted(onProgress, 'embedding', {
+      totalChunks: chunks.length,
+      model: EMBEDDING_MODEL,
+      estimatedTokens,
+    });
     const embeddings = await generateEmbeddings(chunks.map((c) => c.content));
-    emitCompleted(onProgress, 'embedding', { embeddedCount: embeddings.length });
+    const dimensions = embeddings.length > 0 ? embeddings[0].length : 0;
+    emitCompleted(onProgress, 'embedding', {
+      embeddedCount: embeddings.length,
+      model: EMBEDDING_MODEL,
+      dimensions,
+      estimatedTokens,
+    });
 
     // 4. Insert chunks with embeddings
     const rows = chunks.map((chunk, i) => ({
@@ -668,13 +705,19 @@ export async function processAndEmbedEntry(
       metadata: chunk.metadata,
     }));
 
-    emitStarted(onProgress, 'storing', { rowCount: rows.length });
+    const totalContentSize = rows.reduce((sum, r) => sum + r.content.length, 0);
+    emitStarted(onProgress, 'storing', { rowCount: rows.length, totalContentSize });
     const { error } = await supabaseAdmin
       .from('kb_chunks')
       .insert(rows);
 
     if (error) throw error;
-    emitCompleted(onProgress, 'storing', { rowCount: rows.length });
+    emitCompleted(onProgress, 'storing', {
+      rowCount: rows.length,
+      entryId,
+      totalContentSize,
+      knowledgeBaseId,
+    });
 
     // 5. Mark entry as completed
     await supabaseAdmin

@@ -7,10 +7,12 @@ import { PlanGate } from '@/components/auth/PlanGate';
 import type { ProfileData } from '@/hooks/useCompanyAI';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
+import { useDebugMode } from '@/hooks/useDebugMode';
 import IdentitySection from './sections/IdentitySection';
 import ResponseFlowSection from './response-flow/ResponseFlowSection';
 import FallbackToggle from './response-flow/FallbackToggle';
 import { useResponseFlow } from './response-flow/useResponseFlow';
+import PromptPreviewPanel from './PromptPreviewPanel';
 
 interface Props {
   profileData: ProfileData;
@@ -21,6 +23,7 @@ interface Props {
 export default function AIAgentSections({ profileData, onSave, agentId }: Props) {
   // Company knowledge bases
   const { knowledgeBases } = useCompanyKB();
+  const { debugMode } = useDebugMode();
 
   // Identity
   const [identityExpanded, setIdentityExpanded] = useState(false);
@@ -102,6 +105,9 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
           removeScenario={removeScenario}
         />
         {saveFooter}
+        {debugMode && (
+          <PromptPreviewPanel profileData={{ ...profileData, response_flow: flow }} agentId={agentId} />
+        )}
       </TabsContent>
 
       <TabsContent value="unmatched" className="space-y-4 pt-1">
