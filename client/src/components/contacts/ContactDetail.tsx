@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,12 +65,23 @@ export default function ContactDetail({
   const [memories, setMemories] = useState<ContactMemory[]>([]);
   const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
+  const sessionsFetched = useRef(false);
+  const memoriesFetched = useRef(false);
+
+  // Reset fetch flags when contact changes
+  useEffect(() => {
+    sessionsFetched.current = false;
+    memoriesFetched.current = false;
+    setSessions([]);
+    setMemories([]);
+  }, [contact.id]);
 
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
     try {
       const { data } = await api.get(`/contacts/${contact.id}/sessions`);
       setSessions(data.sessions || []);
+      sessionsFetched.current = true;
     } catch { /* ignore */ } finally {
       setSessionsLoading(false);
     }
@@ -81,6 +92,7 @@ export default function ContactDetail({
     try {
       const { data } = await api.get(`/contacts/${contact.id}/memories`);
       setMemories(data.memories || []);
+      memoriesFetched.current = true;
     } catch { /* ignore */ } finally {
       setMemoriesLoading(false);
     }
@@ -88,9 +100,9 @@ export default function ContactDetail({
 
   // Lazy-load sessions and memories when their tabs are first activated
   useEffect(() => {
-    if (activeTab === 'sessions' && sessions.length === 0 && !sessionsLoading) fetchSessions();
-    if (activeTab === 'memories' && memories.length === 0 && !memoriesLoading) fetchMemories();
-  }, [activeTab, sessions.length, sessionsLoading, fetchSessions, memories.length, memoriesLoading, fetchMemories]);
+    if (activeTab === 'sessions' && !sessionsFetched.current && !sessionsLoading) fetchSessions();
+    if (activeTab === 'memories' && !memoriesFetched.current && !memoriesLoading) fetchMemories();
+  }, [activeTab, sessionsLoading, fetchSessions, memoriesLoading, fetchMemories]);
 
   const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ')
     || contact.whatsapp_name

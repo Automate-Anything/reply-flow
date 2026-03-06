@@ -21,6 +21,7 @@ interface ScheduledMessagesListProps {
   loading: boolean;
   onUpdate: (messageId: string, updates: { body?: string; scheduledFor?: string }) => Promise<unknown>;
   onCancel: (messageId: string) => Promise<void>;
+  tabBar?: React.ReactNode;
 }
 
 function formatScheduledTime(dateStr: string): string {
@@ -50,6 +51,7 @@ export default function ScheduledMessagesList({
   loading,
   onUpdate,
   onCancel,
+  tabBar,
 }: ScheduledMessagesListProps) {
   const [editingMessage, setEditingMessage] = useState<ScheduledMessage | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -67,6 +69,7 @@ export default function ScheduledMessagesList({
   if (loading) {
     return (
       <div className="flex h-full w-full flex-col">
+        {tabBar && <div className="border-b p-3">{tabBar}</div>}
         <div className="space-y-1 p-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-3">
@@ -84,6 +87,7 @@ export default function ScheduledMessagesList({
 
   return (
     <div className="flex h-full w-full flex-col">
+      {tabBar && <div className="border-b p-3">{tabBar}</div>}
       <div className="flex-1 overflow-y-auto p-1">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-muted-foreground">

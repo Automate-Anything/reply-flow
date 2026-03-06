@@ -258,37 +258,37 @@ export default function InboxPage() {
 
   const showConversationList = activeTab !== 'scheduled';
 
+  const tabBar = (
+    <div className="flex items-center gap-1">
+      {([
+        { key: 'all', label: 'All', icon: MessageSquare },
+        { key: 'snoozed', label: 'Snoozed', icon: Clock },
+        { key: 'scheduled', label: 'Scheduled', icon: CalendarClock },
+      ] as const).map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          onClick={() => {
+            setActiveTab(key);
+            if (key === 'scheduled') setActiveConversation(null);
+          }}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+            activeTab === key
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex h-full" data-component="InboxPage">
-      {/* Left panel: tabs + list */}
+      {/* Left panel */}
       <div className={`${activeConversation && showConversationList ? 'hidden md:flex' : 'flex'} h-full w-full flex-col border-r md:w-[320px]`}>
-        {/* Tab bar */}
-        <div className="flex items-center gap-1 border-b px-3 py-1.5">
-          {([
-            { key: 'all', label: 'All', icon: MessageSquare },
-            { key: 'snoozed', label: 'Snoozed', icon: Clock },
-            { key: 'scheduled', label: 'Scheduled', icon: CalendarClock },
-          ] as const).map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => {
-                setActiveTab(key);
-                if (key === 'scheduled') setActiveConversation(null);
-              }}
-              className={cn(
-                'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                activeTab === key
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* List content based on active tab */}
         <div className="min-h-0 flex-1">
           {activeTab === 'scheduled' ? (
             <ScheduledMessagesList
@@ -296,6 +296,7 @@ export default function InboxPage() {
               loading={scheduledLoading}
               onUpdate={updateScheduledMessage}
               onCancel={cancelScheduledMsg}
+              tabBar={tabBar}
             />
           ) : inboxToolsOpen ? (
             <InboxToolsPanel onClose={() => setInboxToolsOpen(false)} />
@@ -322,6 +323,7 @@ export default function InboxPage() {
               onLabelsCreated={refreshLabels}
               onOpenInboxTools={() => setInboxToolsOpen(true)}
               statuses={conversationStatuses}
+              tabBar={tabBar}
             />
           )}
         </div>
