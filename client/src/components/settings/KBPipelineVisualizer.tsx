@@ -57,6 +57,16 @@ function getStepDetail(stepKey: string, data?: Record<string, unknown>): string 
       }
       return null;
     }
+    case 'cleaning': {
+      const cleanedLength = data.cleanedLength ?? data.cleaned_length;
+      const structuredLength = data.structuredLength ?? data.structured_length;
+      const warnings = data.warnings;
+      const parts: string[] = [];
+      if (cleanedLength != null) parts.push(`${Number(cleanedLength).toLocaleString()} chars cleaned`);
+      if (structuredLength != null) parts.push(`${Number(structuredLength).toLocaleString()} chars structured`);
+      if (warnings != null && Number(warnings) > 0) parts.push(`${warnings} warnings`);
+      return parts.length > 0 ? parts.join(', ') : null;
+    }
     case 'chunking': {
       const chunkCount = data.chunkCount ?? data.chunk_count ?? data.count;
       const avgChunkSize = data.avgChunkSize ?? data.avg_chunk_size ?? data.avgSize;

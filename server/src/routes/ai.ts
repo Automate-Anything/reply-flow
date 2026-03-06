@@ -582,8 +582,20 @@ router.post('/kbs/:kbId/entries/upload/stream', requirePermission('knowledge_bas
       return;
     }
 
-    // Process document with progress streaming
+    // Process document with progress streaming (classification + extraction events emitted by processDocument)
     const processed = await processDocument(file.buffer, file.originalname, file.mimetype, onProgress);
+
+    // Emit cleaning step (cleaning is done within extraction, but we show it separately for visibility)
+    sseWrite(res, { step: 'cleaning', status: 'started', timestamp: Date.now() });
+    sseWrite(res, {
+      step: 'cleaning', status: 'completed',
+      data: {
+        cleanedLength: processed.cleanedText.length,
+        structuredLength: processed.structuredText.length,
+        warnings: processed.warnings.length,
+      },
+      timestamp: Date.now(),
+    });
 
     if (!processed.cleanedText.trim()) {
       sseWrite(res, { step: 'error', status: 'error', error: 'Could not extract text from file', timestamp: Date.now() });
