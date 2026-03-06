@@ -10,6 +10,8 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { cleanText } from './documentProcessor.js';
 import { getRetrievalSettings } from './retrievalSettings.js';
+import type { PipelineProgressCallback } from './pipelineEvents.js';
+import { emitStarted, emitCompleted, emitError } from './pipelineEvents.js';
 
 // ── Types ──────────────────────────────────────────
 
@@ -606,6 +608,7 @@ export async function processAndEmbedEntry(
   sourceType?: string,
   contentType?: string,
   strategy?: string,
+  onProgress?: PipelineProgressCallback,
 ): Promise<void> {
   if (!openai) {
     console.warn('Embeddings skipped: OPENAI_API_KEY not configured');
@@ -626,6 +629,7 @@ export async function processAndEmbedEntry(
       .eq('entry_id', entryId);
 
     // 2. Chunk the text (content-aware: semantic for prose, pre-structured for tabular/code)
+    emitStarted(onProgress, 'chunking', { strategy: strategy ?? 'default' });
     const chunks = await chunkDocument(structuredText, {
       entryTitle,
       fileName: fileName ?? null,
@@ -634,16 +638,24 @@ export async function processAndEmbedEntry(
       strategy,
     });
 
+    const avgChunkSize = chunks.length > 0
+      ? Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / chunks.length)
+      : 0;
+    emitCompleted(onProgress, 'chunking', { chunkCount: chunks.length, avgChunkSize });
+
     if (chunks.length === 0) {
       await supabaseAdmin
         .from('knowledge_base_entries')
         .update({ embedding_status: 'completed' })
         .eq('id', entryId);
+      emitCompleted(onProgress, 'complete', { chunkCount: 0 });
       return;
     }
 
     // 3. Generate embeddings for all chunks
+    emitStarted(onProgress, 'embedding', { totalChunks: chunks.length });
     const embeddings = await generateEmbeddings(chunks.map((c) => c.content));
+    emitCompleted(onProgress, 'embedding', { embeddedCount: embeddings.length });
 
     // 4. Insert chunks with embeddings
     const rows = chunks.map((chunk, i) => ({
@@ -656,19 +668,24 @@ export async function processAndEmbedEntry(
       metadata: chunk.metadata,
     }));
 
+    emitStarted(onProgress, 'storing', { rowCount: rows.length });
     const { error } = await supabaseAdmin
       .from('kb_chunks')
       .insert(rows);
 
     if (error) throw error;
+    emitCompleted(onProgress, 'storing', { rowCount: rows.length });
 
     // 5. Mark entry as completed
     await supabaseAdmin
       .from('knowledge_base_entries')
       .update({ embedding_status: 'completed' })
       .eq('id', entryId);
+
+    emitCompleted(onProgress, 'complete', { chunkCount: chunks.length, embeddedCount: embeddings.length });
   } catch (error) {
     console.error(`Failed to process entry ${entryId}:`, error);
+    emitError(onProgress, 'error', String(error));
 
     await supabaseAdmin
       .from('knowledge_base_entries')

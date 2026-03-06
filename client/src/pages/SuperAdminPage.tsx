@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { useDebugMode } from '@/hooks/useDebugMode';
 import {
   Shield,
   Users,
@@ -24,9 +26,10 @@ import {
   Eye,
   ArrowRight,
   Settings2,
+  Bug,
 } from 'lucide-react';
 
-const TABS = ['overview', 'templates', 'preview', 'knowledge-bases', 'retrieval'] as const;
+const TABS = ['overview', 'templates', 'preview', 'knowledge-bases', 'retrieval', 'debug'] as const;
 type Tab = (typeof TABS)[number];
 
 // ── Types ──────────────────────────────────────────
@@ -172,6 +175,7 @@ export default function SuperAdminPage() {
           <TabsTrigger value="preview" className="flex-1">Prompt Preview</TabsTrigger>
           <TabsTrigger value="knowledge-bases" className="flex-1">Knowledge Bases</TabsTrigger>
           <TabsTrigger value="retrieval" className="flex-1">Retrieval Settings</TabsTrigger>
+          <TabsTrigger value="debug" className="flex-1">Debug</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -188,6 +192,9 @@ export default function SuperAdminPage() {
         </TabsContent>
         <TabsContent value="retrieval" className="mt-6">
           <RetrievalSettingsTab />
+        </TabsContent>
+        <TabsContent value="debug" className="mt-6">
+          <DebugModeTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -993,6 +1000,81 @@ function EmbeddingStatusBadge({ status }: { status: string }) {
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variants[status] || variants.pending}`}>
       {status}
     </span>
+  );
+}
+
+// ── Debug Mode Tab ────────────────────────────────
+
+function DebugModeTab() {
+  const { debugMode, toggleDebugMode, loading } = useDebugMode();
+  const [toggling, setToggling] = useState(false);
+
+  const handleToggle = async (checked: boolean) => {
+    setToggling(true);
+    try {
+      await toggleDebugMode(checked);
+      toast.success(checked ? 'Debug mode enabled' : 'Debug mode disabled');
+    } catch {
+      toast.error('Failed to toggle debug mode');
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bug className="h-4 w-4" />
+            Debug Mode
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            When enabled, AI responses include detailed debug information (tokens, timing, KB search scores, prompt sections) and KB uploads show a live pipeline visualizer.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Enable Debug Mode</p>
+              <p className="text-xs text-muted-foreground">
+                System-wide setting. Affects all super admin sessions.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant={debugMode ? 'default' : 'outline'} className="text-xs">
+                {debugMode ? 'ON' : 'OFF'}
+              </Badge>
+              <Switch
+                checked={debugMode}
+                onCheckedChange={handleToggle}
+                disabled={loading || toggling}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">What Debug Mode Does</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+            <p><strong className="text-foreground">AI Debug Panels</strong> — Each AI reply shows an expandable panel with token counts, response time, query classification, KB search scores, matched scenario, and the full assembled prompt.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+            <p><strong className="text-foreground">KB Pipeline Visualizer</strong> — File uploads show a live step-by-step view of classification, extraction, cleaning, chunking, embedding, and storing.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+            <p><strong className="text-foreground">Visual Debug Overlay</strong> — Hover over UI elements to see component boundaries and dimensions.</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

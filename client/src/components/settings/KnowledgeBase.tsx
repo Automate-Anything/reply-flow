@@ -14,6 +14,8 @@ import type { KBEntry, KBChunk } from '@/hooks/useCompanyKB';
 import { cn } from '@/lib/utils';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
+import KBPipelineVisualizer from './KBPipelineVisualizer';
+import type { PipelineStepState } from './KBPipelineVisualizer';
 
 interface Props {
   entries: KBEntry[];
@@ -25,6 +27,9 @@ interface Props {
   onUpdateChunk?: (entryId: string, chunkId: string, content: string) => Promise<{ chunk: KBChunk; reembedded: boolean }>;
   onDeleteChunk?: (entryId: string, chunkId: string) => Promise<{ remainingChunks: number }>;
   onReembed?: (entryId: string) => Promise<unknown>;
+  onUploadStream?: (file: File, title: string | undefined, onEvent: (event: PipelineStepState) => void) => Promise<unknown>;
+  onAddStream?: (title: string, content: string, onEvent: (event: PipelineStepState) => void) => Promise<unknown>;
+  isDebugMode?: boolean;
   loading: boolean;
   initialOpen?: boolean;
 }
@@ -541,7 +546,7 @@ function EntryCard({
   );
 }
 
-export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, onFetchChunks, onUpdateChunk, onDeleteChunk, onReembed, loading, initialOpen }: Props) {
+export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, onFetchChunks, onUpdateChunk, onDeleteChunk, onReembed, onUploadStream, onAddStream, isDebugMode, loading, initialOpen }: Props) {
   const [showAddForm, setShowAddForm] = useState(!!initialOpen);
   const [addMode, setAddMode] = useState<'text' | 'file'>('text');
   const [title, setTitle] = useState('');
@@ -550,6 +555,23 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
   const [adding, setAdding] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineStepState[]>([]);
+  const [showPipeline, setShowPipeline] = useState(false);
+  const [pipelineComplete, setPipelineComplete] = useState(false);
+  const [pipelineError, setPipelineError] = useState<string | undefined>();
+
+  const resetPipeline = () => {
+    setPipelineEvents([]);
+    setShowPipeline(false);
+    setPipelineComplete(false);
+    setPipelineError(undefined);
+  };
+
+  const handlePipelineEvent = (event: PipelineStepState) => {
+    setPipelineEvents((prev) => [...prev, event]);
+    if (event.step === 'complete') setPipelineComplete(true);
+    if (event.step === 'error' || event.status === 'error') setPipelineError(event.error || 'Pipeline failed');
+  };
 
   const handleAddText = async () => {
     if (!title.trim() || !content.trim()) {
@@ -557,6 +579,23 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
       return;
     }
     setAdding(true);
+
+    if (isDebugMode && onAddStream) {
+      resetPipeline();
+      setShowPipeline(true);
+      try {
+        await onAddStream(title.trim(), content.trim(), handlePipelineEvent);
+        setTitle('');
+        setContent('');
+        toast.success('Knowledge base entry added');
+      } catch {
+        toast.error('Failed to add entry');
+      } finally {
+        setAdding(false);
+      }
+      return;
+    }
+
     try {
       await onAdd({ title: title.trim(), content: content.trim() });
       setTitle('');
@@ -588,6 +627,24 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
   const handleUploadFile = async () => {
     if (!selectedFile) return;
     setUploading(true);
+
+    if (isDebugMode && onUploadStream) {
+      resetPipeline();
+      setShowPipeline(true);
+      try {
+        await onUploadStream(selectedFile, title || undefined, handlePipelineEvent);
+        setSelectedFile(null);
+        setTitle('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        toast.success('File uploaded and processed');
+      } catch {
+        toast.error('Failed to upload file');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     try {
       await onUpload(selectedFile, title || undefined);
       setSelectedFile(null);
@@ -738,6 +795,27 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
                 </Button>
               )}
             </>
+          )}
+
+          {/* Pipeline Visualizer (debug mode) */}
+          {showPipeline && (
+            <div className="mt-3">
+              <KBPipelineVisualizer
+                events={pipelineEvents}
+                isComplete={pipelineComplete}
+                error={pipelineError}
+              />
+              {(pipelineComplete || pipelineError) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { resetPipeline(); setShowAddForm(false); }}
+                  className="mt-2 h-7 text-xs"
+                >
+                  Close
+                </Button>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -13,6 +13,7 @@ import { PlanGate } from '@/components/auth/PlanGate';
 import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
+import { useDebugMode } from '@/hooks/useDebugMode';
 
 export default function KnowledgeBasePage() {
   const navigate = useNavigate();
@@ -23,9 +24,11 @@ export default function KnowledgeBasePage() {
   const {
     knowledgeBases, loading,
     createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase,
-    fetchKBEntries, addKBEntry, uploadKBFile, updateKBEntry, deleteKBEntry,
+    fetchKBEntries, addKBEntry, uploadKBFile, uploadKBFileStream, addKBEntryStream,
+    updateKBEntry, deleteKBEntry,
     fetchEntryChunks, updateChunk, deleteChunk, reembedEntry, searchKB,
   } = useCompanyKB();
+  const { debugMode } = useDebugMode();
 
   // Create KB form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -160,6 +163,28 @@ export default function KnowledgeBasePage() {
     [uploadKBFile]
   );
 
+  const handleUploadFileStream = useCallback(
+    (kbId: string) => async (file: File, title: string | undefined, onEvent: (event: any) => void) => {
+      const entry = await uploadKBFileStream(kbId, file, title, onEvent);
+      if (entry) {
+        setKbEntries((prev) => ({ ...prev, [kbId]: [entry, ...(prev[kbId] || [])] }));
+      }
+      return entry;
+    },
+    [uploadKBFileStream]
+  );
+
+  const handleAddEntryStream = useCallback(
+    (kbId: string) => async (title: string, content: string, onEvent: (event: any) => void) => {
+      const entry = await addKBEntryStream(kbId, title, content, onEvent);
+      if (entry) {
+        setKbEntries((prev) => ({ ...prev, [kbId]: [entry, ...(prev[kbId] || [])] }));
+      }
+      return entry;
+    },
+    [addKBEntryStream]
+  );
+
   const handleUpdateEntry = useCallback(
     (kbId: string) => async (entryId: string, updates: { title?: string; content?: string }) => {
       const updated = await updateKBEntry(kbId, entryId, updates);
@@ -239,7 +264,7 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="mx-auto max-w-3xl space-y-6 p-6" data-component="KnowledgeBasePage">
       <div className="flex items-center gap-3">
         {backPath && (
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(backPath)}>
@@ -400,6 +425,9 @@ export default function KnowledgeBasePage() {
                       onUpdateChunk={handleUpdateChunk(kb.id)}
                       onDeleteChunk={handleDeleteChunk(kb.id)}
                       onReembed={handleReembed(kb.id)}
+                      onUploadStream={handleUploadFileStream(kb.id)}
+                      onAddStream={handleAddEntryStream(kb.id)}
+                      isDebugMode={debugMode}
                       loading={isLoadingEntries}
                     />
                   </div>

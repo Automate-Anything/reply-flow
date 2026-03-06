@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import { Clock, Pin, Reply, Star, X } from 'lucide-react';
 import type { Message } from '@/hooks/useMessages';
+import AIDebugPanel from './AIDebugPanel';
+import type { AIDebugData } from './AIDebugPanel';
 
 interface ReplyMetadata {
   quoted_message_id: string | null;
@@ -13,6 +15,7 @@ interface MessageBubbleProps {
   message: Message;
   onCancelScheduled?: (messageId: string) => Promise<void>;
   onReply?: (message: Message) => void;
+  isDebugMode?: boolean;
 }
 
 function formatTimestamp(ts: string | null): string {
@@ -43,15 +46,17 @@ function groupReactions(reactions: Array<{ emoji: string; user_id: string }>): A
   return Array.from(map, ([emoji, count]) => ({ emoji, count }));
 }
 
-export default function MessageBubble({ message, onCancelScheduled, onReply }: MessageBubbleProps) {
+export default function MessageBubble({ message, onCancelScheduled, onReply, isDebugMode }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const isAI = message.sender_type === 'ai';
   const isScheduled = message.status === 'scheduled' && message.scheduled_for;
   const reply = (message.metadata?.reply as ReplyMetadata) || null;
   const reactions = groupReactions(message.reactions || []);
+  const debugData = isDebugMode && isAI ? (message.metadata?.debug as AIDebugData | undefined) : undefined;
 
   return (
     <div
+      data-component="MessageBubble"
       className={cn(
         'group/msg flex w-full items-center gap-1',
         isOutbound ? 'justify-end' : 'justify-start'
@@ -148,6 +153,9 @@ export default function MessageBubble({ message, onCancelScheduled, onReply }: M
             ))}
           </div>
         )}
+
+        {/* AI Debug Panel */}
+        {debugData && <AIDebugPanel debugData={debugData} />}
       </div>
 
       {/* Reply button — inbound messages: appears to the right */}

@@ -19,6 +19,7 @@ interface MessageThreadProps {
   onCancelReply?: () => void;
   onMessageUpdate: (message: Message) => void;
   onForward: (message: Message) => void;
+  isDebugMode?: boolean;
 }
 
 export default function MessageThread({
@@ -35,6 +36,7 @@ export default function MessageThread({
   onCancelReply,
   onMessageUpdate,
   onForward,
+  isDebugMode,
 }: MessageThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +45,7 @@ export default function MessageThread({
   }, [messages]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden" data-component="MessageThread">
       <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="space-y-4">
@@ -75,6 +77,7 @@ export default function MessageThread({
                   message={msg}
                   onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
                   onReply={onReply}
+                  isDebugMode={isDebugMode}
                 />
               </MessageContextMenu>
             ))}

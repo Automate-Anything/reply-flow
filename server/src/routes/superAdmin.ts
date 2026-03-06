@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { buildSystemPrompt, invalidateTemplateCache } from '../services/promptBuilder.js';
 import type { ProfileData, KBEntry } from '../services/promptBuilder.js';
 import { invalidateRetrievalSettingsCache } from '../services/retrievalSettings.js';
+import { invalidateDebugModeCache } from '../services/debugMode.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -485,6 +486,50 @@ router.put('/retrieval-settings/:key', async (req, res, next) => {
 
     invalidateRetrievalSettingsCache();
     res.json({ setting: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /debug-mode ──────────────────────────────────
+router.get('/debug-mode', async (_req, res, next) => {
+  try {
+    const { data } = await supabaseAdmin
+      .from('retrieval_settings')
+      .select('value')
+      .eq('key', 'super_admin_debug_mode')
+      .single();
+
+    res.json({ enabled: data?.value === '1' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /debug-mode/toggle ─────────────────────────
+router.post('/debug-mode/toggle', async (req, res, next) => {
+  try {
+    const { enabled } = req.body as { enabled: boolean };
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled must be a boolean' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('retrieval_settings')
+      .update({
+        value: enabled ? '1' : '0',
+        updated_by: req.userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('key', 'super_admin_debug_mode')
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    invalidateDebugModeCache();
+    res.json({ enabled: data?.value === '1' });
   } catch (err) {
     next(err);
   }

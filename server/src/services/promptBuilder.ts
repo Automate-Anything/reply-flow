@@ -93,6 +93,15 @@ export interface ChannelOverrides {
   custom_instructions?: string;
 }
 
+// ── Debug: prompt section tracking ──────────────────
+
+export interface PromptSection {
+  name: string;
+  content: string;
+}
+
+export type OnSectionCallback = (section: PromptSection) => void;
+
 // ── Shared constants (fallback defaults) ────────────
 
 const DEFAULT_TONE_DESCRIPTIONS: Record<string, string> = {
@@ -385,39 +394,45 @@ function buildResponseFlowPrompt(
   kbEntries: KBEntry[],
   t: PromptTemplateCache,
   channelOverrides?: ChannelOverrides,
+  onSection?: OnSectionCallback,
 ): string {
   const flow = profile.response_flow!;
   const parts: string[] = [];
 
+  const track = (name: string, content: string) => {
+    parts.push(content);
+    onSection?.({ name, content });
+  };
+
   // Identity
-  parts.push(buildIdentitySection(profile, t));
+  track('Identity', buildIdentitySection(profile, t));
 
   // Language
   const lang = buildLanguageSection(profile, t);
-  if (lang) parts.push(lang);
+  if (lang) track('Language', lang);
 
   // Default communication style
   const styleDesc = formatStyleDescription(flow.default_style, t);
-  if (styleDesc) parts.push(`## Communication Style\n${styleDesc}`);
+  if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
   // Greeting
   if (flow.greeting_message) {
-    parts.push(`## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
+    track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
   }
 
   // General response rules
   if (flow.response_rules) {
-    parts.push(`## Response Guidelines\n${flow.response_rules}`);
+    track('ResponseGuidelines', `## Response Guidelines\n${flow.response_rules}`);
   }
 
   // Topics to avoid
   if (flow.topics_to_avoid) {
-    parts.push(`## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
+    track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
   }
 
   // Scenarios (pass KB entries so per-scenario attachments are inlined)
   const scenarios = buildScenariosSection(flow, kbEntries, t);
-  if (scenarios) parts.push(scenarios);
+  if (scenarios) track('Scenarios', scenarios);
 
   // Fallback knowledge base (from fallback_kb_attachments)
   if (flow.fallback_kb_attachments && flow.fallback_kb_attachments.length > 0) {
@@ -427,16 +442,16 @@ function buildResponseFlowPrompt(
       fallbackEntries.push(...entries);
     }
     const kb = buildKBSection(fallbackEntries, t);
-    if (kb) parts.push(kb);
+    if (kb) track('KBContext', kb);
   }
 
   // Channel-specific instructions
   if (channelOverrides?.custom_instructions) {
-    parts.push(`## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
+    track('ChannelInstructions', `## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
   }
 
   // Core rules
-  parts.push(t.coreRules);
+  track('CoreRules', t.coreRules);
 
   return parts.join('\n\n');
 }
@@ -479,11 +494,17 @@ function buildLegacyPrompt(
   kbEntries: KBEntry[],
   t: PromptTemplateCache,
   channelOverrides?: ChannelOverrides,
+  onSection?: OnSectionCallback,
 ): string {
   const parts: string[] = [];
 
+  const track = (name: string, content: string) => {
+    parts.push(content);
+    onSection?.({ name, content });
+  };
+
   // Identity
-  parts.push(buildLegacyIdentitySection(profile, t));
+  track('Identity', buildLegacyIdentitySection(profile, t));
 
   // Communication style
   const styleRules: string[] = [];
@@ -497,21 +518,21 @@ function buildLegacyPrompt(
       styleRules.push(t.language.specific.replace('{language}', profile.language_preference));
     }
   }
-  if (styleRules.length > 0) parts.push(`## Communication Style\n${styleRules.join('\n')}`);
+  if (styleRules.length > 0) track('CommunicationStyle', `## Communication Style\n${styleRules.join('\n')}`);
 
-  if (profile.response_rules) parts.push(`## Response Guidelines\n${profile.response_rules}`);
-  if (profile.topics_to_avoid) parts.push(`## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${profile.topics_to_avoid}`);
-  if (profile.escalation_rules) parts.push(`## Escalation Guidelines\n${profile.escalation_rules}`);
-  if (profile.greeting_message) parts.push(`## First Contact Greeting\n${t.greeting.replace('{greeting_message}', profile.greeting_message)}`);
+  if (profile.response_rules) track('ResponseGuidelines', `## Response Guidelines\n${profile.response_rules}`);
+  if (profile.topics_to_avoid) track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${profile.topics_to_avoid}`);
+  if (profile.escalation_rules) track('EscalationGuidelines', `## Escalation Guidelines\n${profile.escalation_rules}`);
+  if (profile.greeting_message) track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', profile.greeting_message)}`);
 
   const kb = buildKBSection(kbEntries, t);
-  if (kb) parts.push(kb);
+  if (kb) track('KBContext', kb);
 
   if (channelOverrides?.custom_instructions) {
-    parts.push(`## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
+    track('ChannelInstructions', `## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
   }
 
-  parts.push(t.coreRules);
+  track('CoreRules', t.coreRules);
   return parts.join('\n\n');
 }
 
@@ -557,31 +578,37 @@ export async function buildScenarioResponsePrompt(
   kbEntries: KBEntry[],
   matchedScenarioLabel: string | null,
   channelOverrides?: ChannelOverrides,
+  onSection?: OnSectionCallback,
 ): Promise<string> {
   const t = await getPromptTemplates();
   const flow = profile.response_flow!;
   const parts: string[] = [];
 
+  const track = (name: string, content: string) => {
+    parts.push(content);
+    onSection?.({ name, content });
+  };
+
   // Identity
-  parts.push(buildIdentitySection(profile, t));
+  track('Identity', buildIdentitySection(profile, t));
 
   // Language
   const lang = buildLanguageSection(profile, t);
-  if (lang) parts.push(lang);
+  if (lang) track('Language', lang);
 
   // Greeting
   if (flow.greeting_message) {
-    parts.push(`## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
+    track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
   }
 
   // General response rules
   if (flow.response_rules) {
-    parts.push(`## Response Guidelines\n${flow.response_rules}`);
+    track('ResponseGuidelines', `## Response Guidelines\n${flow.response_rules}`);
   }
 
   // Topics to avoid
   if (flow.topics_to_avoid) {
-    parts.push(`## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
+    track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
   }
 
   // Find matched scenario
@@ -593,7 +620,7 @@ export async function buildScenarioResponsePrompt(
     // Resolved style (scenario overrides + defaults)
     const resolved = resolveScenarioStyle(matchedScenario, flow.default_style);
     const styleDesc = formatStyleDescription(resolved, t);
-    if (styleDesc) parts.push(`## Communication Style\n${styleDesc}`);
+    if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
     // Single scenario block
     const scenarioLines: string[] = [];
@@ -631,17 +658,17 @@ export async function buildScenarioResponsePrompt(
       if (matchedScenario.escalation_message) scenarioLines.push(`- **Say**: "${matchedScenario.escalation_message}"`);
     }
 
-    parts.push(scenarioLines.join('\n'));
+    track('ActiveScenario', scenarioLines.join('\n'));
   } else {
     // No scenario matched — use default style + fallback behavior
     const styleDesc = formatStyleDescription(flow.default_style, t);
-    if (styleDesc) parts.push(`## Communication Style\n${styleDesc}`);
+    if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
     if (flow.fallback_mode === 'human_handle') {
       const fallbackMsg = flow.human_phone
         ? t.scenario.fallback_human_phone.replace('{human_phone}', flow.human_phone)
         : t.scenario.fallback_human_followup;
-      parts.push(`## Important\n${fallbackMsg}`);
+      track('FallbackBehavior', `## Important\n${fallbackMsg}`);
     }
 
     // Fallback KB attachments
@@ -651,17 +678,17 @@ export async function buildScenarioResponsePrompt(
         fallbackEntries.push(...kbEntries.filter((e) => e.knowledge_base_id === att.kb_id));
       }
       const kb = buildKBSection(fallbackEntries, t);
-      if (kb) parts.push(kb);
+      if (kb) track('KBContext', kb);
     }
   }
 
   // Channel-specific instructions
   if (channelOverrides?.custom_instructions) {
-    parts.push(`## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
+    track('ChannelInstructions', `## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
   }
 
   // Core rules
-  parts.push(t.coreRules);
+  track('CoreRules', t.coreRules);
 
   return parts.join('\n\n');
 }
@@ -672,12 +699,13 @@ export async function buildSystemPrompt(
   profile: ProfileData,
   kbEntries: KBEntry[] = [],
   channelOverrides?: ChannelOverrides,
+  onSection?: OnSectionCallback,
 ): Promise<string> {
   const t = await getPromptTemplates();
   // New scenario-based flow
   if (profile.response_flow) {
-    return buildResponseFlowPrompt(profile, kbEntries, t, channelOverrides);
+    return buildResponseFlowPrompt(profile, kbEntries, t, channelOverrides, onSection);
   }
   // Legacy flat fields
-  return buildLegacyPrompt(profile, kbEntries, t, channelOverrides);
+  return buildLegacyPrompt(profile, kbEntries, t, channelOverrides, onSection);
 }

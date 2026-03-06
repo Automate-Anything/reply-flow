@@ -11,6 +11,8 @@ import { classifyMessage } from '../services/ai.js';
 import { processDocument, cleanText } from '../services/documentProcessor.js';
 import { processAndEmbedEntry, isEmbeddingsAvailable, searchKnowledgeBase, backfillExistingEntries, generateEmbedding } from '../services/embeddings.js';
 import { classifyQuery } from '../services/queryClassifier.js';
+import { sseWrite } from '../services/pipelineEvents.js';
+import type { PipelineEvent, PipelineProgressCallback } from '../services/pipelineEvents.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -423,6 +425,59 @@ router.post('/kbs/:kbId/entries', requirePermission('knowledge_base', 'create'),
   }
 });
 
+// ── SSE streaming text entry (debug mode) ─────────
+router.post('/kbs/:kbId/entries/stream', requirePermission('knowledge_base', 'create'), async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const onProgress: PipelineProgressCallback = (event: PipelineEvent) => {
+    sseWrite(res, event);
+  };
+
+  try {
+    const companyId = req.companyId!;
+    const kbId = req.params.kbId as string;
+    const { title, content } = req.body as { title: string; content: string };
+
+    if (!title || !content) {
+      sseWrite(res, { step: 'error', status: 'error', error: 'Title and content are required', timestamp: Date.now() });
+      res.end();
+      return;
+    }
+
+    sseWrite(res, { step: 'cleaning', status: 'started', timestamp: Date.now() });
+    const cleanedContent = cleanText(content);
+    sseWrite(res, { step: 'cleaning', status: 'completed', data: { cleanedLength: cleanedContent.length }, timestamp: Date.now() });
+
+    const { data, error } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .insert({
+        company_id: companyId,
+        created_by: req.userId,
+        knowledge_base_id: kbId,
+        title,
+        content: cleanedContent,
+        source_type: 'text',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (isEmbeddingsAvailable() && data) {
+      await processAndEmbedEntry(data.id, cleanedContent, kbId, companyId, title, null, 'text', undefined, undefined, onProgress);
+    }
+
+    sseWrite(res, { step: 'complete', status: 'completed', data: { entry: data }, timestamp: Date.now() });
+  } catch (err) {
+    sseWrite(res, { step: 'error', status: 'error', error: String(err), timestamp: Date.now() });
+  } finally {
+    res.end();
+  }
+});
+
 // Upload file entry to a knowledge base
 router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res, next) => {
   try {
@@ -501,6 +556,84 @@ router.post('/kbs/:kbId/entries/upload', requirePermission('knowledge_base', 'cr
     res.json({ entry: data, warnings: processed.warnings });
   } catch (err) {
     next(err);
+  }
+});
+
+// ── SSE streaming file upload (debug mode) ────────
+router.post('/kbs/:kbId/entries/upload/stream', requirePermission('knowledge_base', 'create'), upload.single('file'), async (req, res) => {
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const onProgress: PipelineProgressCallback = (event: PipelineEvent) => {
+    sseWrite(res, event);
+  };
+
+  try {
+    const companyId = req.companyId!;
+    const kbId = req.params.kbId as string;
+    const file = req.file;
+
+    if (!file) {
+      sseWrite(res, { step: 'error', status: 'error', error: 'No file uploaded', timestamp: Date.now() });
+      res.end();
+      return;
+    }
+
+    // Process document with progress streaming
+    const processed = await processDocument(file.buffer, file.originalname, file.mimetype, onProgress);
+
+    if (!processed.cleanedText.trim()) {
+      sseWrite(res, { step: 'error', status: 'error', error: 'Could not extract text from file', timestamp: Date.now() });
+      res.end();
+      return;
+    }
+
+    // Upload file to Supabase Storage
+    const storagePath = `${companyId}/kb/${Date.now()}_${file.originalname}`;
+    const { error: storageError } = await supabaseAdmin.storage
+      .from('knowledge-base')
+      .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
+
+    if (storageError) console.error('Storage upload error:', storageError);
+
+    const fileUrl = storageError ? null : storagePath;
+    const title = (req.body.title as string) || file.originalname.replace(/\.[^.]+$/, '');
+
+    const { data, error } = await supabaseAdmin
+      .from('knowledge_base_entries')
+      .insert({
+        company_id: companyId,
+        created_by: req.userId,
+        knowledge_base_id: kbId,
+        title,
+        content: processed.cleanedText,
+        source_type: 'file',
+        file_name: file.originalname,
+        file_url: fileUrl,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Generate chunks and embeddings with progress streaming
+    if (isEmbeddingsAvailable() && data) {
+      await processAndEmbedEntry(
+        data.id, processed.structuredText, kbId, companyId, title,
+        file.originalname, processed.metadata.sourceType,
+        processed.metadata.contentType, processed.metadata.strategy,
+        onProgress,
+      );
+    }
+
+    sseWrite(res, { step: 'complete', status: 'completed', data: { entry: data, warnings: processed.warnings }, timestamp: Date.now() });
+  } catch (err) {
+    sseWrite(res, { step: 'error', status: 'error', error: String(err), timestamp: Date.now() });
+  } finally {
+    res.end();
   }
 });
 

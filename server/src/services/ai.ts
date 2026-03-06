@@ -2,11 +2,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { buildSystemPrompt, buildClassificationPrompt, buildScenarioResponsePrompt } from './promptBuilder.js';
-import type { ProfileData, KBEntry, ChannelOverrides } from './promptBuilder.js';
+import type { ProfileData, KBEntry, ChannelOverrides, PromptSection } from './promptBuilder.js';
 import { isEmbeddingsAvailable, searchKnowledgeBase } from './embeddings.js';
 import { classifyQuery } from './queryClassifier.js';
 import { getContactContext } from './sessionMemory.js';
 import type { ContactMemory } from './sessionMemory.js';
+import { isDebugModeEnabled } from './debugMode.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -18,6 +19,13 @@ const RESPONSE_MODEL = 'claude-sonnet-4-20250514';
 
 // ── Types ──────────────────────────────────────────
 
+interface DebugContext {
+  reformulatedQuery: string;
+  queryClassification: { method: string; reasoning: string; vectorWeight: number; ftsWeight: number } | null;
+  searchResults: Array<{ title: string; confidence: string; rrfScore: number; vectorRank: number; ftsRank: number; contentPreview: string }>;
+  kbFallbackUsed: boolean;
+}
+
 interface AIContext {
   profileData: ProfileData;
   kbEntries: KBEntry[];
@@ -26,6 +34,7 @@ interface AIContext {
   maxTokens: number;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   contactMemories: ContactMemory[];
+  debugContext?: DebugContext;
 }
 
 export interface ClassificationResult {
@@ -236,9 +245,13 @@ export async function shouldAIRespond(
   }));
 
   // 8. Semantic search for relevant KB content (or fall back to loading all)
+  const debugMode = await isDebugModeEnabled();
   let kbData: KBEntry[] = [];
   let kbLowConfidence = false;
+  let kbFallbackUsed = false;
   let searchQuery = messages[messages.length - 1]?.content || '';
+  let debugQC: DebugContext['queryClassification'] = null;
+  let debugSearchResults: DebugContext['searchResults'] = [];
 
   if (isEmbeddingsAvailable()) {
     searchQuery = await reformulateQuery(messages);
@@ -248,6 +261,18 @@ export async function shouldAIRespond(
       vectorWeight: qc.vectorWeight,
       ftsWeight: qc.ftsWeight,
     });
+
+    if (debugMode) {
+      debugQC = { method: qc.method, reasoning: qc.reasoning, vectorWeight: qc.vectorWeight, ftsWeight: qc.ftsWeight };
+      debugSearchResults = searchResults.map((r) => ({
+        title: (r.metadata?.sourceEntryTitle as string) || 'KB',
+        confidence: r.confidence,
+        rrfScore: r.rrfScore,
+        vectorRank: r.vectorRank,
+        ftsRank: r.ftsRank,
+        contentPreview: r.content.slice(0, 300),
+      }));
+    }
 
     if (searchResults.length > 0) {
       kbLowConfidence = searchResults.every((r) => r.confidence === 'low');
@@ -263,6 +288,7 @@ export async function shouldAIRespond(
 
   // Fallback: load all entries if search returned nothing or embeddings unavailable
   if (kbData.length === 0) {
+    kbFallbackUsed = true;
     const { data: kbEntries } = await supabaseAdmin
       .from('knowledge_base_entries')
       .select('id, title, content, knowledge_base_id')
@@ -295,9 +321,14 @@ export async function shouldAIRespond(
 
   const maxTokens = channelSettings.max_tokens || 500;
 
+  // Build debug context if debug mode is on
+  const debugContext: DebugContext | undefined = debugMode
+    ? { reformulatedQuery: searchQuery, queryClassification: debugQC, searchResults: debugSearchResults, kbFallbackUsed }
+    : undefined;
+
   return {
     action: 'respond',
-    context: { profileData, kbEntries: kbData, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories },
+    context: { profileData, kbEntries: kbData, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories, debugContext },
   };
 }
 
@@ -413,41 +444,50 @@ export async function generateAndSendAIReply(
 ): Promise<void> {
   if (!anthropic) return;
 
-  const { profileData, kbEntries, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories } = context;
+  const { profileData, kbEntries, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories, debugContext } = context;
   const hasScenarios = !!(profileData.response_flow?.scenarios?.length);
 
   let systemPrompt: string;
+  let classification: ClassificationResult | null = null;
+  const promptSections: PromptSection[] = [];
+  const onSection = debugContext ? (s: PromptSection) => { promptSections.push(s); } : undefined;
 
   if (hasScenarios) {
     try {
-      const classification = await classifyMessage(profileData, messages);
+      classification = await classifyMessage(profileData, messages);
       systemPrompt = await buildScenarioResponsePrompt(
-        profileData, kbEntries, classification.scenario_label, channelOverrides,
+        profileData, kbEntries, classification.scenario_label, channelOverrides, onSection,
       );
     } catch (err) {
       console.error('Classification failed, falling back to full prompt:', err);
-      systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+      systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides, onSection);
     }
   } else {
-    systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+    systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides, onSection);
   }
 
   // Warn the AI when KB results are low confidence or absent
   if (kbLowConfidence || kbEntries.length === 0) {
-    systemPrompt += '\n\nNote: No highly relevant knowledge base content was found for this query. If you are not confident in your answer, let the customer know you will look into it and get back to them.';
+    const kbNote = 'Note: No highly relevant knowledge base content was found for this query. If you are not confident in your answer, let the customer know you will look into it and get back to them.';
+    systemPrompt += '\n\n' + kbNote;
+    onSection?.({ name: 'KBConfidenceNote', content: kbNote });
   }
 
   // Append contact memories from previous sessions
   if (contactMemories.length > 0) {
-    systemPrompt += '\n\n' + formatContactMemories(contactMemories);
+    const memoriesSection = formatContactMemories(contactMemories);
+    systemPrompt += '\n\n' + memoriesSection;
+    onSection?.({ name: 'ContactMemories', content: memoriesSection });
   }
 
+  const startTime = Date.now();
   const response = await anthropic.messages.create({
     model: RESPONSE_MODEL,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages,
   });
+  const responseTimeMs = Date.now() - startTime;
 
   const aiReply = response.content
     .filter((block) => block.type === 'text')
@@ -456,7 +496,29 @@ export async function generateAndSendAIReply(
 
   if (!aiReply.trim()) return;
 
-  await sendAndStoreMessage(companyId, sessionId, aiReply);
+  // Build debug metadata if debug mode was enabled
+  const metadata = debugContext ? {
+    debug: {
+      reformulatedQuery: debugContext.reformulatedQuery,
+      queryClassification: debugContext.queryClassification,
+      kbSearchResults: debugContext.searchResults,
+      kbFallbackUsed: debugContext.kbFallbackUsed,
+      kbLowConfidence: kbLowConfidence || false,
+      scenarioLabel: classification?.scenario_label ?? null,
+      scenarioConfidence: classification?.confidence ?? null,
+      promptSections,
+      systemPrompt,
+      tokens: {
+        input: response.usage?.input_tokens ?? 0,
+        output: response.usage?.output_tokens ?? 0,
+      },
+      responseTimeMs,
+      model: RESPONSE_MODEL,
+      stopReason: response.stop_reason ?? 'unknown',
+    },
+  } : undefined;
+
+  await sendAndStoreMessage(companyId, sessionId, aiReply, metadata);
 }
 
 /**
@@ -524,7 +586,8 @@ export async function sendOutsideHoursReply(
 async function sendAndStoreMessage(
   companyId: string,
   sessionId: string,
-  message: string
+  message: string,
+  metadata?: Record<string, unknown>,
 ): Promise<void> {
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
@@ -563,6 +626,7 @@ async function sendAndStoreMessage(
     status: 'sent',
     read: true,
     message_ts: now,
+    metadata: metadata ?? null,
   });
 
   await supabaseAdmin

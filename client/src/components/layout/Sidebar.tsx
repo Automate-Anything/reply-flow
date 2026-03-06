@@ -60,6 +60,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
 
   return (
     <aside
+      data-component="Sidebar"
       className={cn(
         'flex h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200',
         collapsed ? 'w-[60px]' : 'w-[240px]'

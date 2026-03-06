@@ -200,7 +200,7 @@ export default function ConversationHeader({
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
 
   return (
-    <div className="flex items-center justify-between border-b px-4 py-3">
+    <div className="flex items-center justify-between border-b px-4 py-3" data-component="ConversationHeader">
       <div className="flex min-w-0 items-center gap-3">
         {onBack && (
           <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={onBack}>

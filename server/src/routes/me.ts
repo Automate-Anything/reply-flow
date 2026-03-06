@@ -121,12 +121,24 @@ router.get('/', async (req, res, next) => {
       }
     }
 
+    // Fetch debug mode flag for super admins
+    let debugMode = false;
+    if (profile.is_super_admin) {
+      const { data: debugSetting } = await supabaseAdmin
+        .from('retrieval_settings')
+        .select('value')
+        .eq('key', 'super_admin_debug_mode')
+        .single();
+      debugMode = debugSetting?.value === '1';
+    }
+
     res.json({
       profile,
       company: membership ? (membership.companies as any) : null,
       role: membership ? (membership.roles as any) : null,
       permissions,
       is_super_admin: profile.is_super_admin || false,
+      debug_mode: debugMode,
     });
   } catch (err) {
     next(err);

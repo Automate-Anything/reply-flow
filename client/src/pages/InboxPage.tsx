@@ -14,6 +14,7 @@ import ConversationNotes from '@/components/inbox/ConversationNotes';
 import ContactPanel from '@/components/inbox/ContactPanel';
 import InboxToolsPanel from '@/components/inbox/InboxToolsPanel';
 import ForwardMessageModal from '@/components/inbox/ForwardMessageModal';
+import { useDebugMode } from '@/hooks/useDebugMode';
 
 export default function InboxPage() {
   const [search, setSearch] = useState('');
@@ -27,6 +28,7 @@ export default function InboxPage() {
   const [inboxToolsOpen, setInboxToolsOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+  const { debugMode } = useDebugMode();
 
   // Draft persistence
   const draftRef = useRef<string>('');
@@ -237,7 +239,7 @@ export default function InboxPage() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full" data-component="InboxPage">
       {/* Conversation list / Inbox tools */}
       <div className={`${activeConversation ? 'hidden md:flex' : 'flex'} h-full w-full md:w-auto`}>
         {inboxToolsOpen ? (
@@ -300,6 +302,7 @@ export default function InboxPage() {
               onCancelReply={() => setReplyingTo(null)}
               onMessageUpdate={handleMessageUpdate}
               onForward={setForwardingMessage}
+              isDebugMode={debugMode}
             />
           </div>
 

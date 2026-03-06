@@ -16,6 +16,8 @@ import {
   extractMarkdown, extractHtml, extractCsv, extractJson,
   extractSpreadsheet, extractCode, extractConfig,
 } from './contentProcessors.js';
+import type { PipelineProgressCallback } from './pipelineEvents.js';
+import { emitStarted, emitCompleted } from './pipelineEvents.js';
 
 // ── Types ──────────────────────────────────────────
 
@@ -341,51 +343,80 @@ export async function processDocument(
   buffer: Buffer,
   fileName: string,
   mimeType: string,
+  onProgress?: PipelineProgressCallback,
 ): Promise<ProcessedDocument> {
   // Classify content to determine the right processing strategy
+  emitStarted(onProgress, 'classification');
   const classification = classifyContent(buffer, fileName, mimeType);
+  emitCompleted(onProgress, 'classification', {
+    strategy: classification.strategy,
+    contentType: classification.contentType,
+    confidence: classification.confidence,
+  });
 
+  emitStarted(onProgress, 'extraction', { strategy: classification.strategy, contentType: classification.contentType });
+
+  let result: ProcessedDocument;
   switch (classification.strategy) {
     case 'document_pipeline': {
       // Existing prose extractors (PDF, DOCX)
       if (classification.contentType === 'prose') {
         const ext = fileName.split('.').pop()?.toLowerCase();
         if (mimeType === 'application/pdf' || ext === 'pdf') {
-          return extractPdf(buffer);
+          result = await extractPdf(buffer);
+          break;
         }
         if (
           mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
           ext === 'docx'
         ) {
-          return extractDocx(buffer);
+          result = await extractDocx(buffer);
+          break;
         }
       }
-      return extractTxt(buffer);
+      result = extractTxt(buffer);
+      break;
     }
 
     case 'markdown_pipeline':
-      return extractMarkdown(buffer, fileName);
+      result = extractMarkdown(buffer, fileName);
+      break;
 
     case 'html_pipeline':
-      return extractHtml(buffer, fileName);
+      result = extractHtml(buffer, fileName);
+      break;
 
     case 'structured_data':
-      return extractJson(buffer, fileName);
+      result = extractJson(buffer, fileName);
+      break;
 
     case 'tabular_pipeline':
       if (classification.contentType === 'spreadsheet') {
-        return extractSpreadsheet(buffer, fileName);
+        result = await extractSpreadsheet(buffer, fileName);
+        break;
       }
-      return extractCsv(buffer, fileName);
+      result = extractCsv(buffer, fileName);
+      break;
 
     case 'code_pipeline':
       if (classification.contentType === 'config') {
-        return extractConfig(buffer, fileName);
+        result = extractConfig(buffer, fileName);
+        break;
       }
-      return extractCode(buffer, fileName);
+      result = extractCode(buffer, fileName);
+      break;
 
     case 'text_fallback':
     default:
-      return extractTxt(buffer);
+      result = extractTxt(buffer);
+      break;
   }
+
+  emitCompleted(onProgress, 'extraction', {
+    cleanedLength: result.cleanedText.length,
+    structuredLength: result.structuredText.length,
+    warnings: result.warnings,
+  });
+
+  return result;
 }
