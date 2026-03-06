@@ -195,7 +195,7 @@ export default function ScheduledMessagesList({
         description="This message will not be sent. This action cannot be undone."
         actionLabel="Cancel message"
         variant="destructive"
-        onConfirm={() => cancellingId && handleCancel(cancellingId)}
+        onConfirm={() => { if (cancellingId) return handleCancel(cancellingId); }}
       />
     </div>
   );
