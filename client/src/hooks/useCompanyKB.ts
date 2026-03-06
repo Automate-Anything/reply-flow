@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 export interface KnowledgeBase {
   id: string;
@@ -143,7 +144,8 @@ export function useCompanyKB() {
       formData.append('file', file);
       if (title) formData.append('title', title);
 
-      const token = localStorage.getItem('auth_token');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       const response = await fetch(`${api.defaults.baseURL}/ai/kbs/${kbId}/entries/upload/stream`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -199,7 +201,8 @@ export function useCompanyKB() {
       content: string,
       onEvent: (event: { step: string; status: string; data?: Record<string, unknown>; error?: string; timestamp: number }) => void
     ) => {
-      const token = localStorage.getItem('auth_token');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       const response = await fetch(`${api.defaults.baseURL}/ai/kbs/${kbId}/entries/stream`, {
         method: 'POST',
         headers: {
