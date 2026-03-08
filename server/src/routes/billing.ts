@@ -928,6 +928,134 @@ router.post('/addons/purchase', async (req, res, next) => {
 });
 
 // ────────────────────────────────────────────────
+// POST /api/billing/addons/update
+// Sets the exact quantity for an add-on (add, reduce, or remove entirely).
+// Body: { addon_id: 'extra_channel' | 'extra_agent', quantity: number }
+// ────────────────────────────────────────────────
+router.post('/addons/update', async (req, res, next) => {
+  try {
+    if (!stripe) {
+      res.status(503).json({ error: 'Stripe is not configured' });
+      return;
+    }
+
+    const companyId = req.companyId;
+    if (!companyId) {
+      res.status(400).json({ error: 'No company associated with this account' });
+      return;
+    }
+
+    const { addon_id, quantity } = req.body;
+    if (!addon_id) {
+      res.status(400).json({ error: 'addon_id is required' });
+      return;
+    }
+    const qty = parseInt(quantity, 10);
+    if (isNaN(qty) || qty < 0) {
+      res.status(400).json({ error: 'quantity must be a non-negative integer' });
+      return;
+    }
+
+    // Look up the add-on product
+    const { data: product, error: productError } = await supabaseAdmin
+      .from('addon_products')
+      .select('id, name, stripe_price_id')
+      .eq('id', addon_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (productError) throw productError;
+    if (!product) {
+      res.status(400).json({ error: 'Invalid or inactive add-on' });
+      return;
+    }
+    if (!product.stripe_price_id) {
+      res.status(503).json({ error: 'This add-on is not yet connected to Stripe. Please set the stripe_price_id in addon_products.' });
+      return;
+    }
+
+    // Require an active (non-trialing) Stripe subscription
+    const { data: sub, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_subscription_id, status')
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    if (subError) throw subError;
+    if (!sub?.stripe_subscription_id) {
+      res.status(400).json({ error: 'No active Stripe subscription found.' });
+      return;
+    }
+    if (sub.status !== 'active') {
+      res.status(400).json({ error: 'Add-ons can only be purchased on an active (non-trial) subscription.' });
+      return;
+    }
+
+    // Get current addon state from DB
+    const { data: addonRow } = await supabaseAdmin
+      .from('company_addons')
+      .select('quantity, stripe_subscription_item_id')
+      .eq('company_id', companyId)
+      .eq('addon_id', addon_id)
+      .maybeSingle();
+
+    if (qty === 0) {
+      // Remove addon entirely
+      if (addonRow?.stripe_subscription_item_id) {
+        await stripe.subscriptionItems.del(addonRow.stripe_subscription_item_id, { proration_behavior: 'create_prorations' });
+      }
+      await supabaseAdmin
+        .from('company_addons')
+        .delete()
+        .eq('company_id', companyId)
+        .eq('addon_id', addon_id);
+
+      res.json({ success: true, quantity: 0 });
+      return;
+    }
+
+    // qty > 0
+    if (addonRow) {
+      // Update existing row
+      if (addonRow.stripe_subscription_item_id) {
+        await stripe.subscriptionItems.update(addonRow.stripe_subscription_item_id, { quantity: qty });
+      }
+      await supabaseAdmin
+        .from('company_addons')
+        .update({ quantity: qty, updated_at: new Date().toISOString() })
+        .eq('company_id', companyId)
+        .eq('addon_id', addon_id);
+    } else {
+      // No existing row — create subscription item and DB record
+      const stripeSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id);
+      const existingItem = stripeSub.items.data.find((item) => item.price.id === product.stripe_price_id);
+
+      let stripeItemId: string;
+      if (existingItem) {
+        await stripe.subscriptionItems.update(existingItem.id, { quantity: qty });
+        stripeItemId = existingItem.id;
+      } else {
+        const newItem = await stripe.subscriptionItems.create({
+          subscription: sub.stripe_subscription_id,
+          price: product.stripe_price_id,
+          quantity: qty,
+          proration_behavior: 'create_prorations',
+        });
+        stripeItemId = newItem.id;
+      }
+
+      await supabaseAdmin
+        .from('company_addons')
+        .insert({ company_id: companyId, addon_id, quantity: qty, stripe_subscription_item_id: stripeItemId });
+    }
+
+    res.json({ success: true, quantity: qty });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
 // POST /api/billing/addons/remove
 // Removes one unit of an add-on from the company's Stripe subscription.
 // If quantity reaches 0 the subscription item is deleted entirely.

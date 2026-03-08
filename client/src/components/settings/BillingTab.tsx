@@ -145,6 +145,7 @@ export default function BillingTab() {
   const [addonProducts, setAddonProducts] = useState<AddonProduct[]>([]);
   const [purchasedAddons, setPurchasedAddons] = useState<PurchasedAddon[]>([]);
   const [addonLoading, setAddonLoading] = useState<Partial<Record<AddonId, 'adding' | 'removing'>>>({});
+  const [pendingQty, setPendingQty] = useState<Partial<Record<AddonId, number>>>({});
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -185,6 +186,26 @@ export default function BillingTab() {
   useEffect(() => {
     Promise.all([fetchSubscription(), fetchAddons()]).finally(() => setLoading(false));
   }, []);
+
+  // Keep pendingQty in sync with purchased addons (on load and after a successful update)
+  useEffect(() => {
+    const map: Partial<Record<AddonId, number>> = {};
+    purchasedAddons.forEach((a) => { map[a.addon_id] = a.quantity; });
+    setPendingQty(map);
+  }, [purchasedAddons]);
+
+  const handleAddonUpdate = async (addonId: AddonId, quantity: number) => {
+    setAddonLoading((prev) => ({ ...prev, [addonId]: 'adding' }));
+    try {
+      await api.post('/billing/addons/update', { addon_id: addonId, quantity });
+      await fetchAddons();
+      toast.success('Add-on updated.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to update add-on. Please try again.');
+    } finally {
+      setAddonLoading((prev) => { const next = { ...prev }; delete next[addonId]; return next; });
+    }
+  };
 
   // Redirect to Stripe Checkout — with_trial: true adds a 7-day free trial period
   const handleCheckout = async (planId: PlanId, withTrial = false) => {
@@ -275,29 +296,6 @@ export default function BillingTab() {
     }
   };
 
-  const handleAddonPurchase = async (addonId: AddonId) => {
-    setAddonLoading((prev) => ({ ...prev, [addonId]: 'adding' }));
-    try {
-      await api.post('/billing/addons/purchase', { addon_id: addonId });
-      await fetchAddons();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error ?? 'Failed to add add-on. Please try again.');
-    } finally {
-      setAddonLoading((prev) => { const next = { ...prev }; delete next[addonId]; return next; });
-    }
-  };
-
-  const handleAddonRemove = async (addonId: AddonId) => {
-    setAddonLoading((prev) => ({ ...prev, [addonId]: 'removing' }));
-    try {
-      await api.post('/billing/addons/remove', { addon_id: addonId });
-      await fetchAddons();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error ?? 'Failed to remove add-on. Please try again.');
-    } finally {
-      setAddonLoading((prev) => { const next = { ...prev }; delete next[addonId]; return next; });
-    }
-  };
 
   if (loading) {
     return <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>;
@@ -580,7 +578,9 @@ export default function BillingTab() {
           <CardContent className="space-y-4">
             {addonProducts.map((product) => {
               const purchased = purchasedAddons.find((p) => p.addon_id === product.id);
-              const qty = purchased?.quantity ?? 0;
+              const currentQty = purchased?.quantity ?? 0;
+              const pendingQ = pendingQty[product.id] ?? 0;
+              const hasChanges = pendingQ !== currentQty;
               const state = addonLoading[product.id];
               const busy = !!state;
 
@@ -598,23 +598,33 @@ export default function BillingTab() {
                       size="icon"
                       variant="outline"
                       className="h-8 w-8"
-                      disabled={busy || qty === 0}
-                      onClick={() => handleAddonRemove(product.id)}
+                      disabled={busy || pendingQ === 0}
+                      onClick={() => setPendingQty((p) => ({ ...p, [product.id]: Math.max(0, (p[product.id] ?? currentQty) - 1) }))}
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </Button>
                     <span className="w-5 text-center text-sm font-semibold tabular-nums">
-                      {state === 'adding' || state === 'removing' ? '…' : qty}
+                      {busy ? '…' : pendingQ}
                     </span>
                     <Button
                       size="icon"
                       variant="outline"
                       className="h-8 w-8"
                       disabled={busy}
-                      onClick={() => handleAddonPurchase(product.id)}
+                      onClick={() => setPendingQty((p) => ({ ...p, [product.id]: (p[product.id] ?? currentQty) + 1 }))}
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
+                    {hasChanges && (
+                      <Button
+                        size="sm"
+                        className="ml-1"
+                        disabled={busy}
+                        onClick={() => handleAddonUpdate(product.id, pendingQ)}
+                      >
+                        {busy ? 'Saving…' : 'Confirm'}
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
