@@ -43,7 +43,9 @@ export async function checkPlanLimit(
 
   if (!sub) return { allowed: true, used: 0, included: Infinity };
 
-  const plan = sub.plan as unknown as { channels: number; agents: number };
+  const plan = sub.plan as unknown as { channels: number; agents: number } | null;
+  if (!plan) return { allowed: true, used: 0, included: Infinity };
+
   const baseIncluded = sub.status === 'trialing' ? TRIAL_LIMITS[resource] : plan[resource];
 
   // Add any purchased add-ons to the base limit
