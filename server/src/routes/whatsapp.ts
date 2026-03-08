@@ -29,8 +29,8 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
     const channel = await whapi.createChannel(channelName);
 
     // 2. Fund the channel based on subscription status
-    //    - Trialing: fund for remaining trial days (capped at 7)
-    //    - Active:   fund for 14 days (WhAPI limit per extension)
+    //    - Trialing: fund for remaining trial days (max 7)
+    //    - Active:   fund for 30 days (monthly billing period)
     //    - No sub / cancelled / past_due: fund for 1 day only
     let daysToFund = 1;
     try {
@@ -42,9 +42,9 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
 
       if (sub?.status === 'trialing' && sub.trial_ends_at) {
         const msRemaining = new Date(sub.trial_ends_at).getTime() - Date.now();
-        daysToFund = Math.min(7, Math.max(1, Math.ceil(msRemaining / 86_400_000)));
+        daysToFund = Math.max(1, Math.ceil(msRemaining / 86_400_000));
       } else if (sub?.status === 'active') {
-        daysToFund = 14;
+        daysToFund = 30;
       }
     } catch (err) {
       console.error('Failed to look up subscription for Whapi funding, defaulting to 1 day:', err);
@@ -63,6 +63,7 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
       .from('whatsapp_channels')
       .insert({
         company_id: companyId,
+        user_id: req.userId,
         created_by: req.userId,
         channel_id: channel.id,
         channel_token: channel.token,
