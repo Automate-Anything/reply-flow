@@ -44,7 +44,7 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
         const msRemaining = new Date(sub.trial_ends_at).getTime() - Date.now();
         daysToFund = Math.max(1, Math.ceil(msRemaining / 86_400_000));
       } else if (sub?.status === 'active') {
-        daysToFund = 30;
+        daysToFund = 14;
       }
     } catch (err) {
       console.error('Failed to look up subscription for Whapi funding, defaulting to 1 day:', err);
