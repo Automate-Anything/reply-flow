@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle, Clock } from 'lucide-react';
+import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle, Clock, Plus, Minus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,19 @@ import api from '@/lib/api';
 import { useSearchParams } from 'react-router-dom';
 
 type PlanId = 'starter' | 'pro' | 'scale';
+type AddonId = 'extra_channel' | 'extra_agent';
+
+interface AddonProduct {
+  id: AddonId;
+  name: string;
+  description: string;
+  price_monthly_cents: number;
+}
+
+interface PurchasedAddon {
+  addon_id: AddonId;
+  quantity: number;
+}
 
 interface Plan {
   id: PlanId;
@@ -129,6 +142,9 @@ export default function BillingTab() {
   const [cancelling, setCancelling] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [addonProducts, setAddonProducts] = useState<AddonProduct[]>([]);
+  const [purchasedAddons, setPurchasedAddons] = useState<PurchasedAddon[]>([]);
+  const [addonLoading, setAddonLoading] = useState<Partial<Record<AddonId, 'adding' | 'removing'>>>({});
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -157,8 +173,17 @@ export default function BillingTab() {
       .catch(() => {});
   };
 
+  const fetchAddons = () => {
+    return api.get('/billing/addons')
+      .then(({ data }) => {
+        setAddonProducts(data.available ?? []);
+        setPurchasedAddons(data.purchased ?? []);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
-    fetchSubscription().finally(() => setLoading(false));
+    Promise.all([fetchSubscription(), fetchAddons()]).finally(() => setLoading(false));
   }, []);
 
   // Redirect to Stripe Checkout — with_trial: true adds a 7-day free trial period
@@ -247,6 +272,30 @@ export default function BillingTab() {
       toast.error(err?.response?.data?.error ?? 'Failed to reactivate. Please try again.');
     } finally {
       setReactivating(false);
+    }
+  };
+
+  const handleAddonPurchase = async (addonId: AddonId) => {
+    setAddonLoading((prev) => ({ ...prev, [addonId]: 'adding' }));
+    try {
+      await api.post('/billing/addons/purchase', { addon_id: addonId });
+      await fetchAddons();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to add add-on. Please try again.');
+    } finally {
+      setAddonLoading((prev) => { const next = { ...prev }; delete next[addonId]; return next; });
+    }
+  };
+
+  const handleAddonRemove = async (addonId: AddonId) => {
+    setAddonLoading((prev) => ({ ...prev, [addonId]: 'removing' }));
+    try {
+      await api.post('/billing/addons/remove', { addon_id: addonId });
+      await fetchAddons();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to remove add-on. Please try again.');
+    } finally {
+      setAddonLoading((prev) => { const next = { ...prev }; delete next[addonId]; return next; });
     }
   };
 
@@ -518,6 +567,61 @@ export default function BillingTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Add-ons — only shown to active (non-trial) Stripe subscribers */}
+      {hasStripeSubscription && !isTrialing && subscriptionStatus === 'active' && addonProducts.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Add-ons</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Expand your plan with additional channels or agents. Billed monthly, prorated from purchase date.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {addonProducts.map((product) => {
+              const purchased = purchasedAddons.find((p) => p.addon_id === product.id);
+              const qty = purchased?.quantity ?? 0;
+              const state = addonLoading[product.id];
+              const busy = !!state;
+
+              return (
+                <div key={product.id} className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{product.name}</p>
+                    <p className="text-xs text-muted-foreground">{product.description}</p>
+                  </div>
+                  <div className="shrink-0 text-sm font-semibold text-muted-foreground">
+                    ${(product.price_monthly_cents / 100).toFixed(0)}/mo each
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      disabled={busy || qty === 0}
+                      onClick={() => handleAddonRemove(product.id)}
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="w-5 text-center text-sm font-semibold tabular-nums">
+                      {state === 'adding' || state === 'removing' ? '…' : qty}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      disabled={busy}
+                      onClick={() => handleAddonPurchase(product.id)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Checkout CTA — shown when a plan is selected and user has no existing subscription */}
       {selected && !isTrialing && (
