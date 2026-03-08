@@ -28,36 +28,6 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
     const channelName = req.body.name?.trim() || `reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`;
     const channel = await whapi.createChannel(channelName);
 
-    // 2. Fund the channel based on subscription status
-    //    - Trialing: fund for remaining trial days (max 7)
-    //    - Active:   fund for 30 days (monthly billing period)
-    //    - No sub / cancelled / past_due: fund for 1 day only
-    let daysToFund = 1;
-    try {
-      const { data: sub } = await supabaseAdmin
-        .from('subscriptions')
-        .select('status, trial_ends_at')
-        .eq('company_id', companyId)
-        .maybeSingle();
-
-      if (sub?.status === 'trialing' && sub.trial_ends_at) {
-        const msRemaining = new Date(sub.trial_ends_at).getTime() - Date.now();
-        daysToFund = Math.max(1, Math.ceil(msRemaining / 86_400_000));
-      } else if (sub?.status === 'active') {
-        daysToFund = 30;
-      }
-    } catch (err) {
-      console.error('Failed to look up subscription for Whapi funding, defaulting to 1 day:', err);
-    }
-
-    try {
-      await whapi.extendChannel(channel.id, daysToFund);
-    } catch (err) {
-      // Clean up the orphaned channel on WhAPI if funding fails
-      await whapi.deleteChannel(channel.id).catch(() => {});
-      throw err;
-    }
-
     // 3. Save to DB with pending status
     const { data: insertedRow, error: dbError } = await supabaseAdmin
       .from('whatsapp_channels')
