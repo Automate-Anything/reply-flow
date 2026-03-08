@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loader2, Send, StickyNote, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConversationNotes } from '@/hooks/useConversationNotes';
@@ -102,14 +103,19 @@ export default function ConversationNotes({ sessionId, onClose }: ConversationNo
                   <span className="text-[10px] text-muted-foreground">
                     {formatNoteDate(note.created_at)}
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100"
-                    onClick={() => handleDelete(note.id)}
+                  <ConfirmDialog
+                    title="Delete this note?"
+                    description="This action cannot be undone."
+                    onConfirm={() => handleDelete(note.id)}
                   >
-                    <Trash2 className="h-3 w-3 text-muted-foreground" />
-                  </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </ConfirmDialog>
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-xs">{note.content}</p>
               </div>

@@ -2,8 +2,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { buildSystemPrompt, buildClassificationPrompt, buildScenarioResponsePrompt } from './promptBuilder.js';
-import type { ProfileData, KBEntry, ChannelOverrides } from './promptBuilder.js';
+import type { ProfileData, KBEntry, ChannelOverrides, PromptSection } from './promptBuilder.js';
 import { isEmbeddingsAvailable, searchKnowledgeBase } from './embeddings.js';
+import { classifyQuery } from './queryClassifier.js';
+import { getContactContext } from './sessionMemory.js';
+import type { ContactMemory } from './sessionMemory.js';
+import { isDebugModeEnabled } from './debugMode.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -15,12 +19,22 @@ const RESPONSE_MODEL = 'claude-sonnet-4-20250514';
 
 // ── Types ──────────────────────────────────────────
 
+interface DebugContext {
+  reformulatedQuery: string;
+  queryClassification: { method: string; reasoning: string; vectorWeight: number; ftsWeight: number } | null;
+  searchResults: Array<{ title: string; confidence: string; rrfScore: number; vectorRank: number; ftsRank: number; contentPreview: string }>;
+  kbFallbackUsed: boolean;
+}
+
 interface AIContext {
   profileData: ProfileData;
   kbEntries: KBEntry[];
+  kbLowConfidence?: boolean;
   channelOverrides?: ChannelOverrides;
   maxTokens: number;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  contactMemories: ContactMemory[];
+  debugContext?: DebugContext;
 }
 
 export interface ClassificationResult {
@@ -153,7 +167,7 @@ export async function shouldAIRespond(
   // 1. Get session + channel_id
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
-    .select('channel_id, human_takeover, auto_resume_at')
+    .select('channel_id, human_takeover, auto_resume_at, contact_id')
     .eq('id', sessionId)
     .single();
 
@@ -231,29 +245,61 @@ export async function shouldAIRespond(
   }));
 
   // 8. Semantic search for relevant KB content (or fall back to loading all)
+  const debugMode = await isDebugModeEnabled();
   let kbData: KBEntry[] = [];
+  let kbLowConfidence = false;
+  let kbFallbackUsed = false;
+  let searchQuery = messages[messages.length - 1]?.content || '';
+  let debugQC: DebugContext['queryClassification'] = null;
+  let debugSearchResults: DebugContext['searchResults'] = [];
 
   if (isEmbeddingsAvailable()) {
-    const searchQuery = await reformulateQuery(messages);
-    const searchResults = await searchKnowledgeBase(companyId, searchQuery);
+    searchQuery = await reformulateQuery(messages);
+    const qc = classifyQuery(searchQuery);
+    const searchResults = await searchKnowledgeBase(companyId, searchQuery, {
+      retrievalMethod: qc.method,
+      vectorWeight: qc.vectorWeight,
+      ftsWeight: qc.ftsWeight,
+    });
+
+    if (debugMode) {
+      debugQC = { method: qc.method, reasoning: qc.reasoning, vectorWeight: qc.vectorWeight, ftsWeight: qc.ftsWeight };
+      debugSearchResults = searchResults.map((r) => ({
+        title: (r.metadata?.sourceEntryTitle as string) || 'KB',
+        confidence: r.confidence,
+        rrfScore: r.rrfScore,
+        vectorRank: r.vectorRank,
+        ftsRank: r.ftsRank,
+        contentPreview: r.content.slice(0, 300),
+      }));
+    }
 
     if (searchResults.length > 0) {
+      kbLowConfidence = searchResults.every((r) => r.confidence === 'low');
       kbData = searchResults.map((r) => ({
         id: r.id,
         title: (r.metadata?.sourceEntryTitle as string) || 'Knowledge Base',
         content: r.content,
         knowledge_base_id: r.knowledgeBaseId,
+        sectionHeading: (r.metadata?.sectionHeading as string) || null,
       }));
     }
   }
 
   // Fallback: load all entries if search returned nothing or embeddings unavailable
   if (kbData.length === 0) {
+    kbFallbackUsed = true;
     const { data: kbEntries } = await supabaseAdmin
       .from('knowledge_base_entries')
       .select('id, title, content, knowledge_base_id')
       .eq('company_id', companyId);
     kbData = (kbEntries || []) as KBEntry[];
+  }
+
+  // 8b. Load contact memories for returning contacts
+  let contactMemories: ContactMemory[] = [];
+  if (session.contact_id) {
+    contactMemories = await getContactContext(session.contact_id, companyId, searchQuery);
   }
 
   // 9. Resolve profile_data — prefer agent's profile if assigned
@@ -275,9 +321,14 @@ export async function shouldAIRespond(
 
   const maxTokens = channelSettings.max_tokens || 500;
 
+  // Build debug context if debug mode is on
+  const debugContext: DebugContext | undefined = debugMode
+    ? { reformulatedQuery: searchQuery, queryClassification: debugQC, searchResults: debugSearchResults, kbFallbackUsed }
+    : undefined;
+
   return {
     action: 'respond',
-    context: { profileData, kbEntries: kbData, channelOverrides, maxTokens, messages },
+    context: { profileData, kbEntries: kbData, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories, debugContext },
   };
 }
 
@@ -295,7 +346,7 @@ export async function classifyMessage(
     return { scenario_label: null, confidence: 'low' };
   }
 
-  const classificationPrompt = buildClassificationPrompt(profileData);
+  const classificationPrompt = await buildClassificationPrompt(profileData);
   if (!classificationPrompt) {
     return { scenario_label: null, confidence: 'high' };
   }
@@ -341,6 +392,45 @@ export async function classifyMessage(
   }
 }
 
+// ── Contact memory formatting ─────────────────────
+
+function formatContactMemories(memories: ContactMemory[]): string {
+  const summary = memories.find((m) => m.memory_type === 'summary');
+  const others = memories.filter((m) => m.memory_type !== 'summary');
+
+  const parts: string[] = ['## What You Know About This Contact From Previous Conversations'];
+
+  if (summary) {
+    parts.push(`**Last conversation:** ${summary.content}`);
+  }
+
+  if (others.length > 0) {
+    const grouped: Record<string, string[]> = {};
+    for (const m of others) {
+      if (!grouped[m.memory_type]) grouped[m.memory_type] = [];
+      grouped[m.memory_type].push(m.content);
+    }
+
+    const labels: Record<string, string> = {
+      preference: 'Preferences',
+      fact: 'Key Facts',
+      decision: 'Past Agreements',
+      issue: 'Unresolved Issues',
+    };
+
+    for (const [type, items] of Object.entries(grouped)) {
+      parts.push(`**${labels[type] || type}:**`);
+      parts.push(items.map((item) => `- ${item}`).join('\n'));
+    }
+  }
+
+  parts.push(
+    '\nUse this context naturally — don\'t explicitly mention "your previous conversation" unless the contact brings it up first. If an issue was unresolved, proactively check if it\'s been resolved.'
+  );
+
+  return parts.join('\n');
+}
+
 // ── AI reply generation ────────────────────────────
 
 /**
@@ -354,31 +444,50 @@ export async function generateAndSendAIReply(
 ): Promise<void> {
   if (!anthropic) return;
 
-  const { profileData, kbEntries, channelOverrides, maxTokens, messages } = context;
+  const { profileData, kbEntries, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories, debugContext } = context;
   const hasScenarios = !!(profileData.response_flow?.scenarios?.length);
 
   let systemPrompt: string;
+  let classification: ClassificationResult | null = null;
+  const promptSections: PromptSection[] = [];
+  const onSection = debugContext ? (s: PromptSection) => { promptSections.push(s); } : undefined;
 
   if (hasScenarios) {
     try {
-      const classification = await classifyMessage(profileData, messages);
+      classification = await classifyMessage(profileData, messages);
       systemPrompt = await buildScenarioResponsePrompt(
-        profileData, kbEntries, classification.scenario_label, channelOverrides,
+        profileData, kbEntries, classification.scenario_label, channelOverrides, onSection,
       );
     } catch (err) {
       console.error('Classification failed, falling back to full prompt:', err);
-      systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+      systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides, onSection);
     }
   } else {
-    systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides);
+    systemPrompt = await buildSystemPrompt(profileData, kbEntries, channelOverrides, onSection);
   }
 
+  // Warn the AI when KB results are low confidence or absent
+  if (kbLowConfidence || kbEntries.length === 0) {
+    const kbNote = 'Note: No highly relevant knowledge base content was found for this query. If you are not confident in your answer, let the customer know you will look into it and get back to them.';
+    systemPrompt += '\n\n' + kbNote;
+    onSection?.({ name: 'KBConfidenceNote', content: kbNote });
+  }
+
+  // Append contact memories from previous sessions
+  if (contactMemories.length > 0) {
+    const memoriesSection = formatContactMemories(contactMemories);
+    systemPrompt += '\n\n' + memoriesSection;
+    onSection?.({ name: 'ContactMemories', content: memoriesSection });
+  }
+
+  const startTime = Date.now();
   const response = await anthropic.messages.create({
     model: RESPONSE_MODEL,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages,
   });
+  const responseTimeMs = Date.now() - startTime;
 
   const aiReply = response.content
     .filter((block) => block.type === 'text')
@@ -387,7 +496,29 @@ export async function generateAndSendAIReply(
 
   if (!aiReply.trim()) return;
 
-  await sendAndStoreMessage(companyId, sessionId, aiReply);
+  // Build debug metadata if debug mode was enabled
+  const metadata = debugContext ? {
+    debug: {
+      reformulatedQuery: debugContext.reformulatedQuery,
+      queryClassification: debugContext.queryClassification,
+      kbSearchResults: debugContext.searchResults,
+      kbFallbackUsed: debugContext.kbFallbackUsed,
+      kbLowConfidence: kbLowConfidence || false,
+      scenarioLabel: classification?.scenario_label ?? null,
+      scenarioConfidence: classification?.confidence ?? null,
+      promptSections,
+      systemPrompt,
+      tokens: {
+        input: response.usage?.input_tokens ?? 0,
+        output: response.usage?.output_tokens ?? 0,
+      },
+      responseTimeMs,
+      model: RESPONSE_MODEL,
+      stopReason: response.stop_reason ?? 'unknown',
+    },
+  } : undefined;
+
+  await sendAndStoreMessage(companyId, sessionId, aiReply, metadata);
 }
 
 /**
@@ -455,7 +586,8 @@ export async function sendOutsideHoursReply(
 async function sendAndStoreMessage(
   companyId: string,
   sessionId: string,
-  message: string
+  message: string,
+  metadata?: Record<string, unknown>,
 ): Promise<void> {
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
@@ -494,6 +626,7 @@ async function sendAndStoreMessage(
     status: 'sent',
     read: true,
     message_ts: now,
+    metadata: metadata ?? null,
   });
 
   await supabaseAdmin

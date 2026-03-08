@@ -14,6 +14,9 @@ export interface Message {
   scheduled_for: string | null;
   created_at: string;
   metadata: Record<string, unknown> | null;
+  is_starred: boolean;
+  is_pinned: boolean;
+  reactions: Array<{ emoji: string; user_id: string }>;
 }
 
 export function useMessages(sessionId: string | null) {
@@ -41,9 +44,9 @@ export function useMessages(sessionId: string | null) {
   }, [fetchMessages]);
 
   const sendMessage = useCallback(
-    async (body: string) => {
+    async (body: string, quotedMessageId?: string) => {
       if (!sessionId) return;
-      const { data } = await api.post('/messages/send', { sessionId, body });
+      const { data } = await api.post('/messages/send', { sessionId, body, quotedMessageId });
       setMessages((prev) => [...prev, data.message]);
       return data.message;
     },

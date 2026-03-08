@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,8 @@ import { useCompanyKB } from '@/hooks/useCompanyKB';
 import { PlanGate } from '@/components/auth/PlanGate';
 import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
+import { useDebugMode } from '@/hooks/useDebugMode';
 
 export default function KnowledgeBasePage() {
   const navigate = useNavigate();
@@ -22,9 +24,11 @@ export default function KnowledgeBasePage() {
   const {
     knowledgeBases, loading,
     createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase,
-    fetchKBEntries, addKBEntry, uploadKBFile, updateKBEntry, deleteKBEntry,
-    fetchEntryChunks, reembedEntry, searchKB,
+    fetchKBEntries, addKBEntry, uploadKBFile, uploadKBFileStream, addKBEntryStream,
+    updateKBEntry, deleteKBEntry,
+    fetchEntryChunks, updateChunk, deleteChunk, reembedEntry, searchKB,
   } = useCompanyKB();
+  const { debugMode } = useDebugMode();
 
   // Create KB form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -50,7 +54,16 @@ export default function KnowledgeBasePage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<KBSearchResult[]>([]);
+  const [searchClassification, setSearchClassification] = useState<{ method: string; reasoning: string } | null>(null);
   const [searching, setSearching] = useState(false);
+
+  // Protect create/edit forms from accidental navigation
+  const isPageDirty = useMemo(() => {
+    if (showCreateForm && (newName.trim() || newDescription.trim())) return true;
+    if (editingKbId && (editName.trim() || editDescription.trim())) return true;
+    return false;
+  }, [showCreateForm, newName, newDescription, editingKbId, editName, editDescription]);
+  useFormDirtyGuard(isPageDirty);
 
   const handleCreate = async () => {
     if (!newName.trim()) {
@@ -120,6 +133,9 @@ export default function KnowledgeBasePage() {
     try {
       await deleteKnowledgeBase(kbId);
       if (expandedKbId === kbId) setExpandedKbId(null);
+      // Clear stale search results — deleted KB entries may still be shown
+      setSearchQuery('');
+      setSearchResults([]);
       toast.success('Knowledge base deleted');
     } catch {
       toast.error('Failed to delete knowledge base');
@@ -145,6 +161,28 @@ export default function KnowledgeBasePage() {
       return newEntry;
     },
     [uploadKBFile]
+  );
+
+  const handleUploadFileStream = useCallback(
+    (kbId: string) => async (file: File, title: string | undefined, onEvent: (event: any) => void) => {
+      const entry = await uploadKBFileStream(kbId, file, title, onEvent);
+      if (entry) {
+        setKbEntries((prev) => ({ ...prev, [kbId]: [entry, ...(prev[kbId] || [])] }));
+      }
+      return entry;
+    },
+    [uploadKBFileStream]
+  );
+
+  const handleAddEntryStream = useCallback(
+    (kbId: string) => async (title: string, content: string, onEvent: (event: any) => void) => {
+      const entry = await addKBEntryStream(kbId, title, content, onEvent);
+      if (entry) {
+        setKbEntries((prev) => ({ ...prev, [kbId]: [entry, ...(prev[kbId] || [])] }));
+      }
+      return entry;
+    },
+    [addKBEntryStream]
   );
 
   const handleUpdateEntry = useCallback(
@@ -184,14 +222,30 @@ export default function KnowledgeBasePage() {
     [reembedEntry]
   );
 
+  const handleUpdateChunk = useCallback(
+    (kbId: string) => async (entryId: string, chunkId: string, content: string) => {
+      return updateChunk(kbId, entryId, chunkId, content);
+    },
+    [updateChunk]
+  );
+
+  const handleDeleteChunk = useCallback(
+    (kbId: string) => async (entryId: string, chunkId: string) => {
+      return deleteChunk(kbId, entryId, chunkId);
+    },
+    [deleteChunk]
+  );
+
   const handleSearch = async () => {
     const q = searchQuery.trim();
     if (!q) return;
     setSearching(true);
     setSearchResults([]);
+    setSearchClassification(null);
     try {
-      const results = await searchKB(q);
+      const { results, queryClassification } = await searchKB(q);
       setSearchResults(results);
+      setSearchClassification(queryClassification ?? null);
     } catch {
       toast.error('Search failed');
     } finally {
@@ -210,7 +264,7 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="mx-auto max-w-3xl space-y-6 p-6" data-component="KnowledgeBasePage">
       <div className="flex items-center gap-3">
         {backPath && (
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(backPath)}>
@@ -368,7 +422,12 @@ export default function KnowledgeBasePage() {
                       onUpdate={handleUpdateEntry(kb.id)}
                       onDelete={handleDeleteEntry(kb.id)}
                       onFetchChunks={handleFetchChunks(kb.id)}
+                      onUpdateChunk={handleUpdateChunk(kb.id)}
+                      onDeleteChunk={handleDeleteChunk(kb.id)}
                       onReembed={handleReembed(kb.id)}
+                      onUploadStream={handleUploadFileStream(kb.id)}
+                      onAddStream={handleAddEntryStream(kb.id)}
+                      isDebugMode={debugMode}
                       loading={isLoadingEntries}
                     />
                   </div>
@@ -450,23 +509,39 @@ export default function KnowledgeBasePage() {
 
               {!searching && searchResults.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">{searchResults.length} results</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground">{searchResults.length} results</p>
+                    {searchClassification && (
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary" title={searchClassification.reasoning}>
+                        {searchClassification.method.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
                   {searchResults.map((result, i) => (
                     <div key={result.id} className="rounded border bg-muted/30 p-2.5 space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">#{i + 1}</span>
                         <span className="text-[11px] text-muted-foreground">
-                          RRF: {result.rrfScore.toFixed(4)}
+                          {searchClassification?.method === 'vector' ? 'Sim' : searchClassification?.method === 'fts' ? 'FTS' : 'RRF'}: {result.rrfScore.toFixed(4)}
                         </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          Vector: #{result.vectorRank}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          FTS: #{result.ftsRank}
-                        </span>
+                        {result.vectorRank > 0 && (
+                          <span className="text-[11px] text-muted-foreground">
+                            Vector: #{result.vectorRank}
+                          </span>
+                        )}
+                        {result.ftsRank > 0 && (
+                          <span className="text-[11px] text-muted-foreground">
+                            FTS: #{result.ftsRank}
+                          </span>
+                        )}
                       </div>
+                      {result.relevanceReason && (
+                        <p className="text-xs text-primary/80 italic">
+                          {result.relevanceReason}
+                        </p>
+                      )}
                       <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
-                        {result.content.slice(0, 300)}{result.content.length > 300 ? '...' : ''}
+                        {result.snippet || result.content.slice(0, 300)}{!result.snippet && result.content.length > 300 ? '...' : ''}
                       </p>
                     </div>
                   ))}

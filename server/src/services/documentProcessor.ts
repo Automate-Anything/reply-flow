@@ -2,11 +2,22 @@
  * Document Processing Pipeline for RAG
  *
  * Handles format-specific text extraction, cleaning, metadata extraction,
- * and structure preservation for PDF, DOCX, and TXT files.
+ * and structure preservation for any supported file type.
+ *
+ * Uses a content classifier to detect file type and route to the
+ * appropriate processor (prose, markdown, HTML, CSV, JSON, XLSX, code, config).
  *
  * Returns both cleaned text (for storage) and structured markdown text
  * (for section-aware chunking in the embeddings service).
  */
+
+import { classifyContent, type ContentType, type ProcessingStrategy } from './contentClassifier.js';
+import {
+  extractMarkdown, extractHtml, extractCsv, extractJson,
+  extractSpreadsheet, extractCode, extractConfig,
+} from './contentProcessors.js';
+import type { PipelineProgressCallback } from './pipelineEvents.js';
+import { emitStarted, emitCompleted } from './pipelineEvents.js';
 
 // ── Types ──────────────────────────────────────────
 
@@ -26,7 +37,12 @@ export interface DocumentMetadata {
   author: string | null;
   createdDate: string | null;
   pageCount: number | null;
-  sourceType: 'pdf' | 'docx' | 'txt';
+  sourceType: string;
+  contentType?: ContentType;
+  strategy?: ProcessingStrategy;
+  schema?: Record<string, string>;
+  rowCount?: number;
+  language?: string | null;
 }
 
 interface PageText {
@@ -165,7 +181,9 @@ function cleanPages(pages: PageText[]): PageText[] {
 
 /** Extract text from PDF with per-page tracking and metadata */
 async function extractPdf(buffer: Buffer): Promise<ProcessedDocument> {
-  const pdfParse = (await import('pdf-parse')).default;
+  // Import internal module directly to avoid pdf-parse's test file loading bug
+  // (it tries to read test/data/05-versions-space.pdf on default import)
+  const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
 
   const pages: PageText[] = [];
   let pageNum = 0;
@@ -325,23 +343,105 @@ export async function processDocument(
   buffer: Buffer,
   fileName: string,
   mimeType: string,
+  onProgress?: PipelineProgressCallback,
 ): Promise<ProcessedDocument> {
-  const ext = fileName.split('.').pop()?.toLowerCase();
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
 
-  if (mimeType === 'application/pdf' || ext === 'pdf') {
-    return extractPdf(buffer);
+  // Classify content to determine the right processing strategy
+  emitStarted(onProgress, 'classification', { fileName, fileSize: buffer.length, mimeType });
+  const classification = classifyContent(buffer, fileName, mimeType);
+  emitCompleted(onProgress, 'classification', {
+    strategy: classification.strategy,
+    contentType: classification.contentType,
+    confidence: classification.confidence,
+    fileName,
+    fileSize: buffer.length,
+    mimeType,
+    extension: ext ? `.${ext}` : null,
+  });
+
+  // Determine which extractor will be used
+  let extractorName = 'text';
+  if (classification.strategy === 'document_pipeline' && classification.contentType === 'prose') {
+    if (mimeType === 'application/pdf' || ext === 'pdf') extractorName = 'pdf';
+    else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === 'docx') extractorName = 'docx';
+  } else if (classification.strategy === 'markdown_pipeline') extractorName = 'markdown';
+  else if (classification.strategy === 'html_pipeline') extractorName = 'html';
+  else if (classification.strategy === 'structured_data') extractorName = 'json';
+  else if (classification.strategy === 'tabular_pipeline') extractorName = classification.contentType === 'spreadsheet' ? 'spreadsheet' : 'csv';
+  else if (classification.strategy === 'code_pipeline') extractorName = classification.contentType === 'config' ? 'config' : 'code';
+
+  emitStarted(onProgress, 'extraction', {
+    strategy: classification.strategy,
+    contentType: classification.contentType,
+    extractor: extractorName,
+  });
+
+  let result: ProcessedDocument;
+  switch (classification.strategy) {
+    case 'document_pipeline': {
+      // Existing prose extractors (PDF, DOCX)
+      if (classification.contentType === 'prose') {
+        if (mimeType === 'application/pdf' || ext === 'pdf') {
+          result = await extractPdf(buffer);
+          break;
+        }
+        if (
+          mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          ext === 'docx'
+        ) {
+          result = await extractDocx(buffer);
+          break;
+        }
+      }
+      result = extractTxt(buffer);
+      break;
+    }
+
+    case 'markdown_pipeline':
+      result = extractMarkdown(buffer, fileName);
+      break;
+
+    case 'html_pipeline':
+      result = extractHtml(buffer, fileName);
+      break;
+
+    case 'structured_data':
+      result = extractJson(buffer, fileName);
+      break;
+
+    case 'tabular_pipeline':
+      if (classification.contentType === 'spreadsheet') {
+        result = await extractSpreadsheet(buffer, fileName);
+        break;
+      }
+      result = extractCsv(buffer, fileName);
+      break;
+
+    case 'code_pipeline':
+      if (classification.contentType === 'config') {
+        result = extractConfig(buffer, fileName);
+        break;
+      }
+      result = extractCode(buffer, fileName);
+      break;
+
+    case 'text_fallback':
+    default:
+      result = extractTxt(buffer);
+      break;
   }
 
-  if (
-    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    ext === 'docx'
-  ) {
-    return extractDocx(buffer);
-  }
+  emitCompleted(onProgress, 'extraction', {
+    extractor: extractorName,
+    cleanedLength: result.cleanedText.length,
+    structuredLength: result.structuredText.length,
+    metadata: result.metadata,
+    warningTexts: result.warnings,
+    warningCount: result.warnings.length,
+    contentPreview: result.cleanedText.slice(0, 500),
+    structuredPreview: result.structuredText.slice(0, 500),
+  });
 
-  if (mimeType === 'text/plain' || ext === 'txt') {
-    return extractTxt(buffer);
-  }
-
-  throw new Error(`Unsupported file type: ${mimeType} (${ext})`);
+  return result;
 }

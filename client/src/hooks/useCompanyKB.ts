@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 export interface KnowledgeBase {
   id: string;
@@ -50,6 +51,8 @@ export interface KBSearchResult {
   rrfScore: number;
   vectorRank: number;
   ftsRank: number;
+  relevanceReason?: string | null;
+  snippet?: string;
 }
 
 export function useCompanyKB() {
@@ -130,6 +133,127 @@ export function useCompanyKB() {
     []
   );
 
+  const uploadKBFileStream = useCallback(
+    async (
+      kbId: string,
+      file: File,
+      title: string | undefined,
+      onEvent: (event: { step: string; status: string; data?: Record<string, unknown>; error?: string; timestamp: number }) => void
+    ) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (title) formData.append('title', title);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const response = await fetch(`${api.defaults.baseURL}/ai/kbs/${kbId}/entries/upload/stream`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Stream upload failed');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalEntry: KBEntry | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              onEvent(event);
+              if (event.step === 'complete' && event.data?.entry) {
+                finalEntry = event.data.entry as KBEntry;
+              }
+            } catch {
+              // Skip malformed SSE lines
+            }
+          }
+        }
+      }
+
+      if (finalEntry) {
+        setKnowledgeBases((prev) =>
+          prev.map((kb) => (kb.id === kbId ? { ...kb, entry_count: kb.entry_count + 1 } : kb))
+        );
+      }
+      return finalEntry;
+    },
+    []
+  );
+
+  const addKBEntryStream = useCallback(
+    async (
+      kbId: string,
+      title: string,
+      content: string,
+      onEvent: (event: { step: string; status: string; data?: Record<string, unknown>; error?: string; timestamp: number }) => void
+    ) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const response = await fetch(`${api.defaults.baseURL}/ai/kbs/${kbId}/entries/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ title, content }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Stream add failed');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalEntry: KBEntry | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              onEvent(event);
+              if (event.step === 'complete' && event.data?.entry) {
+                finalEntry = event.data.entry as KBEntry;
+              }
+            } catch {
+              // Skip malformed SSE lines
+            }
+          }
+        }
+      }
+
+      if (finalEntry) {
+        setKnowledgeBases((prev) =>
+          prev.map((kb) => (kb.id === kbId ? { ...kb, entry_count: kb.entry_count + 1 } : kb))
+        );
+      }
+      return finalEntry;
+    },
+    []
+  );
+
   const updateKBEntry = useCallback(
     async (kbId: string, entryId: string, updates: { title?: string; content?: string }) => {
       const { data } = await api.put(`/ai/kbs/${kbId}/entries/${entryId}`, updates);
@@ -158,6 +282,22 @@ export function useCompanyKB() {
     []
   );
 
+  const updateChunk = useCallback(
+    async (kbId: string, entryId: string, chunkId: string, content: string): Promise<{ chunk: KBChunk; reembedded: boolean }> => {
+      const { data } = await api.put(`/ai/kbs/${kbId}/entries/${entryId}/chunks/${chunkId}`, { content });
+      return { chunk: data.chunk, reembedded: data.reembedded };
+    },
+    []
+  );
+
+  const deleteChunk = useCallback(
+    async (kbId: string, entryId: string, chunkId: string): Promise<{ remainingChunks: number }> => {
+      const { data } = await api.delete(`/ai/kbs/${kbId}/entries/${entryId}/chunks/${chunkId}`);
+      return { remainingChunks: data.remainingChunks };
+    },
+    []
+  );
+
   const reembedEntry = useCallback(
     async (kbId: string, entryId: string) => {
       await api.post(`/ai/kbs/${kbId}/entries/${entryId}/reembed`);
@@ -166,12 +306,12 @@ export function useCompanyKB() {
   );
 
   const searchKB = useCallback(
-    async (query: string, knowledgeBaseIds?: string[]): Promise<KBSearchResult[]> => {
+    async (query: string, knowledgeBaseIds?: string[]): Promise<{ results: KBSearchResult[]; queryClassification?: { method: string; reasoning: string } }> => {
       const { data } = await api.post('/ai/kb/search', {
         query,
         knowledge_base_ids: knowledgeBaseIds,
       });
-      return data.results;
+      return { results: data.results, queryClassification: data.queryClassification };
     },
     []
   );
@@ -185,9 +325,13 @@ export function useCompanyKB() {
     fetchKBEntries,
     addKBEntry,
     uploadKBFile,
+    uploadKBFileStream,
+    addKBEntryStream,
     updateKBEntry,
     deleteKBEntry,
     fetchEntryChunks,
+    updateChunk,
+    deleteChunk,
     reembedEntry,
     searchKB,
     refetch: fetchKnowledgeBases,

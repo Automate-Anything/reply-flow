@@ -12,7 +12,7 @@ import {
   Crown, Shield, UserCog, Users, User, Eye,
   MessageSquare, Mail, BookUser, StickyNote, Smartphone,
   Bot, Library, Tag, UsersRound, Building2, KeyRound,
-  MessageCircle, Zap,
+  MessageCircle, Zap, ListPlus, List,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,11 +47,16 @@ const RESOURCE_ACTIONS: Record<string, string[]> = {
   contacts: ['view', 'create', 'edit', 'delete'],
   contact_notes: ['view', 'create', 'edit', 'delete'],
   conversation_notes: ['view', 'create', 'edit', 'delete'],
+  conversation_statuses: ['view', 'create', 'edit', 'delete'],
   canned_responses: ['view', 'create', 'edit', 'delete'],
   channels: ['view', 'create', 'edit', 'delete'],
-  ai_settings: ['view', 'edit'],
+  ai_settings: ['view', 'create', 'edit', 'delete'],
   knowledge_base: ['view', 'create', 'edit', 'delete'],
   labels: ['view', 'create', 'edit', 'delete'],
+  contact_tags: ['view', 'create', 'edit', 'delete'],
+  contact_lists: ['view', 'create', 'edit', 'delete'],
+  custom_fields: ['view', 'create', 'edit', 'delete'],
+  billing: ['view', 'manage'],
   team: ['view', 'invite', 'edit_role', 'remove'],
   company_settings: ['view', 'edit'],
   role_permissions: ['view', 'edit'],
@@ -69,7 +74,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     label: 'Data',
     description: 'Conversations, messages, contacts, and notes',
     icon: MessageSquare,
-    resources: ['conversations', 'messages', 'contacts', 'contact_notes', 'conversation_notes', 'canned_responses'],
+    resources: ['conversations', 'messages', 'contacts', 'contact_notes', 'contact_tags', 'contact_lists', 'custom_fields', 'conversation_notes', 'conversation_statuses', 'canned_responses'],
   },
   {
     label: 'Content',
@@ -81,7 +86,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     label: 'Administration',
     description: 'Team, company settings, and permissions',
     icon: Building2,
-    resources: ['team', 'company_settings', 'role_permissions'],
+    resources: ['team', 'company_settings', 'role_permissions', 'billing'],
   },
 ];
 
@@ -96,6 +101,11 @@ const RESOURCE_LABELS: Record<string, string> = {
   ai_settings: 'AI Settings',
   knowledge_base: 'Knowledge Base',
   labels: 'Labels',
+  contact_tags: 'Contact Tags',
+  contact_lists: 'Contact Lists',
+  conversation_statuses: 'Conversation Statuses',
+  custom_fields: 'Custom Fields',
+  billing: 'Billing',
   team: 'Team',
   company_settings: 'Company Settings',
   role_permissions: 'Role Permissions',
@@ -112,6 +122,11 @@ const RESOURCE_ICONS: Record<string, React.ComponentType<{ className?: string }>
   ai_settings: Bot,
   knowledge_base: Library,
   labels: Tag,
+  contact_tags: Tag,
+  contact_lists: List,
+  conversation_statuses: MessageCircle,
+  custom_fields: ListPlus,
+  billing: Crown,
   team: UsersRound,
   company_settings: Building2,
   role_permissions: KeyRound,
@@ -125,6 +140,7 @@ const ACTION_LABELS: Record<string, string> = {
   invite: 'Invite',
   edit_role: 'Edit Role',
   remove: 'Remove',
+  manage: 'Manage',
 };
 
 const ROLE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {

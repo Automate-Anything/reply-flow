@@ -19,7 +19,12 @@ import rolesRouter from './routes/roles.js';
 import meRouter from './routes/me.js';
 import superAdminRouter from './routes/superAdmin.js';
 
+import contactImportExportRouter from './routes/contactImportExport.js';
+import contactTagsRouter from './routes/contactTags.js';
+import contactListsRouter from './routes/contactLists.js';
+import customFieldsRouter from './routes/customFields.js';
 import conversationNotesRouter from './routes/conversationNotes.js';
+import conversationStatusesRouter from './routes/conversationStatuses.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import seedRouter from './routes/seed.js';
@@ -56,8 +61,12 @@ app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/messages', sendLimiter, messagesRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/labels', labelsRouter);
+app.use('/api/contacts', contactImportExportRouter);
 app.use('/api/contacts', contactsRouter);
 app.use('/api/contact-notes', contactNotesRouter);
+app.use('/api/contact-tags', contactTagsRouter);
+app.use('/api/contact-lists', contactListsRouter);
+app.use('/api/custom-fields', customFieldsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/team', teamRouter);
@@ -67,6 +76,7 @@ app.use('/api/me', meRouter);
 app.use('/api/super-admin', superAdminRouter);
 
 app.use('/api/conversation-notes', conversationNotesRouter);
+app.use('/api/conversation-statuses', conversationStatusesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/seed', seedRouter);
@@ -74,7 +84,7 @@ app.use('/api/seed', seedRouter);
 app.use(errorHandler);
 
 app.listen(env.PORT, () => {
-  console.log(`Server running on port ${env.PORT}`);
+  console.log(`Server running on port ${env.PORT} (smart-kb)`);
   startScheduler();
 });
 

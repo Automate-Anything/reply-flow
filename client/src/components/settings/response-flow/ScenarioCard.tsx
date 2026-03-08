@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Pencil, X, AlertTriangle } from 'lucide-react';
 import type { Scenario, CommunicationStyle } from '@/hooks/useCompanyAI';
 
@@ -82,14 +83,19 @@ export default function ScenarioCard({ scenario, defaultStyle, onEdit, onDelete 
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-            onClick={onDelete}
+          <ConfirmDialog
+            title="Delete this scenario?"
+            description="This scenario and all its configuration will be permanently removed."
+            onConfirm={onDelete}
           >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </ConfirmDialog>
         </div>
       </div>
     </div>

@@ -9,16 +9,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import { Loader2, Pencil, Plus, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCannedResponses, type CannedResponse } from '@/hooks/useCannedResponses';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 export default function CannedResponsesManager() {
   const { responses, loading, create, update, remove } = useCannedResponses();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', content: '', shortcut: '', category: '' });
+  const [originalForm, setOriginalForm] = useState({ title: '', content: '', shortcut: '', category: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, dialogOpen ? originalForm : null);
+  useFormDirtyGuard(isDirty);
 
   const resetForm = () => {
     setForm({ title: '', content: '', shortcut: '', category: '' });
@@ -27,16 +36,20 @@ export default function CannedResponsesManager() {
 
   const openCreate = () => {
     resetForm();
+    const defaults = { title: '', content: '', shortcut: '', category: '' };
+    setOriginalForm(defaults);
     setDialogOpen(true);
   };
 
   const openEdit = (response: CannedResponse) => {
-    setForm({
+    const values = {
       title: response.title,
       content: response.content,
       shortcut: response.shortcut || '',
       category: response.category || '',
-    });
+    };
+    setForm(values);
+    setOriginalForm(values);
     setEditingId(response.id);
     setDialogOpen(true);
   };
@@ -87,7 +100,13 @@ export default function CannedResponsesManager() {
         <p className="text-sm text-muted-foreground">
           Type "/" in the message input to use quick replies.
         </p>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+              if (!open) {
+                guardedClose(() => { setDialogOpen(false); resetForm(); });
+              } else {
+                setDialogOpen(true);
+              }
+            }}>
           <DialogTrigger asChild>
             <Button size="sm" className="shrink-0" onClick={openCreate}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -142,7 +161,7 @@ export default function CannedResponsesManager() {
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                <Button variant="outline" onClick={() => guardedClose(() => { setDialogOpen(false); resetForm(); })}>
                   Cancel
                 </Button>
                 <Button onClick={handleSubmit} disabled={submitting}>
@@ -201,7 +220,7 @@ export default function CannedResponsesManager() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                  onClick={() => handleDelete(response.id)}
+                  onClick={() => setPendingDeleteId(response.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -210,6 +229,25 @@ export default function CannedResponsesManager() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDeleteId}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+        title="Delete this quick reply?"
+        description="This action cannot be undone."
+        onConfirm={() => {
+          handleDelete(pendingDeleteId!);
+          setPendingDeleteId(null);
+        }}
+      />
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSubmit}
+        saving={submitting}
+      />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Bot, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Bot, Trash2, Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAgent } from '@/hooks/useAgents';
 import type { ProfileData } from '@/hooks/useCompanyAI';
@@ -90,11 +90,11 @@ export default function AgentDetailPage() {
         </div>
         <div className="min-w-0 flex-1">
           {editingName ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-1">
               <Input
                 value={nameValue}
                 onChange={(e) => setNameValue(e.target.value)}
-                className="h-8 text-sm font-semibold"
+                className="h-8 min-w-[200px] flex-1 text-sm font-semibold"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleNameSave();
@@ -117,11 +117,12 @@ export default function AgentDetailPage() {
                   setNameValue(agent.name);
                   setEditingName(true);
                 }}
-                className="text-left"
+                className="group flex items-center gap-1.5 text-left"
               >
-                <h2 className="text-lg font-semibold hover:text-primary transition-colors">
+                <h2 className="text-lg font-semibold group-hover:text-primary transition-colors">
                   {agent.name}
                 </h2>
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             </PlanGate>
           )}

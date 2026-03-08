@@ -21,6 +21,7 @@ import ChannelDetailPage from '@/components/settings/ChannelDetailView';
 import AIAgentsPage from '@/pages/AIAgentsPage';
 import AgentDetailPage from '@/pages/AgentDetailPage';
 import SuperAdminPage from '@/pages/SuperAdminPage';
+import DebugOverlay from '@/components/debug/DebugOverlay';
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
             </Routes>
           </BrowserRouter>
           <Toaster position="bottom-right" richColors closeButton />
+          <DebugOverlay />
         </SessionProvider>
       </TooltipProvider>
     </ThemeProvider>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Loader2, Trash2, Plus } from 'lucide-react';
 import type { ContactNote } from '@/hooks/useContacts';
 
@@ -79,12 +80,10 @@ export default function ContactNotes({ notes, loading, onAdd, onDelete }: Contac
                   {formatDate(note.created_at)}
                 </p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`ml-2 h-7 w-7 shrink-0 transition-opacity ${deletingId === note.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                disabled={deletingId === note.id}
-                onClick={async () => {
+              <ConfirmDialog
+                title="Delete this note?"
+                description="This action cannot be undone."
+                onConfirm={async () => {
                   setDeletingId(note.id);
                   try {
                     await onDelete(note.id);
@@ -93,12 +92,19 @@ export default function ContactNotes({ notes, loading, onAdd, onDelete }: Contac
                   }
                 }}
               >
-                {deletingId === note.id ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3 w-3" />
-                )}
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`ml-2 h-7 w-7 shrink-0 transition-opacity ${deletingId === note.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                  disabled={deletingId === note.id}
+                >
+                  {deletingId === note.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </Button>
+              </ConfirmDialog>
             </div>
           ))}
         </div>

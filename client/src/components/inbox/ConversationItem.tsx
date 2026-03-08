@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Clock, Star } from 'lucide-react';
+import { Clock, Pin, RotateCcw, Star } from 'lucide-react';
 import type { Conversation } from '@/hooks/useConversations';
 
 interface ConversationItemProps {
@@ -21,11 +21,11 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: 'bg-blue-500',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending',
-  resolved: 'Resolved',
-  closed: 'Closed',
-};
+// Show badge for any status except the default "open"
+function getStatusLabel(status: string): string | null {
+  if (status === 'open') return null;
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
 
 function formatSnoozeUntil(dateStr: string): string {
   const date = new Date(dateStr);
@@ -62,11 +62,11 @@ export default function ConversationItem({
   selected,
   onToggleSelect,
 }: ConversationItemProps) {
-  const hasUnread = conversation.unread_count > 0;
+  const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const name = conversation.contact_name || conversation.phone_number;
   const initial = (name[0] || '?').toUpperCase();
   const priorityColor = PRIORITY_COLORS[conversation.priority];
-  const statusLabel = STATUS_LABELS[conversation.status];
+  const statusLabel = getStatusLabel(conversation.status);
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
 
@@ -124,6 +124,9 @@ export default function ConversationItem({
             {name}
           </span>
           <div className="flex shrink-0 items-center gap-1">
+            {conversation.pinned_at && (
+              <Pin className="h-3 w-3 text-muted-foreground" />
+            )}
             {conversation.is_starred && (
               <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
             )}
@@ -143,20 +146,46 @@ export default function ConversationItem({
               hasUnread ? 'font-medium text-foreground' : 'text-muted-foreground'
             )}
           >
-            {conversation.last_message_direction === 'outbound' && (
-              <span className="font-normal text-muted-foreground">You: </span>
+            {conversation.draft_message ? (
+              <>
+                <span className="font-medium text-orange-500">Draft: </span>
+                {conversation.draft_message}
+              </>
+            ) : (
+              <>
+                {conversation.last_message_direction === 'outbound' && (
+                  <span className="font-normal text-muted-foreground">You: </span>
+                )}
+                {conversation.last_message || 'No messages yet'}
+              </>
             )}
-            {conversation.last_message || 'No messages yet'}
           </span>
           {hasUnread && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
-              {conversation.unread_count}
-            </span>
+            conversation.unread_count > 0 ? (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+                {conversation.unread_count}
+              </span>
+            ) : (
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+            )
           )}
         </div>
 
-        {(conversation.labels.length > 0 || statusLabel || isSnoozed) && (
+        {(conversation.labels.length > 0 || statusLabel || isSnoozed || conversation.contact_session_count > 1) && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
+            {conversation.contact_session_count > 1 && (
+              <Badge
+                variant="secondary"
+                className="h-4 px-1.5 text-[10px] gap-0.5 text-violet-600 dark:text-violet-400"
+              >
+                <RotateCcw className="h-2.5 w-2.5" />
+                {conversation.contact_session_count === 2
+                  ? '2nd'
+                  : conversation.contact_session_count === 3
+                    ? '3rd'
+                    : `${conversation.contact_session_count}th`}
+              </Badge>
+            )}
             {isSnoozed && (
               <Badge
                 variant="secondary"

@@ -20,7 +20,9 @@ import {
   Clock,
   Flag,
   Loader2,
+  Mail,
   MoreHorizontal,
+  Pin,
   Plus,
   Star,
   StickyNote,
@@ -33,6 +35,8 @@ import api from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import AIToggle from '@/components/ai/AIToggle';
 
 interface ConversationHeaderProps {
@@ -44,6 +48,7 @@ interface ConversationHeaderProps {
   onOpenContact?: () => void;
   onToggleNotes?: () => void;
   teamMembers?: TeamMember[];
+  statuses?: ConversationStatus[];
   notesPanelOpen?: boolean;
   onLabelsCreated?: () => void;
 }
@@ -54,11 +59,11 @@ interface LabelOption {
   color: string;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'open', label: 'Open', color: 'text-green-600' },
-  { value: 'pending', label: 'Pending', color: 'text-yellow-600' },
-  { value: 'resolved', label: 'Resolved', color: 'text-blue-600' },
-  { value: 'closed', label: 'Closed', color: 'text-gray-500' },
+const FALLBACK_STATUSES = [
+  { value: 'open', label: 'Open', color: '#22C55E' },
+  { value: 'pending', label: 'Pending', color: '#EAB308' },
+  { value: 'resolved', label: 'Resolved', color: '#3B82F6' },
+  { value: 'closed', label: 'Closed', color: '#6B7280' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -106,12 +111,14 @@ export default function ConversationHeader({
   onOpenContact,
   onToggleNotes,
   teamMembers = [],
+  statuses = [],
   notesPanelOpen,
   onLabelsCreated,
 }: ConversationHeaderProps) {
   const [allLabels, setAllLabels] = useState<LabelOption[]>([]);
   const [labelLoading, setLabelLoading] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const [patchLoading, setPatchLoading] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [creatingLabel, setCreatingLabel] = useState(false);
@@ -178,19 +185,22 @@ export default function ConversationHeader({
       const { data } = await api.patch(`/conversations/${conversation.id}`, updates);
       onConversationUpdate?.(data.session);
       onLabelsChange();
-    } catch {
-      toast.error('Failed to update conversation');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to update conversation');
     } finally {
       setPatchLoading(false);
     }
   };
 
-  const currentStatus = STATUS_OPTIONS.find((s) => s.value === conversation.status);
+  const statusOptions = statuses.length > 0
+    ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
+    : FALLBACK_STATUSES;
+  const currentStatus = statusOptions.find((s) => s.value === conversation.status);
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
 
   return (
-    <div className="flex items-center justify-between border-b px-4 py-3">
+    <div className="flex items-center justify-between border-b px-4 py-3" data-component="ConversationHeader">
       <div className="flex min-w-0 items-center gap-3">
         {onBack && (
           <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={onBack}>
@@ -340,9 +350,12 @@ export default function ConversationHeader({
                 key={m.user_id}
                 onClick={() => patchConversation({ assigned_to: m.user_id })}
               >
-                {m.full_name}
+                <div className="flex flex-col">
+                  <span>{m.full_name}</span>
+                  <span className="text-xs text-muted-foreground">{m.email}</span>
+                </div>
                 {conversation.assigned_to === m.user_id && (
-                  <Check className="ml-auto h-3 w-3" />
+                  <Check className="ml-auto h-3 w-3 shrink-0" />
                 )}
               </DropdownMenuItem>
             ))}
@@ -359,16 +372,16 @@ export default function ConversationHeader({
               disabled={patchLoading}
               title={`Status: ${currentStatus?.label}`}
             >
-              <CircleDot className={cn('h-4 w-4', currentStatus?.color)} />
+              <CircleDot className="h-4 w-4" style={{ color: currentStatus?.color }} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {STATUS_OPTIONS.map((s) => (
+            {statusOptions.map((s) => (
               <DropdownMenuItem
                 key={s.value}
                 onClick={() => patchConversation({ status: s.value })}
               >
-                <CircleDot className={cn('mr-2 h-3 w-3', s.color)} />
+                <CircleDot className="mr-2 h-3 w-3" style={{ color: s.color }} />
                 {s.label}
                 {conversation.status === s.value && <Check className="ml-auto h-3 w-3" />}
               </DropdownMenuItem>
@@ -396,6 +409,31 @@ export default function ConversationHeader({
                 )}
               />
               {conversation.is_starred ? 'Unstar' : 'Star'}
+            </DropdownMenuItem>
+
+            {/* Pin / Unpin */}
+            <DropdownMenuItem
+              onClick={() =>
+                patchConversation({ pinned_at: conversation.pinned_at ? null : new Date().toISOString() })
+              }
+              disabled={patchLoading}
+            >
+              <Pin
+                className={cn(
+                  'mr-2 h-3.5 w-3.5',
+                  conversation.pinned_at && 'text-primary'
+                )}
+              />
+              {conversation.pinned_at ? 'Unpin' : 'Pin'}
+            </DropdownMenuItem>
+
+            {/* Mark as unread */}
+            <DropdownMenuItem
+              onClick={() => patchConversation({ marked_unread: true })}
+              disabled={patchLoading}
+            >
+              <Mail className="mr-2 h-3.5 w-3.5" />
+              Mark as unread
             </DropdownMenuItem>
 
             {/* Notes */}
@@ -442,7 +480,7 @@ export default function ConversationHeader({
 
             {/* Archive */}
             <DropdownMenuItem
-              onClick={handleArchive}
+              onClick={() => setConfirmArchiveOpen(true)}
               disabled={archiving}
               className="text-destructive focus:text-destructive"
             >
@@ -456,6 +494,16 @@ export default function ConversationHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <ConfirmDialog
+        open={confirmArchiveOpen}
+        onOpenChange={setConfirmArchiveOpen}
+        title="Archive this conversation?"
+        description="Archived conversations can be found in the archived filter."
+        actionLabel="Archive"
+        onConfirm={handleArchive}
+        loading={archiving}
+      />
     </div>
   );
 }

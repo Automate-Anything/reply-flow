@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FlaskConical } from 'lucide-react';
+import { Loader2, FlaskConical, ChevronDown, ChevronRight, Clock, ArrowUp, ArrowDown } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import type { ProfileData } from '@/hooks/useCompanyAI';
+import { useDebugMode } from '@/hooks/useDebugMode';
+import { PromptBuilderView } from '@/components/settings/PromptPreviewPanel';
 import api from '@/lib/api';
 
 interface Props {
@@ -20,10 +22,21 @@ interface Props {
   agentId?: string;
 }
 
+interface TestDebug {
+  promptSections: Array<{ name: string; content: string }>;
+  systemPrompt: string;
+  tokens: { input: number; output: number };
+  responseTimeMs: number;
+  model: string;
+  stopReason: string;
+  kbEntriesUsed: number;
+}
+
 interface TestResult {
   matched_scenario: string | null;
   confidence: 'high' | 'medium' | 'low' | null;
   response: string;
+  debug?: TestDebug;
 }
 
 export default function TestDialog({ open, onOpenChange, profileData, channelId, agentId }: Props) {
@@ -31,18 +44,22 @@ export default function TestDialog({ open, onOpenChange, profileData, channelId,
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const { debugMode } = useDebugMode();
 
   const handleTest = async () => {
     if (!message.trim()) return;
     setLoading(true);
     setResult(null);
     setError(null);
+    setShowPrompt(false);
     try {
       const { data } = await api.post('/ai/test-reply', {
         profile_data: agentId ? undefined : profileData,
         message: message.trim(),
         channelId,
         agentId,
+        include_debug: debugMode,
       });
       setResult(data);
     } catch (err) {
@@ -55,11 +72,14 @@ export default function TestDialog({ open, onOpenChange, profileData, channelId,
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={debugMode && result?.debug ? 'sm:max-w-4xl' : 'sm:max-w-lg'}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4" />
             Test Message
+            {debugMode && (
+              <Badge variant="outline" className="text-[10px] text-purple-500 border-purple-300">Debug</Badge>
+            )}
           </DialogTitle>
           <DialogDescription>
             Type a sample message to see how the AI would respond with your current configuration.
@@ -123,10 +143,55 @@ export default function TestDialog({ open, onOpenChange, profileData, channelId,
                   </Badge>
                 )}
               </div>
+
+              {/* Debug info bar */}
+              {result.debug && (
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground bg-purple-500/5 border border-purple-300/30 rounded-md px-3 py-1.5">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {result.debug.responseTimeMs}ms
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <ArrowUp className="h-3 w-3" />
+                    {result.debug.tokens.input} in
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <ArrowDown className="h-3 w-3" />
+                    {result.debug.tokens.output} out
+                  </span>
+                  <span>{result.debug.model}</span>
+                  <span>{result.debug.kbEntriesUsed} KB entries</span>
+                </div>
+              )}
+
               <div className="rounded-md border bg-muted/30 p-3">
                 <p className="text-xs text-muted-foreground mb-1">AI Response:</p>
                 <p className="text-sm whitespace-pre-wrap">{result.response}</p>
               </div>
+
+              {/* Debug: Prompt Builder */}
+              {result.debug && result.debug.promptSections.length > 0 && (
+                <div className="rounded-lg border border-dashed border-purple-300/50">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-purple-500/5 transition-colors"
+                    onClick={() => setShowPrompt(!showPrompt)}
+                  >
+                    {showPrompt ? <ChevronDown className="h-3 w-3 text-purple-400" /> : <ChevronRight className="h-3 w-3 text-purple-400" />}
+                    <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                      System Prompt ({result.debug.promptSections.length} sections, {result.debug.systemPrompt.length.toLocaleString()} chars)
+                    </span>
+                  </button>
+                  {showPrompt && (
+                    <div className="border-t border-purple-300/30 p-3">
+                      <PromptBuilderView
+                        sections={result.debug.promptSections}
+                        fullPrompt={result.debug.systemPrompt}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

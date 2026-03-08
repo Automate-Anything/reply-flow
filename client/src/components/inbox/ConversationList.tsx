@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MessageSquare, Search, Settings } from 'lucide-react';
 import ConversationItem from './ConversationItem';
+import ConversationContextMenu from './ConversationContextMenu';
 import ConversationFiltersPopover from './ConversationFilters';
 import BulkActionBar from './BulkActionBar';
 import type { Conversation, ConversationFilters } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
 interface LabelOption {
   id: string;
@@ -31,10 +33,13 @@ interface ConversationListProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   onBulkActionComplete: () => void;
+  onRefresh: () => void;
   teamMembers: TeamMember[];
   labels: LabelOption[];
   onLabelsCreated?: () => void;
   onOpenInboxTools?: () => void;
+  statuses?: ConversationStatus[];
+  tabBar?: React.ReactNode;
 }
 
 export default function ConversationList({
@@ -52,14 +57,17 @@ export default function ConversationList({
   onSelectAll,
   onClearSelection,
   onBulkActionComplete,
+  onRefresh,
   teamMembers,
   labels,
   onLabelsCreated,
   onOpenInboxTools,
+  statuses = [],
+  tabBar,
 }: ConversationListProps) {
   return (
-    <div className="flex h-full w-full flex-col border-r md:w-[320px]">
-      <div className="border-b p-3">
+    <div className="flex h-full w-full flex-col" data-component="ConversationList">
+      <div className="border-b p-3 space-y-2">
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -70,7 +78,7 @@ export default function ConversationList({
               onChange={(e) => onSearchChange(e.target.value)}
             />
           </div>
-          <ConversationFiltersPopover filters={filters} onFiltersChange={onFiltersChange} />
+          <ConversationFiltersPopover filters={filters} onFiltersChange={onFiltersChange} statuses={statuses} />
           {onOpenInboxTools && (
             <Button
               variant="ghost"
@@ -83,6 +91,7 @@ export default function ConversationList({
             </Button>
           )}
         </div>
+        {tabBar}
       </div>
 
       {selectionMode && conversations.length > 0 && (
@@ -130,17 +139,41 @@ export default function ConversationList({
             </div>
           </div>
         ) : (
-          conversations.map((conv) => (
-            <ConversationItem
-              key={conv.id}
-              conversation={conv}
-              isActive={conv.id === activeId}
-              onClick={() => onSelect(conv)}
-              selectable={selectionMode}
-              selected={selectedIds.includes(conv.id)}
-              onToggleSelect={() => onToggleSelect(conv.id)}
-            />
-          ))
+          (() => {
+            const pinnedConvs = conversations.filter((c) => c.pinned_at);
+            const unpinnedConvs = conversations.filter((c) => !c.pinned_at);
+            const renderItem = (conv: Conversation) => (
+              <ConversationContextMenu
+                key={conv.id}
+                conversation={conv}
+                teamMembers={teamMembers}
+                statuses={statuses}
+                onUpdate={onRefresh}
+              >
+                <ConversationItem
+                  conversation={conv}
+                  isActive={conv.id === activeId}
+                  onClick={() => onSelect(conv)}
+                  selectable={selectionMode}
+                  selected={selectedIds.includes(conv.id)}
+                  onToggleSelect={() => onToggleSelect(conv.id)}
+                />
+              </ConversationContextMenu>
+            );
+            return (
+              <>
+                {pinnedConvs.map(renderItem)}
+                {pinnedConvs.length > 0 && unpinnedConvs.length > 0 && (
+                  <div className="mx-3 my-1 flex items-center gap-2">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[10px] font-medium text-muted-foreground">Pinned</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                )}
+                {unpinnedConvs.map(renderItem)}
+              </>
+            );
+          })()
         )}
       </div>
 
@@ -152,6 +185,7 @@ export default function ConversationList({
           teamMembers={teamMembers}
           labels={labels}
           onLabelsCreated={onLabelsCreated}
+          statuses={statuses}
         />
       )}
     </div>

@@ -24,7 +24,7 @@ export interface Conversation {
   last_message_at: string | null;
   last_message_direction: string | null;
   last_message_sender: string | null;
-  status: 'open' | 'pending' | 'resolved' | 'closed';
+  status: string;
   priority: 'none' | 'low' | 'medium' | 'high' | 'urgent';
   is_archived: boolean;
   is_starred: boolean;
@@ -33,8 +33,11 @@ export interface Conversation {
   assigned_user: AssignedUser | null;
   human_takeover: boolean;
   marked_unread: boolean;
+  pinned_at: string | null;
+  draft_message: string | null;
   unread_count: number;
   labels: ConversationLabel[];
+  contact_session_count: number;
   created_at: string;
 }
 
@@ -44,6 +47,7 @@ export interface ConversationFilters {
   priority?: string;
   starred?: boolean;
   snoozed?: boolean;
+  unread?: boolean;
   sort?: 'newest' | 'oldest';
   labelId?: string;
 }
@@ -70,6 +74,7 @@ export function useConversations(
       if (filters?.priority && filters.priority !== 'all') params.set('priority', filters.priority);
       if (filters?.starred) params.set('starred', 'true');
       if (filters?.snoozed) params.set('snoozed', 'true');
+      if (filters?.unread) params.set('unread', 'true');
       if (filters?.sort) params.set('sort', filters.sort);
       if (filters?.labelId) params.set('labelId', filters.labelId);
       const { data } = await api.get(`/conversations?${params}`);

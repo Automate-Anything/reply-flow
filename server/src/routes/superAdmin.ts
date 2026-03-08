@@ -4,6 +4,8 @@ import { requireSuperAdmin } from '../middleware/superAdmin.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { buildSystemPrompt, invalidateTemplateCache } from '../services/promptBuilder.js';
 import type { ProfileData, KBEntry } from '../services/promptBuilder.js';
+import { invalidateRetrievalSettingsCache } from '../services/retrievalSettings.js';
+import { invalidateDebugModeCache } from '../services/debugMode.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -432,6 +434,102 @@ router.get('/knowledge-bases/:kbId/analytics', async (req, res, next) => {
         ([status, count]) => ({ status, count })
       ),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /retrieval-settings ────────────────────────
+router.get('/retrieval-settings', async (_req, res, next) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('retrieval_settings')
+      .select('key, value, label, description, updated_at')
+      .order('key');
+
+    if (error) throw error;
+    res.json({ settings: data || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── PUT /retrieval-settings/:key ──────────────────
+router.put('/retrieval-settings/:key', async (req, res, next) => {
+  try {
+    const { key } = req.params;
+    const { value } = req.body as { value: string };
+
+    if (value === undefined || value === null || String(value).trim() === '') {
+      res.status(400).json({ error: 'value is required' });
+      return;
+    }
+
+    const numValue = parseFloat(String(value));
+    if (isNaN(numValue) || numValue < 0) {
+      res.status(400).json({ error: 'value must be a non-negative number' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('retrieval_settings')
+      .update({ value: String(numValue), updated_by: req.userId, updated_at: new Date().toISOString() })
+      .eq('key', key)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) {
+      res.status(404).json({ error: 'Setting not found' });
+      return;
+    }
+
+    invalidateRetrievalSettingsCache();
+    res.json({ setting: data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /debug-mode ──────────────────────────────────
+router.get('/debug-mode', async (_req, res, next) => {
+  try {
+    const { data } = await supabaseAdmin
+      .from('retrieval_settings')
+      .select('value')
+      .eq('key', 'super_admin_debug_mode')
+      .single();
+
+    res.json({ enabled: data?.value === '1' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /debug-mode/toggle ─────────────────────────
+router.post('/debug-mode/toggle', async (req, res, next) => {
+  try {
+    const { enabled } = req.body as { enabled: boolean };
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled must be a boolean' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('retrieval_settings')
+      .update({
+        value: enabled ? '1' : '0',
+        updated_by: req.userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('key', 'super_admin_debug_mode')
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    invalidateDebugModeCache();
+    res.json({ enabled: data?.value === '1' });
   } catch (err) {
     next(err);
   }

@@ -5,11 +5,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { PlanGate } from '@/components/auth/PlanGate';
 import type { ProfileData } from '@/hooks/useCompanyAI';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
+import { useDebugMode } from '@/hooks/useDebugMode';
 import IdentitySection from './sections/IdentitySection';
 import ResponseFlowSection from './response-flow/ResponseFlowSection';
 import FallbackToggle from './response-flow/FallbackToggle';
 import { useResponseFlow } from './response-flow/useResponseFlow';
+import PromptPreviewPanel from './PromptPreviewPanel';
 
 interface Props {
   profileData: ProfileData;
@@ -20,6 +23,7 @@ interface Props {
 export default function AIAgentSections({ profileData, onSave, agentId }: Props) {
   // Company knowledge bases
   const { knowledgeBases } = useCompanyKB();
+  const { debugMode } = useDebugMode();
 
   // Identity
   const [identityExpanded, setIdentityExpanded] = useState(false);
@@ -40,6 +44,8 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
     addScenario, updateScenario, removeScenario,
     setFallbackMode, setFallbackKBAttachments, reset,
   } = useResponseFlow(profileData);
+
+  useFormDirtyGuard(dirty);
 
   const [saving, setSaving] = useState(false);
 
@@ -69,7 +75,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
   ) : null;
 
   return (
-    <Tabs defaultValue="response-flow">
+    <Tabs defaultValue="identity">
       <TabsList className="w-full">
         <TabsTrigger value="identity" className="flex-1">Identity</TabsTrigger>
         <TabsTrigger value="response-flow" className="flex-1">Response Flow</TabsTrigger>
@@ -99,6 +105,9 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
           removeScenario={removeScenario}
         />
         {saveFooter}
+        {debugMode && (
+          <PromptPreviewPanel profileData={{ ...profileData, response_flow: flow }} agentId={agentId} />
+        )}
       </TabsContent>
 
       <TabsContent value="unmatched" className="space-y-4 pt-1">

@@ -3,13 +3,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
 import {
   Plus, FileText, Upload, Trash2, Loader2, X, ChevronDown, ChevronUp,
-  RotateCw, Layers,
+  RotateCw, Layers, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { KBEntry, KBChunk } from '@/hooks/useCompanyKB';
 import { cn } from '@/lib/utils';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
+import KBPipelineVisualizer from './KBPipelineVisualizer';
+import type { PipelineStepState } from './KBPipelineVisualizer';
 
 interface Props {
   entries: KBEntry[];
@@ -18,12 +24,17 @@ interface Props {
   onUpdate: (entryId: string, updates: { title?: string; content?: string }) => Promise<unknown>;
   onDelete: (entryId: string) => Promise<unknown>;
   onFetchChunks?: (entryId: string) => Promise<KBChunk[]>;
+  onUpdateChunk?: (entryId: string, chunkId: string, content: string) => Promise<{ chunk: KBChunk; reembedded: boolean }>;
+  onDeleteChunk?: (entryId: string, chunkId: string) => Promise<{ remainingChunks: number }>;
   onReembed?: (entryId: string) => Promise<unknown>;
+  onUploadStream?: (file: File, title: string | undefined, onEvent: (event: PipelineStepState) => void) => Promise<unknown>;
+  onAddStream?: (title: string, content: string, onEvent: (event: PipelineStepState) => void) => Promise<unknown>;
+  isDebugMode?: boolean;
   loading: boolean;
   initialOpen?: boolean;
 }
 
-const ACCEPTED_TYPES = '.pdf,.docx,.txt';
+const ACCEPTED_TYPES = '.pdf,.docx,.txt,.md,.markdown,.mdx,.html,.htm,.csv,.tsv,.json,.jsonl,.xlsx,.xls,.ts,.tsx,.js,.jsx,.py,.go,.java,.rb,.php,.c,.cpp,.h,.rs,.swift,.kt,.cs,.sh,.sql,.r,.yaml,.yml,.toml,.ini,.xml,.env';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 function formatFileSize(bytes: number): string {
@@ -88,11 +99,21 @@ function EmbeddingStatus({
 function ChunkViewer({
   chunks,
   loading,
+  onUpdateChunk,
+  onDeleteChunk,
+  onChunksChanged,
 }: {
   chunks: KBChunk[];
   loading: boolean;
+  onUpdateChunk?: (chunkId: string, content: string) => Promise<{ chunk: KBChunk; reembedded: boolean }>;
+  onDeleteChunk?: (chunkId: string) => Promise<{ remainingChunks: number }>;
+  onChunksChanged?: (updatedChunks: KBChunk[]) => void;
 }) {
   const [expandedChunk, setExpandedChunk] = useState<number | null>(null);
+  const [editingChunkId, setEditingChunkId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [savingChunk, setSavingChunk] = useState(false);
+  const [deletingChunkId, setDeletingChunkId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -109,16 +130,74 @@ function ChunkViewer({
     );
   }
 
+  const avgChars = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / chunks.length);
+
+  const handleSaveChunk = async (chunkId: string) => {
+    if (!onUpdateChunk || !editContent.trim()) return;
+    setSavingChunk(true);
+    try {
+      const { chunk: updated, reembedded } = await onUpdateChunk(chunkId, editContent.trim());
+      const newChunks = chunks.map((c) => (c.id === chunkId ? updated : c));
+      onChunksChanged?.(newChunks);
+      setEditingChunkId(null);
+      if (reembedded) {
+        toast.success('Chunk updated and re-embedded');
+      } else {
+        toast.warning('Chunk content saved, but re-embedding failed. Search may be stale for this chunk.');
+      }
+    } catch {
+      toast.error('Failed to update chunk');
+    } finally {
+      setSavingChunk(false);
+    }
+  };
+
+  const handleDeleteChunk = async (chunkId: string) => {
+    if (!onDeleteChunk) return;
+    setDeletingChunkId(chunkId);
+    try {
+      const { remainingChunks } = await onDeleteChunk(chunkId);
+      const filtered = chunks
+        .filter((c) => c.id !== chunkId)
+        .map((c, i) => ({
+          ...c,
+          chunk_index: i,
+          metadata: { ...c.metadata, chunkIndex: i, totalChunks: remainingChunks },
+        }));
+      onChunksChanged?.(filtered);
+      setExpandedChunk(null);
+      if (remainingChunks === 0) {
+        toast.success('Last chunk deleted. Consider re-embedding the entry.');
+      } else {
+        toast.success('Chunk deleted');
+      }
+    } catch {
+      toast.error('Failed to delete chunk');
+    } finally {
+      setDeletingChunkId(null);
+    }
+  };
+
   return (
     <div className="space-y-1.5 pt-2">
+      <div className="flex items-center gap-2 text-[10px] text-muted-foreground px-1">
+        <span>{chunks.length} chunks</span>
+        <span>&middot;</span>
+        <span>avg {avgChars.toLocaleString()} chars</span>
+      </div>
       {chunks.map((chunk) => {
         const isExpanded = expandedChunk === chunk.chunk_index;
+        const isEditing = editingChunkId === chunk.id;
+        const isDeleting = deletingChunkId === chunk.id;
         return (
           <div key={chunk.id} className="rounded border bg-muted/30">
             <button
               type="button"
               className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
-              onClick={() => setExpandedChunk(isExpanded ? null : chunk.chunk_index)}
+              onClick={() => {
+                if (isEditing) return;
+                setExpandedChunk(isExpanded ? null : chunk.chunk_index);
+              }}
             >
               <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
                 #{chunk.chunk_index + 1}
@@ -128,8 +207,11 @@ function ChunkViewer({
                   {chunk.metadata.sectionHeading}
                 </span>
               )}
-              <span className="ml-auto truncate text-[11px] text-muted-foreground max-w-[200px]">
+              <span className="truncate text-[11px] text-muted-foreground max-w-[200px]">
                 {chunk.content.slice(0, 80)}...
+              </span>
+              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                {chunk.content.length.toLocaleString()} chars
               </span>
               {isExpanded ? (
                 <ChevronUp className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -144,9 +226,78 @@ function ChunkViewer({
                     {chunk.metadata.sectionHierarchy.join(' > ')}
                   </p>
                 )}
-                <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
-                  {chunk.content}
-                </p>
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      rows={8}
+                      className="w-full resize-none rounded-md border bg-background px-3 py-2 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleSaveChunk(chunk.id)}
+                        disabled={savingChunk || !editContent.trim()}
+                        className="h-7 text-xs"
+                      >
+                        {savingChunk ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                        Save
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingChunkId(null)}
+                        disabled={savingChunk}
+                        className="h-7 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        {editContent.length.toLocaleString()} chars
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
+                      {chunk.content}
+                    </p>
+                    <div className="flex items-center gap-1 mt-2">
+                      {onUpdateChunk && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingChunkId(chunk.id);
+                            setEditContent(chunk.content);
+                          }}
+                          className="h-6 text-[11px] px-2"
+                        >
+                          <Pencil className="mr-1 h-3 w-3" />
+                          Edit
+                        </Button>
+                      )}
+                      {onDeleteChunk && (
+                        <ConfirmDialog
+                          title="Delete this chunk?"
+                          description="This chunk will be permanently removed from the knowledge base. Remaining chunks will be re-indexed."
+                          onConfirm={() => handleDeleteChunk(chunk.id)}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isDeleting}
+                            className="h-6 text-[11px] px-2 text-muted-foreground hover:text-destructive"
+                          >
+                            {isDeleting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Trash2 className="mr-1 h-3 w-3" />}
+                            Delete
+                          </Button>
+                        </ConfirmDialog>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -161,19 +312,30 @@ function EntryCard({
   onUpdate,
   onDelete,
   onFetchChunks,
+  onUpdateChunk,
+  onDeleteChunk,
   onReembed,
 }: {
   entry: KBEntry;
   onUpdate: (updates: { title?: string; content?: string }) => Promise<unknown>;
   onDelete: () => Promise<unknown>;
   onFetchChunks?: () => Promise<KBChunk[]>;
+  onUpdateChunk?: (chunkId: string, content: string) => Promise<{ chunk: KBChunk; reembedded: boolean }>;
+  onDeleteChunk?: (chunkId: string) => Promise<{ remainingChunks: number }>;
   onReembed?: () => Promise<unknown>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(entry.title);
   const [content, setContent] = useState(entry.content);
+  const [originalValues, setOriginalValues] = useState({ title: entry.title, content: entry.content });
   const [saving, setSaving] = useState(false);
+
+  const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(
+    { title, content },
+    editing ? originalValues : null,
+  );
+  useFormDirtyGuard(isDirty);
   const [deleting, setDeleting] = useState(false);
   const [reembedding, setReembedding] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
@@ -293,7 +455,7 @@ function EntryCard({
                   {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
                   Save
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setTitle(entry.title); setContent(entry.content); }} className="h-7 text-xs">
+                <Button variant="ghost" size="sm" onClick={() => guardedClose(() => { setEditing(false); setTitle(entry.title); setContent(entry.content); })} className="h-7 text-xs">
                   Cancel
                 </Button>
               </div>
@@ -315,19 +477,24 @@ function EntryCard({
                 </button>
               )}
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-7 text-xs">
+                <Button variant="ghost" size="sm" onClick={() => { setOriginalValues({ title, content }); setEditing(true); }} className="h-7 text-xs">
                   Edit
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                <ConfirmDialog
+                  title="Delete this entry?"
+                  description="This will permanently delete this knowledge base entry."
+                  onConfirm={handleDelete}
                 >
-                  {deleting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Trash2 className="mr-1 h-3 w-3" />}
-                  Delete
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={deleting}
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    {deleting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Trash2 className="mr-1 h-3 w-3" />}
+                    Delete
+                  </Button>
+                </ConfirmDialog>
                 {entry.embedding_status === 'failed' && onReembed && (
                   <Button
                     variant="ghost"
@@ -355,17 +522,31 @@ function EntryCard({
 
               {/* Chunk viewer */}
               {showChunks && (
-                <ChunkViewer chunks={chunks || []} loading={loadingChunks} />
+                <ChunkViewer
+                  chunks={chunks || []}
+                  loading={loadingChunks}
+                  onUpdateChunk={onUpdateChunk}
+                  onDeleteChunk={onDeleteChunk}
+                  onChunksChanged={setChunks}
+                />
               )}
             </>
           )}
         </div>
       )}
+
+      <UnsavedChangesDialog
+        open={showDialog}
+        onKeepEditing={handleKeepEditing}
+        onDiscard={handleDiscard}
+        onSave={handleSave}
+        saving={saving}
+      />
     </div>
   );
 }
 
-export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, onFetchChunks, onReembed, loading, initialOpen }: Props) {
+export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDelete, onFetchChunks, onUpdateChunk, onDeleteChunk, onReembed, onUploadStream, onAddStream, isDebugMode, loading, initialOpen }: Props) {
   const [showAddForm, setShowAddForm] = useState(!!initialOpen);
   const [addMode, setAddMode] = useState<'text' | 'file'>('text');
   const [title, setTitle] = useState('');
@@ -374,6 +555,23 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
   const [adding, setAdding] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineStepState[]>([]);
+  const [showPipeline, setShowPipeline] = useState(false);
+  const [pipelineComplete, setPipelineComplete] = useState(false);
+  const [pipelineError, setPipelineError] = useState<string | undefined>();
+
+  const resetPipeline = () => {
+    setPipelineEvents([]);
+    setShowPipeline(false);
+    setPipelineComplete(false);
+    setPipelineError(undefined);
+  };
+
+  const handlePipelineEvent = (event: PipelineStepState) => {
+    setPipelineEvents((prev) => [...prev, event]);
+    if (event.step === 'complete') setPipelineComplete(true);
+    if (event.step === 'error' || event.status === 'error') setPipelineError(event.error || 'Pipeline failed');
+  };
 
   const handleAddText = async () => {
     if (!title.trim() || !content.trim()) {
@@ -381,6 +579,23 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
       return;
     }
     setAdding(true);
+
+    if (isDebugMode && onAddStream) {
+      resetPipeline();
+      setShowPipeline(true);
+      try {
+        await onAddStream(title.trim(), content.trim(), handlePipelineEvent);
+        setTitle('');
+        setContent('');
+        toast.success('Knowledge base entry added');
+      } catch {
+        toast.error('Failed to add entry');
+      } finally {
+        setAdding(false);
+      }
+      return;
+    }
+
     try {
       await onAdd({ title: title.trim(), content: content.trim() });
       setTitle('');
@@ -412,6 +627,24 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
   const handleUploadFile = async () => {
     if (!selectedFile) return;
     setUploading(true);
+
+    if (isDebugMode && onUploadStream) {
+      resetPipeline();
+      setShowPipeline(true);
+      try {
+        await onUploadStream(selectedFile, title || undefined, handlePipelineEvent);
+        setSelectedFile(null);
+        setTitle('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        toast.success('File uploaded and processed');
+      } catch {
+        toast.error('Failed to upload file');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     try {
       await onUpload(selectedFile, title || undefined);
       setSelectedFile(null);
@@ -550,7 +783,7 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
                   <Upload className="h-5 w-5 text-muted-foreground" />
                   <div className="text-center">
                     <p className="text-sm font-medium">Click to upload a file</p>
-                    <p className="text-xs text-muted-foreground">PDF, DOCX, or TXT (max 10MB)</p>
+                    <p className="text-xs text-muted-foreground">Any text-based file (max 10MB)</p>
                   </div>
                 </button>
               )}
@@ -562,6 +795,27 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
                 </Button>
               )}
             </>
+          )}
+
+          {/* Pipeline Visualizer (debug mode) */}
+          {showPipeline && (
+            <div className="mt-3">
+              <KBPipelineVisualizer
+                events={pipelineEvents}
+                isComplete={pipelineComplete}
+                error={pipelineError}
+              />
+              {(pipelineComplete || pipelineError) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { resetPipeline(); setShowAddForm(false); }}
+                  className="mt-2 h-7 text-xs"
+                >
+                  Close
+                </Button>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -576,6 +830,8 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
               onUpdate={(updates) => onUpdate(entry.id, updates)}
               onDelete={() => onDelete(entry.id)}
               onFetchChunks={onFetchChunks ? () => onFetchChunks(entry.id) : undefined}
+              onUpdateChunk={onUpdateChunk ? (chunkId, content) => onUpdateChunk(entry.id, chunkId, content) : undefined}
+              onDeleteChunk={onDeleteChunk ? (chunkId) => onDeleteChunk(entry.id, chunkId) : undefined}
               onReembed={onReembed ? () => onReembed(entry.id) : undefined}
             />
           ))}

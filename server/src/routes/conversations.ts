@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { extractSessionMemories } from '../services/sessionMemory.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,6 +20,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       priority,
       starred,
       snoozed,
+      unread,
       labelId,
       sort = 'newest',
       limit = '50',
@@ -97,7 +99,9 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       );
     }
 
-    // Sort
+    // Sort — pinned conversations always appear first
+    query = query.order('pinned_at', { ascending: true, nullsFirst: false });
+
     if (sort === 'oldest') {
       query = query.order('last_message_at', { ascending: true, nullsFirst: false });
     } else {
@@ -130,9 +134,36 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
-    const sessions = (data || []).map((s) => ({
+    // Post-filter for unread: sessions with marked_unread OR actual unread messages
+    let filteredData = data || [];
+    if (unread === 'true') {
+      filteredData = filteredData.filter(
+        (s) => s.marked_unread === true || (unreadMap[s.id] || 0) > 0
+      );
+    }
+
+    // Get session counts per contact for "returning contact" indicators
+    const contactIds = [...new Set(filteredData.map((s) => s.contact_id).filter(Boolean))];
+    let sessionCountMap: Record<string, number> = {};
+    if (contactIds.length > 0) {
+      const { data: countRows } = await supabaseAdmin
+        .from('chat_sessions')
+        .select('contact_id')
+        .eq('company_id', companyId)
+        .in('contact_id', contactIds)
+        .is('deleted_at', null);
+
+      if (countRows) {
+        for (const row of countRows) {
+          sessionCountMap[row.contact_id] = (sessionCountMap[row.contact_id] || 0) + 1;
+        }
+      }
+    }
+
+    const sessions = filteredData.map((s) => ({
       ...s,
       unread_count: unreadMap[s.id] || 0,
+      contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
       labels:
         s.conversation_labels
           ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
@@ -254,7 +285,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
   try {
     const companyId = req.companyId!;
     const { sessionId } = req.params;
-    const { status, assigned_to, priority, is_starred, snoozed_until } = req.body;
+    const { status, assigned_to, priority, is_starred, snoozed_until, marked_unread, pinned_at, draft_message } = req.body;
 
     // Verify session belongs to company
     const { data: session } = await supabaseAdmin
@@ -269,15 +300,32 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       return;
     }
 
-    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const updates: Record<string, unknown> = {};
+    let sessionClosed = false;
 
     if (status !== undefined) {
-      const validStatuses = ['open', 'pending', 'resolved', 'closed'];
-      if (!validStatuses.includes(status)) {
-        res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      // Look up the status in conversation_statuses for this company
+      const { data: statusRow } = await supabaseAdmin
+        .from('conversation_statuses')
+        .select('id, name, "group"')
+        .eq('company_id', companyId)
+        .eq('name', status)
+        .eq('is_deleted', false)
+        .single();
+
+      if (!statusRow) {
+        res.status(400).json({ error: `Invalid status: "${status}"` });
         return;
       }
       updates.status = status;
+
+      // Session boundary based on status group
+      if (statusRow.group === 'closed') {
+        updates.ended_at = new Date().toISOString();
+        sessionClosed = true;
+      } else {
+        updates.ended_at = null;
+      }
     }
 
     if (assigned_to !== undefined) {
@@ -313,6 +361,44 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       updates.snoozed_until = snoozed_until;
     }
 
+    if (marked_unread !== undefined) {
+      updates.marked_unread = !!marked_unread;
+      if (!marked_unread) {
+        updates.last_read_at = new Date().toISOString();
+      }
+    }
+
+    if (pinned_at !== undefined) {
+      if (pinned_at !== null) {
+        // Enforce max 3 pinned conversations per company
+        const { count: pinnedCount } = await supabaseAdmin
+          .from('chat_sessions')
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', companyId)
+          .not('pinned_at', 'is', null)
+          .neq('id', sessionId);
+
+        if ((pinnedCount || 0) >= 3) {
+          res.status(400).json({ error: 'Maximum 3 pinned conversations allowed. Unpin one first.' });
+          return;
+        }
+        updates.pinned_at = new Date().toISOString();
+      } else {
+        updates.pinned_at = null;
+      }
+    }
+
+    if (draft_message !== undefined) {
+      const trimmed = typeof draft_message === 'string' ? draft_message.trim() : null;
+      updates.draft_message = trimmed || null;
+    }
+
+    // Only set updated_at when something meaningful changed (not just draft)
+    const hasMeaningfulUpdate = Object.keys(updates).some((k) => k !== 'draft_message');
+    if (hasMeaningfulUpdate) {
+      updates.updated_at = new Date().toISOString();
+    }
+
     const { data, error } = await supabaseAdmin
       .from('chat_sessions')
       .update(updates)
@@ -323,7 +409,16 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       )
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // Unique constraint violation: tried to reopen but a newer active session exists
+      if (error.code === '23505') {
+        res.status(409).json({
+          error: 'Cannot reopen this session because a newer active session already exists for this contact.',
+        });
+        return;
+      }
+      throw error;
+    }
 
     const result = {
       ...data,
@@ -335,6 +430,13 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
     };
 
     res.json({ session: result });
+
+    // Extract memories from the ended session (async, after response sent)
+    if (sessionClosed) {
+      extractSessionMemories(sessionId as string, companyId).catch((err) => {
+        console.error('Memory extraction error:', err);
+      });
+    }
   } catch (err) {
     next(err);
   }
@@ -377,14 +479,32 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
           .in('id', validIds);
         break;
       case 'status': {
-        const validStatuses = ['open', 'pending', 'resolved', 'closed'];
-        if (!validStatuses.includes(value)) {
-          res.status(400).json({ error: 'Invalid status' });
+        // Look up the status in conversation_statuses for this company
+        const { data: statusRow } = await supabaseAdmin
+          .from('conversation_statuses')
+          .select('id, name, "group"')
+          .eq('company_id', companyId)
+          .eq('name', value)
+          .eq('is_deleted', false)
+          .single();
+
+        if (!statusRow) {
+          res.status(400).json({ error: `Invalid status: "${value}"` });
           return;
+        }
+        const statusUpdate: Record<string, unknown> = {
+          status: value,
+          updated_at: new Date().toISOString(),
+        };
+        // Session boundary based on status group
+        if (statusRow.group === 'closed') {
+          statusUpdate.ended_at = new Date().toISOString();
+        } else {
+          statusUpdate.ended_at = null;
         }
         await supabaseAdmin
           .from('chat_sessions')
-          .update({ status: value, updated_at: new Date().toISOString() })
+          .update(statusUpdate)
           .in('id', validIds);
         break;
       }
@@ -424,6 +544,64 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
           .in('session_id', validIds)
           .eq('label_id', value);
         break;
+      case 'mark_read':
+        await supabaseAdmin
+          .from('chat_messages')
+          .update({ read: true })
+          .in('session_id', validIds)
+          .eq('direction', 'inbound')
+          .eq('read', false);
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({
+            marked_unread: false,
+            last_read_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', validIds);
+        break;
+      case 'mark_unread':
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({ marked_unread: true, updated_at: new Date().toISOString() })
+          .in('id', validIds);
+        break;
+      case 'pin': {
+        if (value === true) {
+          // Enforce max 3 pinned per company
+          const { count: currentPinned } = await supabaseAdmin
+            .from('chat_sessions')
+            .select('id', { count: 'exact', head: true })
+            .eq('company_id', companyId)
+            .not('pinned_at', 'is', null);
+
+          const { count: alreadyPinned } = await supabaseAdmin
+            .from('chat_sessions')
+            .select('id', { count: 'exact', head: true })
+            .in('id', validIds)
+            .not('pinned_at', 'is', null);
+
+          const newPins = validIds.length - (alreadyPinned || 0);
+          if ((currentPinned || 0) + newPins > 3) {
+            res.status(400).json({
+              error: `Cannot pin ${newPins} more conversations. Maximum is 3 pinned total (currently ${currentPinned}).`,
+            });
+            return;
+          }
+
+          await supabaseAdmin
+            .from('chat_sessions')
+            .update({ pinned_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .in('id', validIds)
+            .is('pinned_at', null);
+        } else {
+          await supabaseAdmin
+            .from('chat_sessions')
+            .update({ pinned_at: null, updated_at: new Date().toISOString() })
+            .in('id', validIds);
+        }
+        break;
+      }
       default:
         res.status(400).json({ error: 'Invalid action' });
         return;

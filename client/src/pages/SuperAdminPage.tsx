@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { useDebugMode } from '@/hooks/useDebugMode';
 import {
   Shield,
   Users,
@@ -22,9 +25,11 @@ import {
   Save,
   Eye,
   ArrowRight,
+  Settings2,
+  Bug,
 } from 'lucide-react';
 
-const TABS = ['overview', 'templates', 'preview', 'knowledge-bases'] as const;
+const TABS = ['overview', 'templates', 'preview', 'knowledge-bases', 'retrieval', 'debug'] as const;
 type Tab = (typeof TABS)[number];
 
 // ── Types ──────────────────────────────────────────
@@ -166,9 +171,11 @@ export default function SuperAdminPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full">
           <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
-          <TabsTrigger value="templates" className="flex-1">Prompt Templates</TabsTrigger>
+          <TabsTrigger value="templates" className="flex-1">Prompt Building Blocks</TabsTrigger>
           <TabsTrigger value="preview" className="flex-1">Prompt Preview</TabsTrigger>
           <TabsTrigger value="knowledge-bases" className="flex-1">Knowledge Bases</TabsTrigger>
+          <TabsTrigger value="retrieval" className="flex-1">Retrieval Settings</TabsTrigger>
+          <TabsTrigger value="debug" className="flex-1">Debug</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -182,6 +189,12 @@ export default function SuperAdminPage() {
         </TabsContent>
         <TabsContent value="knowledge-bases" className="mt-6">
           <KnowledgeBasesTab />
+        </TabsContent>
+        <TabsContent value="retrieval" className="mt-6">
+          <RetrievalSettingsTab />
+        </TabsContent>
+        <TabsContent value="debug" className="mt-6">
+          <DebugModeTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -298,18 +311,38 @@ function TemplatesTab() {
   if (loading) return <Skeleton className="h-64" />;
 
   const categoryLabels: Record<string, string> = {
+    identity: 'Identity Intros',
     tone: 'Tone Descriptions',
     length: 'Response Length Descriptions',
     emoji: 'Emoji Usage Descriptions',
+    language: 'Language Instructions',
+    greeting: 'Greeting Format',
+    kb_context: 'Knowledge Base Context',
+    topics_to_avoid: 'Topics to Avoid',
+    scenario: 'Scenario Instructions',
+    classifier: 'Message Classifier',
     core_rules: 'Core Rules',
   };
 
-  const categoryOrder = ['tone', 'length', 'emoji', 'core_rules'];
+  const categoryDescriptions: Record<string, string> = {
+    identity: 'Opening intro sentences for each use case. Use {name} as placeholder for the business/org name.',
+    language: 'Language instructions. Use {language} as placeholder for the specific language name.',
+    greeting: 'Format for first-contact greeting. Use {greeting_message} as placeholder.',
+    kb_context: 'Introduction text shown before knowledge base context is injected into the prompt.',
+    topics_to_avoid: 'Prefix text shown before the list of topics the agent should avoid.',
+    scenario: 'Headers and fallback messages for the scenario system. Use {human_phone} as placeholder in phone fallback.',
+    classifier: 'Full prompt sent to the classifier model. Use {business_context} and {scenario_list} as placeholders.',
+  };
+
+  // Categories that need larger textareas
+  const largeCategories = new Set(['core_rules', 'classifier', 'scenario']);
+
+  const categoryOrder = ['identity', 'tone', 'length', 'emoji', 'language', 'greeting', 'kb_context', 'topics_to_avoid', 'scenario', 'classifier', 'core_rules'];
 
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        These templates control how AI prompts are built. Changes take effect within 60 seconds.
+        These building blocks control how AI prompts are assembled. Changes take effect within 60 seconds.
       </p>
       {categoryOrder.map((category) => {
         const group = templates[category];
@@ -318,6 +351,9 @@ function TemplatesTab() {
           <Card key={category}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">{categoryLabels[category] || category}</CardTitle>
+              {categoryDescriptions[category] && (
+                <p className="text-xs text-muted-foreground mt-1">{categoryDescriptions[category]}</p>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               {group.map((t) => (
@@ -328,7 +364,7 @@ function TemplatesTab() {
                   </div>
                   <textarea
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    rows={category === 'core_rules' ? 8 : 3}
+                    rows={largeCategories.has(category) ? 8 : 3}
                     value={editValues[t.key] || ''}
                     onChange={(e) => setEditValues((prev) => ({ ...prev, [t.key]: e.target.value }))}
                   />
@@ -964,5 +1000,205 @@ function EmbeddingStatusBadge({ status }: { status: string }) {
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variants[status] || variants.pending}`}>
       {status}
     </span>
+  );
+}
+
+// ── Debug Mode Tab ────────────────────────────────
+
+function DebugModeTab() {
+  const { debugMode, toggleDebugMode, loading } = useDebugMode();
+  const [toggling, setToggling] = useState(false);
+
+  const handleToggle = async (checked: boolean) => {
+    setToggling(true);
+    try {
+      await toggleDebugMode(checked);
+      toast.success(checked ? 'Debug mode enabled' : 'Debug mode disabled');
+    } catch {
+      toast.error('Failed to toggle debug mode');
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bug className="h-4 w-4" />
+            Debug Mode
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            When enabled, AI responses include detailed debug information (tokens, timing, KB search scores, prompt sections) and KB uploads show a live pipeline visualizer.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Enable Debug Mode</p>
+              <p className="text-xs text-muted-foreground">
+                System-wide setting. Affects all super admin sessions.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant={debugMode ? 'default' : 'outline'} className="text-xs">
+                {debugMode ? 'ON' : 'OFF'}
+              </Badge>
+              <Switch
+                checked={debugMode}
+                onCheckedChange={handleToggle}
+                disabled={loading || toggling}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">What Debug Mode Does</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+            <p><strong className="text-foreground">AI Debug Panels</strong> — Each AI reply shows an expandable panel with token counts, response time, query classification, KB search scores, matched scenario, and the full assembled prompt.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+            <p><strong className="text-foreground">KB Pipeline Visualizer</strong> — File uploads show a live step-by-step view of classification, extraction, cleaning, chunking, embedding, and storing.</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+            <p><strong className="text-foreground">Visual Debug Overlay</strong> — Hover over UI elements to see component boundaries and dimensions.</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Retrieval Settings Tab ────────────────────────
+
+interface RetrievalSetting {
+  key: string;
+  value: string;
+  label: string;
+  description: string | null;
+  updated_at: string;
+}
+
+const SETTING_GROUPS: Record<string, { title: string; description: string; keys: string[] }> = {
+  search: {
+    title: 'Search Settings',
+    description: 'Control how many results are returned and the minimum quality thresholds.',
+    keys: ['match_count', 'similarity_threshold', 'fts_threshold', 'rrf_threshold'],
+  },
+  chunking: {
+    title: 'Chunking Settings',
+    description: 'Control how documents are split into chunks during upload. Changes only affect newly uploaded documents.',
+    keys: ['max_chunk_size', 'chunk_target_size', 'chunk_overlap', 'min_chunk_size'],
+  },
+};
+
+function RetrievalSettingsTab() {
+  const [settings, setSettings] = useState<RetrievalSetting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<{ settings: RetrievalSetting[] }>('/super-admin/retrieval-settings')
+      .then(({ data }) => {
+        setSettings(data.settings);
+        const values: Record<string, string> = {};
+        for (const s of data.settings) values[s.key] = s.value;
+        setEditValues(values);
+      })
+      .catch(() => toast.error('Failed to load retrieval settings'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const saveSetting = async (key: string) => {
+    const value = editValues[key];
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0) {
+      toast.error('Value must be a non-negative number');
+      return;
+    }
+
+    setSaving(key);
+    try {
+      await api.put(`/super-admin/retrieval-settings/${key}`, { value });
+      setSettings((prev) => prev.map((s) => s.key === key ? { ...s, value } : s));
+      toast.success('Setting saved');
+    } catch {
+      toast.error('Failed to save setting');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (loading) return <Skeleton className="h-64" />;
+
+  const settingsByKey = Object.fromEntries(settings.map((s) => [s.key, s]));
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Configure how the knowledge base search and chunking pipeline works. Changes to search settings take effect within 60 seconds.
+      </p>
+
+      {Object.entries(SETTING_GROUPS).map(([groupKey, group]) => (
+        <Card key={groupKey}>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Settings2 className="h-4 w-4" />
+              {group.title}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">{group.description}</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {group.keys.map((key) => {
+              const setting = settingsByKey[key];
+              if (!setting) return null;
+              const isChanged = editValues[key] !== setting.value;
+
+              return (
+                <div key={key} className="flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium">{setting.label}</label>
+                      <Badge variant="outline" className="text-xs shrink-0">{key}</Badge>
+                    </div>
+                    {setting.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{setting.description}</p>
+                    )}
+                  </div>
+                  <Input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className="w-28 text-right"
+                    value={editValues[key] || ''}
+                    onChange={(e) => setEditValues((prev) => ({ ...prev, [key]: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && isChanged && saveSetting(key)}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => saveSetting(key)}
+                    disabled={saving === key || !isChanged}
+                    className="shrink-0"
+                  >
+                    <Save className="mr-1 h-3 w-3" />
+                    {saving === key ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }

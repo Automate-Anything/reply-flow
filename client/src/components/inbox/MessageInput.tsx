@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Send, Zap, Clock } from 'lucide-react';
+import { Send, Zap, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCannedResponses, type CannedResponse } from '@/hooks/useCannedResponses';
+import type { Message } from '@/hooks/useMessages';
 import { PlanGate } from '@/components/auth/PlanGate';
 import { usePlan } from '@/contexts/PlanContext';
 
@@ -11,6 +12,10 @@ interface MessageInputProps {
   onSend: (body: string) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   disabled?: boolean;
+  initialDraft?: string;
+  onDraftChange?: (text: string) => void;
+  replyingTo?: Message | null;
+  onCancelReply?: () => void;
 }
 
 function getSchedulePresets(): { label: string; getDate: () => Date }[] {
@@ -45,9 +50,9 @@ function getSchedulePresets(): { label: string; getDate: () => Date }[] {
   ];
 }
 
-export default function MessageInput({ onSend, onSchedule, disabled }: MessageInputProps) {
+export default function MessageInput({ onSend, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply }: MessageInputProps) {
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialDraft || '');
   const [sending, setSending] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [quickReplyQuery, setQuickReplyQuery] = useState('');
@@ -56,6 +61,11 @@ export default function MessageInput({ onSend, onSchedule, disabled }: MessageIn
   const [customDate, setCustomDate] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { responses } = useCannedResponses();
+
+  // Sync text when switching conversations
+  useEffect(() => {
+    setText(initialDraft || '');
+  }, [initialDraft]);
 
   const filteredResponses = useMemo(() => {
     if (!quickReplyQuery) return responses;
@@ -75,6 +85,7 @@ export default function MessageInput({ onSend, onSchedule, disabled }: MessageIn
     try {
       await onSend(trimmed);
       setText('');
+      onDraftChange?.('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -90,6 +101,7 @@ export default function MessageInput({ onSend, onSchedule, disabled }: MessageIn
     try {
       await onSchedule(trimmed, scheduledFor.toISOString());
       setText('');
+      onDraftChange?.('');
       setScheduleOpen(false);
       setCustomDate('');
       if (textareaRef.current) {
@@ -110,7 +122,9 @@ export default function MessageInput({ onSend, onSchedule, disabled }: MessageIn
   const insertCannedResponse = (response: CannedResponse) => {
     const slashIndex = text.lastIndexOf('/');
     const before = slashIndex > 0 ? text.slice(0, slashIndex) : '';
-    setText(before + response.content);
+    const newText = before + response.content;
+    setText(newText);
+    onDraftChange?.(newText);
     setShowQuickReplies(false);
     setQuickReplyQuery('');
     textareaRef.current?.focus();
@@ -119,6 +133,7 @@ export default function MessageInput({ onSend, onSchedule, disabled }: MessageIn
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setText(value);
+    onDraftChange?.(value);
 
     const slashIndex = value.lastIndexOf('/');
     if (slashIndex !== -1 && (slashIndex === 0 || value[slashIndex - 1] === ' ' || value[slashIndex - 1] === '\n')) {
@@ -188,7 +203,29 @@ export default function MessageInput({ onSend, onSchedule, disabled }: MessageIn
   const minDateTime = new Date(Date.now() + 60_000).toISOString().slice(0, 16);
 
   return (
-    <div className="relative flex items-end gap-2 border-t bg-background p-3">
+    <div className="border-t bg-background">
+      {/* Reply banner */}
+      {replyingTo && (
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <div className="h-8 w-0.5 shrink-0 rounded-full bg-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-medium text-muted-foreground">
+              Replying to {replyingTo.sender_type === 'contact' ? 'contact' : 'yourself'}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {replyingTo.message_body || '[Media message]'}
+            </p>
+          </div>
+          <button
+            onClick={onCancelReply}
+            className="shrink-0 rounded p-0.5 hover:bg-muted"
+          >
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </div>
+      )}
+
+      <div className="relative flex items-end gap-2 p-3">
       {/* Quick replies popup */}
       {showQuickReplies && filteredResponses.length > 0 && (
         <div className="absolute bottom-full left-3 right-14 mb-1 max-h-48 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
@@ -304,6 +341,7 @@ export default function MessageInput({ onSend, onSchedule, disabled }: MessageIn
           <Send className="h-4 w-4" />
         </Button>
       </PlanGate>
+      </div>
     </div>
   );
 }

@@ -9,12 +9,14 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Archive, Flag, Loader2, Plus, Star, Tag, UserPlus, CircleDot, X } from 'lucide-react';
+import { Archive, Flag, Loader2, Mail, MailOpen, Pin, Plus, Star, Tag, UserPlus, CircleDot, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { TeamMember } from '@/hooks/useTeamMembers';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 import { usePlan } from '@/contexts/PlanContext';
 
 interface LabelOption {
@@ -30,9 +32,10 @@ interface BulkActionBarProps {
   teamMembers: TeamMember[];
   labels: LabelOption[];
   onLabelsCreated?: () => void;
+  statuses?: ConversationStatus[];
 }
 
-const STATUS_OPTIONS = [
+const FALLBACK_STATUSES = [
   { value: 'open', label: 'Open' },
   { value: 'pending', label: 'Pending' },
   { value: 'resolved', label: 'Resolved' },
@@ -54,6 +57,7 @@ export default function BulkActionBar({
   teamMembers,
   labels,
   onLabelsCreated,
+  statuses = [],
 }: BulkActionBarProps) {
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [loading, setLoading] = useState(false);
@@ -88,8 +92,8 @@ export default function BulkActionBar({
       onActionComplete();
       onClearSelection();
       toast.success(`Updated ${selectedIds.length} conversations`);
-    } catch {
-      toast.error('Bulk action failed');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Bulk action failed');
     } finally {
       setLoading(false);
     }
@@ -114,7 +118,10 @@ export default function BulkActionBar({
           </DropdownMenuItem>
           {teamMembers.map((m) => (
             <DropdownMenuItem key={m.user_id} onClick={() => executeBulk('assign', m.user_id)}>
-              {m.full_name}
+              <div className="flex flex-col">
+                <span>{m.full_name}</span>
+                <span className="text-xs text-muted-foreground">{m.email}</span>
+              </div>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -128,7 +135,10 @@ export default function BulkActionBar({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {STATUS_OPTIONS.map((s) => (
+          {(statuses.length > 0
+            ? statuses.map((s) => ({ value: s.name, label: s.name }))
+            : FALLBACK_STATUSES
+          ).map((s) => (
             <DropdownMenuItem key={s.value} onClick={() => executeBulk('status', s.value)}>
               {s.label}
             </DropdownMenuItem>
@@ -223,16 +233,22 @@ export default function BulkActionBar({
       </DropdownMenu>
 
       {/* Archive */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7"
-        disabled={loading}
-        onClick={() => executeBulk('archive', true)}
-        title="Archive"
+      <ConfirmDialog
+        title={`Archive ${selectedIds.length} conversation${selectedIds.length === 1 ? '' : 's'}?`}
+        description="Archived conversations can be found in the archived filter."
+        actionLabel="Archive"
+        onConfirm={() => executeBulk('archive', true)}
       >
-        <Archive className="h-3.5 w-3.5" />
-      </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          disabled={loading}
+          title="Archive"
+        >
+          <Archive className="h-3.5 w-3.5" />
+        </Button>
+      </ConfirmDialog>
 
       {/* Star */}
       <Button
@@ -244,6 +260,42 @@ export default function BulkActionBar({
         title="Star"
       >
         <Star className="h-3.5 w-3.5" />
+      </Button>
+
+      {/* Pin */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        disabled={loading}
+        onClick={() => executeBulk('pin', true)}
+        title="Pin"
+      >
+        <Pin className="h-3.5 w-3.5" />
+      </Button>
+
+      {/* Mark Read */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        disabled={loading}
+        onClick={() => executeBulk('mark_read', true)}
+        title="Mark as read"
+      >
+        <MailOpen className="h-3.5 w-3.5" />
+      </Button>
+
+      {/* Mark Unread */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        disabled={loading}
+        onClick={() => executeBulk('mark_unread', true)}
+        title="Mark as unread"
+      >
+        <Mail className="h-3.5 w-3.5" />
       </Button>
 
       {loading && <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-muted-foreground" />}

@@ -52,10 +52,10 @@ router.post('/:sessionId', requirePermission('conversation_notes', 'create'), as
       return;
     }
 
-    // Verify session belongs to company
+    // Verify session belongs to company and get contact_id
     const { data: session } = await supabaseAdmin
       .from('chat_sessions')
-      .select('id')
+      .select('id, contact_id')
       .eq('id', sessionId)
       .eq('company_id', companyId)
       .single();
@@ -69,6 +69,7 @@ router.post('/:sessionId', requirePermission('conversation_notes', 'create'), as
       .from('conversation_notes')
       .insert({
         session_id: sessionId,
+        contact_id: session.contact_id || null,
         company_id: companyId,
         created_by: req.userId,
         content,

@@ -120,7 +120,7 @@ router.get('/', requirePermission('company_settings', 'view'), async (req, res, 
 router.put('/', requirePermission('company_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { name, slug, logo_url, timezone, default_language, business_hours } = req.body;
+    const { name, slug, logo_url, timezone, default_language, business_hours, session_timeout_hours } = req.body;
 
     const updates: Record<string, unknown> = {};
     if (name !== undefined) updates.name = name;
@@ -129,6 +129,14 @@ router.put('/', requirePermission('company_settings', 'edit'), async (req, res, 
     if (timezone !== undefined) updates.timezone = timezone;
     if (default_language !== undefined) updates.default_language = default_language;
     if (business_hours !== undefined) updates.business_hours = business_hours;
+    if (session_timeout_hours !== undefined) {
+      const hours = Number(session_timeout_hours);
+      if (isNaN(hours) || hours < 1 || hours > 720) {
+        res.status(400).json({ error: 'Session timeout must be between 1 and 720 hours' });
+        return;
+      }
+      updates.session_timeout_hours = hours;
+    }
 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: 'No fields to update' });

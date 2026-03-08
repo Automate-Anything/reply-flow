@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import Stripe from 'stripe';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { extendAllCompanyChannels } from '../services/billingService.js';
@@ -70,7 +71,7 @@ export async function checkPlanLimit(
 // GET /api/billing/subscription
 // Returns the company's current subscription + plan.
 // ────────────────────────────────────────────────
-router.get('/subscription', async (req, res, next) => {
+router.get('/subscription', requirePermission('billing', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId;
     if (!companyId) {
@@ -99,7 +100,7 @@ router.get('/subscription', async (req, res, next) => {
 // Pass with_trial: true to start the subscription with a 7-day free trial.
 // Returns: { url } — redirect the user to this URL
 // ────────────────────────────────────────────────
-router.post('/create-checkout-session', async (req, res, next) => {
+router.post('/create-checkout-session', requirePermission('billing', 'manage'), async (req, res, next) => {
   try {
     if (!stripe) {
       res.status(503).json({ error: 'Stripe is not configured' });
@@ -186,7 +187,7 @@ router.post('/create-checkout-session', async (req, res, next) => {
 // Creates a Stripe Customer Portal session for managing an existing subscription.
 // Returns: { url } — redirect the user to this URL
 // ────────────────────────────────────────────────
-router.post('/portal', async (req, res, next) => {
+router.post('/portal', requirePermission('billing', 'manage'), async (req, res, next) => {
   try {
     if (!stripe) {
       res.status(503).json({ error: 'Stripe is not configured' });
@@ -227,7 +228,7 @@ router.post('/portal', async (req, res, next) => {
 // Direct DB subscription without Stripe — use checkout-session for real payments
 // Body: { plan_id: 'starter' | 'pro' | 'scale' }
 // ────────────────────────────────────────────────
-router.post('/subscribe', async (req, res, next) => {
+router.post('/subscribe', requirePermission('billing', 'manage'), async (req, res, next) => {
   try {
     const companyId = req.companyId;
     if (!companyId) {
@@ -332,7 +333,7 @@ router.post('/skip-trial', async (req, res, next) => {
 // Upgrades or downgrades an existing Stripe subscription immediately with proration.
 // Body: { plan_id: 'starter' | 'pro' | 'scale' }
 // ────────────────────────────────────────────────
-router.post('/change-plan', async (req, res, next) => {
+router.post('/change-plan', requirePermission('billing', 'manage'), async (req, res, next) => {
   try {
     if (!stripe) {
       res.status(503).json({ error: 'Stripe is not configured' });
@@ -413,7 +414,7 @@ router.post('/change-plan', async (req, res, next) => {
 // Schedules the subscription to cancel at the end of the current billing period
 // (or at the end of the trial period if currently trialing — no charge is made).
 // ────────────────────────────────────────────────
-router.post('/cancel', async (req, res, next) => {
+router.post('/cancel', requirePermission('billing', 'manage'), async (req, res, next) => {
   try {
     if (!stripe) {
       res.status(503).json({ error: 'Stripe is not configured' });
@@ -457,7 +458,7 @@ router.post('/cancel', async (req, res, next) => {
 // POST /api/billing/reactivate
 // Cancels a scheduled cancellation, keeping the subscription active.
 // ────────────────────────────────────────────────
-router.post('/reactivate', async (req, res, next) => {
+router.post('/reactivate', requirePermission('billing', 'manage'), async (req, res, next) => {
   try {
     if (!stripe) {
       res.status(503).json({ error: 'Stripe is not configured' });
@@ -502,7 +503,7 @@ router.post('/reactivate', async (req, res, next) => {
 // Returns usage stats for the current billing period.
 // During a trial, TRIAL_LIMITS are used for channel/agent/message/kb_page counts.
 // ────────────────────────────────────────────────
-router.get('/usage', async (req, res, next) => {
+router.get('/usage', requirePermission('billing', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId;
     if (!companyId) {

@@ -12,18 +12,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { ArrowDownUp, CircleDot, Filter, Flag, Star, User } from 'lucide-react';
+import { ArrowDownUp, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationFilters as FilterState } from '@/hooks/useConversations';
+import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
 interface ConversationFiltersProps {
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
+  statuses?: ConversationStatus[];
 }
 
 export default function ConversationFilters({
   filters,
   onFiltersChange,
+  statuses = [],
 }: ConversationFiltersProps) {
   const updateFilter = (key: keyof FilterState, value: unknown) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -39,6 +42,7 @@ export default function ConversationFilters({
     isPriorityActive,
     filters.starred,
     filters.snoozed,
+    filters.unread,
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
@@ -91,10 +95,17 @@ export default function ConversationFilters({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
+                  {statuses.length > 0
+                    ? statuses.map((s) => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))
+                    : <>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="resolved">Resolved</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </>
+                  }
                   <SelectItem value="snoozed">Snoozed</SelectItem>
                 </SelectContent>
               </Select>
@@ -159,6 +170,27 @@ export default function ConversationFilters({
               >
                 <Star
                   className={cn('h-3 w-3', filters.starred && 'fill-current')}
+                />
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between pt-0.5">
+              <div className="flex items-center gap-2">
+                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs">Unread only</span>
+              </div>
+              <Button
+                variant={filters.unread ? 'secondary' : 'ghost'}
+                size="icon"
+                className={cn(
+                  'h-6 w-6 rounded-full',
+                  filters.unread &&
+                    'bg-blue-50 text-blue-500 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20'
+                )}
+                onClick={() => updateFilter('unread', !filters.unread)}
+              >
+                <Mail
+                  className={cn('h-3 w-3', filters.unread && 'fill-current')}
                 />
               </Button>
             </div>
