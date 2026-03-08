@@ -377,6 +377,105 @@ export default function BillingTab() {
 
   return (
     <div className="space-y-8">
+      {/* AI Message Balance — compact top bar */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2 min-w-[120px]">
+              <Wallet className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <p className="text-xs text-muted-foreground">AI Message Balance</p>
+                <p className="text-lg font-bold leading-tight">
+                  ${((balanceData?.balance_cents ?? 0) / 100).toFixed(2)}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {TOPUP_PRESETS.map((preset) => (
+                <button
+                  key={preset.cents}
+                  onClick={() => setTopupPreset(preset.cents)}
+                  className={cn(
+                    'rounded-md border px-3 py-1 text-xs font-medium transition-colors',
+                    topupPreset === preset.cents
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'hover:border-primary/50 hover:bg-muted'
+                  )}
+                >
+                  {preset.label}
+                </button>
+              ))}
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleTopup}
+                disabled={topupLoading || !hasStripeSubscription}
+              >
+                {topupLoading ? 'Redirecting…' : `Add $${(topupPreset / 100).toFixed(0)}`}
+              </Button>
+            </div>
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <span className="text-xs text-muted-foreground">Auto top-up</span>
+              <Switch
+                checked={autoTopupEnabled}
+                onCheckedChange={(val) => {
+                  setAutoTopupEnabled(val);
+                }}
+                disabled={!hasStripeSubscription}
+              />
+              {hasStripeSubscription && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={handleSaveAutoTopup}
+                  disabled={savingAutoTopup}
+                >
+                  {savingAutoTopup ? 'Saving…' : 'Save'}
+                </Button>
+              )}
+            </div>
+          </div>
+          {autoTopupEnabled && (
+            <div className="mt-3 flex flex-wrap items-end gap-3 border-t pt-3">
+              <div className="space-y-1">
+                <Label htmlFor="topup-threshold" className="text-xs">Top up when below</Label>
+                <div className="relative w-24">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    id="topup-threshold"
+                    type="number"
+                    min="1"
+                    step="1"
+                    className="h-7 pl-5 text-xs"
+                    value={String(parseInt(autoTopupThreshold, 10) / 100 || '')}
+                    onChange={(e) => setAutoTopupThreshold(String(Math.round(parseFloat(e.target.value || '0') * 100)))}
+                    placeholder="5.00"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="topup-amount" className="text-xs">Charge amount</Label>
+                <div className="relative w-24">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    id="topup-amount"
+                    type="number"
+                    min="5"
+                    step="1"
+                    className="h-7 pl-5 text-xs"
+                    value={String(parseInt(autoTopupAmount, 10) / 100 || '')}
+                    onChange={(e) => setAutoTopupAmount(String(Math.round(parseFloat(e.target.value || '0') * 100)))}
+                    placeholder="10.00"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pb-1">Uses your saved payment method.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Trial banner */}
       {isTrialing && trialEndsAt && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
@@ -698,156 +797,6 @@ export default function BillingTab() {
           </CardContent>
         </Card>
       )}
-
-      {/* AI Message Balance */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base font-semibold">AI Message Balance</CardTitle>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Keep a credit balance to cover messages beyond your plan's monthly limit. If your
-            balance runs out, your AI agent will pause until you add more credits.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Current balance */}
-          <div className="rounded-lg border bg-muted/30 px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Current Balance
-            </p>
-            <p className="mt-1 text-2xl font-bold">
-              ${((balanceData?.balance_cents ?? 0) / 100).toFixed(2)}
-            </p>
-          </div>
-
-          {/* Manual top-up */}
-          <div className="space-y-3">
-            <p className="text-sm font-medium">Add Balance</p>
-            <div className="flex flex-wrap gap-2">
-              {TOPUP_PRESETS.map((preset) => (
-                <button
-                  key={preset.cents}
-                  onClick={() => setTopupPreset(preset.cents)}
-                  className={cn(
-                    'rounded-md border px-4 py-1.5 text-sm font-medium transition-colors',
-                    topupPreset === preset.cents
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'hover:border-primary/50 hover:bg-muted'
-                  )}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            <Button
-              onClick={handleTopup}
-              disabled={topupLoading || !hasStripeSubscription}
-              size="sm"
-            >
-              {topupLoading ? 'Redirecting…' : `Add $${(topupPreset / 100).toFixed(0)} to Balance`}
-            </Button>
-            {!hasStripeSubscription && (
-              <p className="text-xs text-muted-foreground">
-                You need an active subscription to top up your balance.
-              </p>
-            )}
-          </div>
-
-          {/* Auto top-up */}
-          <div className="space-y-4 border-t pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Auto Top-up</p>
-                <p className="text-xs text-muted-foreground">
-                  Automatically recharge when your balance runs low.
-                </p>
-              </div>
-              <Switch
-                checked={autoTopupEnabled}
-                onCheckedChange={setAutoTopupEnabled}
-                disabled={!hasStripeSubscription}
-              />
-            </div>
-
-            {autoTopupEnabled && (
-              <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="topup-threshold" className="text-xs">
-                      Top up when balance falls below
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                        $
-                      </span>
-                      <Input
-                        id="topup-threshold"
-                        type="number"
-                        min="1"
-                        step="1"
-                        className="pl-6"
-                        value={String(parseInt(autoTopupThreshold, 10) / 100 || '')}
-                        onChange={(e) =>
-                          setAutoTopupThreshold(
-                            String(Math.round(parseFloat(e.target.value || '0') * 100))
-                          )
-                        }
-                        placeholder="5.00"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="topup-amount" className="text-xs">
-                      Charge amount
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                        $
-                      </span>
-                      <Input
-                        id="topup-amount"
-                        type="number"
-                        min="5"
-                        step="1"
-                        className="pl-6"
-                        value={String(parseInt(autoTopupAmount, 10) / 100 || '')}
-                        onChange={(e) =>
-                          setAutoTopupAmount(
-                            String(Math.round(parseFloat(e.target.value || '0') * 100))
-                          )
-                        }
-                        placeholder="10.00"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Uses your saved payment method.{' '}
-                  <button
-                    onClick={handleManageSubscription}
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Manage payment method →
-                  </button>
-                </p>
-              </div>
-            )}
-
-            {hasStripeSubscription && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSaveAutoTopup}
-                disabled={savingAutoTopup}
-              >
-                {savingAutoTopup ? 'Saving…' : 'Save Auto Top-up Settings'}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Checkout CTA — shown when a plan is selected and user has no existing subscription */}
       {selected && !isTrialing && (
