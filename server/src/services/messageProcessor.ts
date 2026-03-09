@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import type { WhapiIncomingMessage } from '../types/webhook.js';
 import { shouldAIRespond, generateAndSendAIReply, sendOutsideHoursReply } from './ai.js';
+import { checkMessageAllowance, deductOverageBalance, triggerAutoTopup } from './billingService.js';
 import { extractSessionMemories } from './sessionMemory.js';
 
 /**
@@ -267,13 +268,48 @@ export async function processIncomingMessage(
     .update(sessionUpdate)
     .eq('id', sessionId);
 
-  // 6. Check if AI should respond (async, don't block)
+  // 6. Check message allowance (billing limits + balance check) before triggering AI
+  let allowance;
+  try {
+    allowance = await checkMessageAllowance(companyId);
+  } catch (err) {
+    console.error('Message allowance check error:', err);
+    // On check failure, allow AI to respond (fail open to avoid blocking messages on billing errors)
+    allowance = { allowed: true, isOverLimit: false, overageMessageCents: 0, autoTopupEnabled: false, autoTopupThresholdCents: 0 };
+  }
+
+  if (!allowance.allowed) {
+    // AI is paused due to billing limits — skip response silently
+    return;
+  }
+
+  // 7. Check if AI should respond and generate reply
   try {
     const aiResult = await shouldAIRespond(companyId, sessionId);
     if (aiResult.action === 'respond') {
-      generateAndSendAIReply(companyId, sessionId, aiResult.context).catch((err) => {
-        console.error('AI reply error:', err);
-      });
+      generateAndSendAIReply(companyId, sessionId, aiResult.context)
+        .then(async () => {
+          // If we're consuming from the balance (over plan limit), deduct and maybe auto top-up
+          if (allowance.isOverLimit && allowance.overageMessageCents > 0) {
+            try {
+              const newBalance = await deductOverageBalance(companyId, allowance.overageMessageCents);
+              if (
+                allowance.autoTopupEnabled &&
+                allowance.autoTopupThresholdCents > 0 &&
+                newBalance < allowance.autoTopupThresholdCents
+              ) {
+                triggerAutoTopup(companyId).catch((err) => {
+                  console.error('Auto top-up error:', err);
+                });
+              }
+            } catch (err) {
+              console.error('Balance deduction error:', err);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('AI reply error:', err);
+        });
     } else if (aiResult.action === 'outside_hours') {
       sendOutsideHoursReply(companyId, sessionId, aiResult.channelId, aiResult.outsideHoursMessage).catch((err) => {
         console.error('Outside hours reply error:', err);

@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
+import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle, Clock, Plus, Minus, Wallet } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +22,33 @@ import api from '@/lib/api';
 import { useSearchParams } from 'react-router-dom';
 
 type PlanId = 'starter' | 'pro' | 'scale';
+type AddonId = 'extra_channel' | 'extra_agent';
+
+interface BalanceData {
+  balance_cents: number;
+  auto_topup_enabled: boolean;
+  auto_topup_threshold_cents: number | null;
+  auto_topup_amount_cents: number | null;
+}
+
+const TOPUP_PRESETS = [
+  { label: '$10', cents: 1000 },
+  { label: '$25', cents: 2500 },
+  { label: '$50', cents: 5000 },
+  { label: '$100', cents: 10000 },
+];
+
+interface AddonProduct {
+  id: AddonId;
+  name: string;
+  description: string;
+  price_monthly_cents: number;
+}
+
+interface PurchasedAddon {
+  addon_id: AddonId;
+  quantity: number;
+}
 
 interface Plan {
   id: PlanId;
@@ -108,18 +138,38 @@ function formatDate(dateStr: string) {
   });
 }
 
+function daysRemaining(isoDate: string): number {
+  const now = new Date();
+  const end = new Date(isoDate);
+  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
 export default function BillingTab() {
   const [activePlanId, setActivePlanId] = useState<PlanId | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [currentPeriodEnd, setCurrentPeriodEnd] = useState<string | null>(null);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [selected, setSelected] = useState<PlanId | null>(null);
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
+  const [skippingTrial, setSkippingTrial] = useState(false);
   const [changingPlan, setChangingPlan] = useState<PlanId | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [addonProducts, setAddonProducts] = useState<AddonProduct[]>([]);
+  const [purchasedAddons, setPurchasedAddons] = useState<PurchasedAddon[]>([]);
+  const [addonLoading, setAddonLoading] = useState<Partial<Record<AddonId, 'adding' | 'removing'>>>({});
+  const [pendingQty, setPendingQty] = useState<Partial<Record<AddonId, number>>>({});
+  const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
+  const [topupPreset, setTopupPreset] = useState<number>(2500);
+  const [topupLoading, setTopupLoading] = useState(false);
+  const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
+  const [autoTopupThreshold, setAutoTopupThreshold] = useState('500');
+  const [autoTopupAmount, setAutoTopupAmount] = useState('1000');
+  const [savingAutoTopup, setSavingAutoTopup] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -127,35 +177,128 @@ export default function BillingTab() {
       toast.success('Subscription activated! Welcome aboard.');
       setSearchParams((prev) => { prev.delete('success'); return prev; }, { replace: true });
     }
+    if (searchParams.get('topup') === 'success') {
+      toast.success('Balance topped up successfully!');
+      setSearchParams((prev) => { prev.delete('topup'); return prev; }, { replace: true });
+    }
   }, []);
 
   const fetchSubscription = () => {
     return api.get('/billing/subscription')
       .then(({ data }) => {
         if (data.subscription) {
-          setActivePlanId(data.subscription.plan_id);
-          setHasStripeSubscription(!!data.subscription.stripe_subscription_id);
-          setCancelAtPeriodEnd(!!data.subscription.cancel_at_period_end);
-          setCurrentPeriodEnd(data.subscription.current_period_end ?? null);
+          const sub = data.subscription;
+          setActivePlanId(sub.plan_id as PlanId);
+          setSubscriptionStatus(sub.status);
+          setHasStripeSubscription(!!sub.stripe_subscription_id);
+          setCancelAtPeriodEnd(!!sub.cancel_at_period_end);
+          setCurrentPeriodEnd(sub.current_period_end ?? null);
+          setTrialEndsAt(sub.trial_ends_at ?? null);
+        } else {
+          setSubscriptionStatus(null);
+          setActivePlanId(null);
         }
       })
       .catch(() => {});
   };
 
+  const fetchAddons = () => {
+    return api.get('/billing/addons')
+      .then(({ data }) => {
+        setAddonProducts(data.available ?? []);
+        setPurchasedAddons(data.purchased ?? []);
+      })
+      .catch(() => {});
+  };
+
+  const fetchBalance = () => {
+    return api.get('/billing/balance')
+      .then(({ data }) => {
+        setBalanceData(data);
+        setAutoTopupEnabled(data.auto_topup_enabled ?? false);
+        if (data.auto_topup_threshold_cents) setAutoTopupThreshold(String(data.auto_topup_threshold_cents));
+        if (data.auto_topup_amount_cents) setAutoTopupAmount(String(data.auto_topup_amount_cents));
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
-    fetchSubscription().finally(() => setLoading(false));
+    Promise.all([fetchSubscription(), fetchAddons(), fetchBalance()]).finally(() => setLoading(false));
   }, []);
 
-  // Redirect to Stripe Checkout for new subscribers
-  const handleCheckout = async () => {
-    if (!selected) return;
-    setRedirecting(true);
+  // Keep pendingQty in sync with purchased addons (on load and after a successful update)
+  useEffect(() => {
+    const map: Partial<Record<AddonId, number>> = {};
+    purchasedAddons.forEach((a) => { map[a.addon_id] = a.quantity; });
+    setPendingQty(map);
+  }, [purchasedAddons]);
+
+  const handleAddonUpdate = async (addonId: AddonId, quantity: number) => {
+    setAddonLoading((prev) => ({ ...prev, [addonId]: 'adding' }));
     try {
-      const { data } = await api.post('/billing/create-checkout-session', { plan_id: selected });
+      await api.post('/billing/addons/update', { addon_id: addonId, quantity });
+      await fetchAddons();
+      toast.success('Add-on updated.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to update add-on. Please try again.');
+    } finally {
+      setAddonLoading((prev) => { const next = { ...prev }; delete next[addonId]; return next; });
+    }
+  };
+
+  const handleTopup = async () => {
+    setTopupLoading(true);
+    try {
+      const { data } = await api.post('/billing/topup', { amount_cents: topupPreset });
       window.location.href = data.url;
     } catch {
-      toast.error('Failed to start checkout. Please try again.');
+      toast.error('Failed to start top-up. Please try again.');
+      setTopupLoading(false);
+    }
+  };
+
+  const handleSaveAutoTopup = async () => {
+    setSavingAutoTopup(true);
+    try {
+      await api.post('/billing/configure-auto-topup', {
+        enabled: autoTopupEnabled,
+        threshold_cents: autoTopupEnabled ? parseInt(autoTopupThreshold, 10) : undefined,
+        amount_cents: autoTopupEnabled ? parseInt(autoTopupAmount, 10) : undefined,
+      });
+      toast.success('Auto top-up settings saved.');
+    } catch {
+      toast.error('Failed to save auto top-up settings.');
+    } finally {
+      setSavingAutoTopup(false);
+    }
+  };
+
+  // Redirect to Stripe Checkout — with_trial: true adds a 7-day free trial period
+  const handleCheckout = async (planId: PlanId, withTrial = false) => {
+    setRedirecting(true);
+    try {
+      const { data } = await api.post('/billing/create-checkout-session', {
+        plan_id: planId,
+        with_trial: withTrial,
+      });
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to start checkout. Please try again.');
       setRedirecting(false);
+    }
+  };
+
+  // End the trial immediately — first charge fires now, full plan limits apply
+  const handleSkipTrial = async () => {
+    setSkippingTrial(true);
+    try {
+      await api.post('/billing/skip-trial');
+      toast.success('Trial ended. Your full plan is now active.');
+      await fetchSubscription();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Failed to skip trial. Please try again.');
+    } finally {
+      setSkippingTrial(false);
     }
   };
 
@@ -186,14 +329,18 @@ export default function BillingTab() {
     }
   };
 
-  // Cancel at period end
+  // Cancel at period end (if trialing, cancels at trial end — no charge)
   const handleCancel = async () => {
     setShowCancelDialog(false);
     setCancelling(true);
     try {
       await api.post('/billing/cancel');
       setCancelAtPeriodEnd(true);
-      toast.success('Your subscription will be cancelled at the end of the billing period.');
+      toast.success(
+        isTrialing
+          ? 'Trial cancelled. You will not be charged.'
+          : 'Your subscription will be cancelled at the end of the billing period.'
+      );
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? 'Failed to cancel. Please try again.');
     } finally {
@@ -215,22 +362,181 @@ export default function BillingTab() {
     }
   };
 
+
   if (loading) {
     return <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>;
   }
 
+  const isTrialing = subscriptionStatus === 'trialing';
+  // A user who had any subscription (even cancelled) has used their trial eligibility
+  const hasHadSubscription = subscriptionStatus !== null;
+  const hasNoSubscription = subscriptionStatus === null;
   const pendingPlan = PLANS.find((p) => p.id === selected);
+  const trialDaysLeft = trialEndsAt ? daysRemaining(trialEndsAt) : 0;
+  const activePlanName = PLANS.find((p) => p.id === activePlanId)?.name;
 
   return (
     <div className="space-y-8">
-      {/* Current plan banner */}
-      {activePlanId && (
+      {/* AI Message Balance — compact top bar */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2 min-w-[120px]">
+              <Wallet className="h-4 w-4 text-primary shrink-0" />
+              <div>
+                <p className="text-xs text-muted-foreground">AI Message Balance</p>
+                <p className="text-lg font-bold leading-tight">
+                  ${((balanceData?.balance_cents ?? 0) / 100).toFixed(2)}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {TOPUP_PRESETS.map((preset) => (
+                <button
+                  key={preset.cents}
+                  onClick={() => setTopupPreset(preset.cents)}
+                  className={cn(
+                    'rounded-md border px-3 py-1 text-xs font-medium transition-colors',
+                    topupPreset === preset.cents
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'hover:border-primary/50 hover:bg-muted'
+                  )}
+                >
+                  {preset.label}
+                </button>
+              ))}
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleTopup}
+                disabled={topupLoading || !hasStripeSubscription}
+              >
+                {topupLoading ? 'Redirecting…' : `Add $${(topupPreset / 100).toFixed(0)}`}
+              </Button>
+            </div>
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <span className="text-xs text-muted-foreground">Auto top-up</span>
+              <Switch
+                checked={autoTopupEnabled}
+                onCheckedChange={(val) => {
+                  setAutoTopupEnabled(val);
+                }}
+                disabled={!hasStripeSubscription}
+              />
+              {hasStripeSubscription && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={handleSaveAutoTopup}
+                  disabled={savingAutoTopup}
+                >
+                  {savingAutoTopup ? 'Saving…' : 'Save'}
+                </Button>
+              )}
+            </div>
+          </div>
+          {autoTopupEnabled && (
+            <div className="mt-3 flex flex-wrap items-end gap-3 border-t pt-3">
+              <div className="space-y-1">
+                <Label htmlFor="topup-threshold" className="text-xs">Top up when below</Label>
+                <div className="relative w-24">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    id="topup-threshold"
+                    type="number"
+                    min="1"
+                    step="1"
+                    className="h-7 pl-5 text-xs"
+                    value={String(parseInt(autoTopupThreshold, 10) / 100 || '')}
+                    onChange={(e) => setAutoTopupThreshold(String(Math.round(parseFloat(e.target.value || '0') * 100)))}
+                    placeholder="5.00"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="topup-amount" className="text-xs">Charge amount</Label>
+                <div className="relative w-24">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                  <Input
+                    id="topup-amount"
+                    type="number"
+                    min="5"
+                    step="1"
+                    className="h-7 pl-5 text-xs"
+                    value={String(parseInt(autoTopupAmount, 10) / 100 || '')}
+                    onChange={(e) => setAutoTopupAmount(String(Math.round(parseFloat(e.target.value || '0') * 100)))}
+                    placeholder="10.00"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pb-1">Uses your saved payment method.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Trial banner */}
+      {isTrialing && trialEndsAt && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <div className="text-sm">
+                <p className="font-semibold text-blue-900 dark:text-blue-100">
+                  {trialDaysLeft > 0
+                    ? `${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left in your free trial`
+                    : 'Your free trial ends today'}
+                  {activePlanName && (
+                    <span className="font-normal text-blue-700 dark:text-blue-300"> — {activePlanName} plan</span>
+                  )}
+                </p>
+                <p className="mt-0.5 text-blue-700 dark:text-blue-300">
+                  Trial limits: 1 WhatsApp channel · 1 AI agent · 100 messages · 3 KB pages.
+                  {trialEndsAt && (
+                    <> Your {activePlanName} plan starts automatically on <strong>{formatDate(trialEndsAt)}</strong>.</>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowCancelDialog(true)}
+                disabled={cancelling || cancelAtPeriodEnd}
+                className="border-blue-300 text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300"
+              >
+                {cancelAtPeriodEnd ? 'Cancellation Scheduled' : 'Cancel Trial'}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSkipTrial}
+                disabled={skippingTrial || cancelAtPeriodEnd}
+              >
+                {skippingTrial ? 'Activating…' : 'Skip Trial & Start Now'}
+              </Button>
+            </div>
+          </div>
+          {cancelAtPeriodEnd && (
+            <div className="mt-3 flex items-center justify-between border-t border-blue-200 pt-3 text-sm dark:border-blue-800">
+              <span className="text-blue-700 dark:text-blue-300">
+                Trial will end on <strong>{trialEndsAt ? formatDate(trialEndsAt) : '—'}</strong>. You will not be charged.
+              </span>
+              <Button size="sm" variant="ghost" onClick={handleReactivate} disabled={reactivating}
+                className="text-blue-700 hover:text-blue-900 dark:text-blue-300">
+                {reactivating ? 'Reactivating…' : 'Undo Cancellation'}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Current plan banner (active paid subscribers, not on trial) */}
+      {activePlanId && !isTrialing && (
         <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           <span>
-            Current plan:{' '}
-            <span className="font-semibold">
-              {PLANS.find((p) => p.id === activePlanId)?.name}
-            </span>
+            Current plan: <span className="font-semibold">{activePlanName}</span>
           </span>
           {hasStripeSubscription && (
             <Button
@@ -247,8 +553,8 @@ export default function BillingTab() {
         </div>
       )}
 
-      {/* Cancellation scheduled banner */}
-      {cancelAtPeriodEnd && currentPeriodEnd && (
+      {/* Cancellation scheduled banner (paid subscribers only) */}
+      {cancelAtPeriodEnd && !isTrialing && currentPeriodEnd && (
         <div className="flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
@@ -257,12 +563,7 @@ export default function BillingTab() {
               <span className="font-semibold">{formatDate(currentPeriodEnd)}</span>. You'll keep access until then.
             </span>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleReactivate}
-            disabled={reactivating}
-          >
+          <Button size="sm" variant="outline" onClick={handleReactivate} disabled={reactivating}>
             {reactivating ? 'Reactivating…' : 'Reactivate Plan'}
           </Button>
         </div>
@@ -271,9 +572,10 @@ export default function BillingTab() {
       {/* Plan Cards */}
       <div className="grid gap-6 sm:grid-cols-3">
         {PLANS.map((plan) => {
-          const isCurrent = activePlanId === plan.id;
-          const isStripe = hasStripeSubscription && activePlanId !== null;
-          const direction = activePlanId ? getPlanDirection(activePlanId, plan.id) : null;
+          const isCurrent = !isTrialing && activePlanId === plan.id;
+          const isTrialPlan = isTrialing && activePlanId === plan.id;
+          const isStripeActive = hasStripeSubscription && !isTrialing && activePlanId !== null;
+          const direction = activePlanId && !isTrialing ? getPlanDirection(activePlanId, plan.id) : null;
           const isChanging = changingPlan === plan.id;
 
           return (
@@ -283,7 +585,8 @@ export default function BillingTab() {
                 'relative flex flex-col transition-shadow',
                 plan.popular && 'border-primary shadow-md',
                 isCurrent && 'ring-2 ring-primary ring-offset-2',
-                selected === plan.id && !isCurrent && 'ring-2 ring-primary/50 ring-offset-2'
+                isTrialPlan && 'ring-2 ring-blue-400 ring-offset-2',
+                selected === plan.id && !isCurrent && !isTrialPlan && 'ring-2 ring-primary/50 ring-offset-2'
               )}
             >
               {plan.popular && (
@@ -295,11 +598,21 @@ export default function BillingTab() {
               )}
 
               <CardHeader className="pb-4 pt-6">
-                <CardTitle className="text-lg font-semibold">{plan.name}</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg font-semibold">{plan.name}</CardTitle>
+                  {isTrialPlan && (
+                    <Badge variant="secondary" className="text-xs">
+                      In Trial
+                    </Badge>
+                  )}
+                </div>
                 <div className="mt-1 flex items-baseline gap-1">
                   <span className="text-3xl font-bold">${plan.price}</span>
                   <span className="text-sm text-muted-foreground">/ month</span>
                 </div>
+                {hasNoSubscription && (
+                  <p className="text-xs text-muted-foreground">Includes 7-day free trial</p>
+                )}
               </CardHeader>
 
               <CardContent className="flex flex-1 flex-col gap-6">
@@ -333,7 +646,21 @@ export default function BillingTab() {
                   <Button className="mt-auto w-full" variant="outline" disabled>
                     Current Plan
                   </Button>
-                ) : isStripe ? (
+                ) : isTrialPlan ? (
+                  <Button className="mt-auto w-full" variant="outline" disabled>
+                    Currently Trialing
+                  </Button>
+                ) : isTrialing ? (
+                  // On a trial for a different plan — offer switching
+                  <Button
+                    className="mt-auto w-full"
+                    variant="outline"
+                    onClick={() => handleSkipTrial()}
+                    disabled={skippingTrial}
+                  >
+                    Switch to {plan.name}
+                  </Button>
+                ) : isStripeActive ? (
                   <Button
                     className="mt-auto w-full gap-1.5"
                     variant={direction === 'upgrade' ? 'default' : 'outline'}
@@ -404,21 +731,108 @@ export default function BillingTab() {
         </CardContent>
       </Card>
 
-      {/* Checkout CTA — only shown for users without a Stripe subscription */}
-      {selected && !hasStripeSubscription && (
-        <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+      {/* Add-ons — only shown to active (non-trial) Stripe subscribers */}
+      {hasStripeSubscription && !isTrialing && subscriptionStatus === 'active' && addonProducts.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Add-ons</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Expand your plan with additional channels or agents. Billed monthly, prorated from purchase date.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {addonProducts.map((product) => {
+              const purchased = purchasedAddons.find((p) => p.addon_id === product.id);
+              const currentQty = purchased?.quantity ?? 0;
+              const pendingQ = pendingQty[product.id] ?? 0;
+              const hasChanges = pendingQ !== currentQty;
+              const state = addonLoading[product.id];
+              const busy = !!state;
+
+              return (
+                <div key={product.id} className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{product.name}</p>
+                    <p className="text-xs text-muted-foreground">{product.description}</p>
+                  </div>
+                  <div className="shrink-0 text-sm font-semibold text-muted-foreground">
+                    ${(product.price_monthly_cents / 100).toFixed(0)}/mo each
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      disabled={busy || pendingQ === 0}
+                      onClick={() => setPendingQty((p) => ({ ...p, [product.id]: Math.max(0, (p[product.id] ?? currentQty) - 1) }))}
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="w-5 text-center text-sm font-semibold tabular-nums">
+                      {busy ? '…' : pendingQ}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      disabled={busy}
+                      onClick={() => setPendingQty((p) => ({ ...p, [product.id]: (p[product.id] ?? currentQty) + 1 }))}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                    {hasChanges && (
+                      <Button
+                        size="sm"
+                        className="ml-1"
+                        disabled={busy}
+                        onClick={() => handleAddonUpdate(product.id, pendingQ)}
+                      >
+                        {busy ? 'Saving…' : 'Confirm'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Checkout CTA — shown when a plan is selected and user has no existing subscription */}
+      {selected && !isTrialing && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-4 space-y-3">
           <p className="text-sm font-medium">
-            Subscribe to{' '}
             <span className="font-semibold">{pendingPlan?.name}</span> — ${pendingPlan?.price}/month
           </p>
-          <Button size="sm" onClick={handleCheckout} disabled={redirecting}>
-            {redirecting ? 'Redirecting…' : 'Confirm & Subscribe'}
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {hasNoSubscription && (
+              <Button
+                className="flex-1"
+                onClick={() => handleCheckout(selected, true)}
+                disabled={redirecting}
+              >
+                {redirecting ? 'Redirecting…' : 'Start 7-Day Free Trial'}
+              </Button>
+            )}
+            <Button
+              variant={hasNoSubscription ? 'outline' : 'default'}
+              className="flex-1"
+              onClick={() => handleCheckout(selected, false)}
+              disabled={redirecting}
+            >
+              {redirecting ? 'Redirecting…' : hasHadSubscription ? 'Subscribe Now' : 'Subscribe Without Trial'}
+            </Button>
+          </div>
+          {hasNoSubscription && (
+            <p className="text-xs text-muted-foreground">
+              Free trial: 1 channel · 1 agent · 100 messages · 3 KB pages for 7 days. Credit card required — you won't be charged until the trial ends.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Cancel plan option */}
-      {hasStripeSubscription && !cancelAtPeriodEnd && (
+      {/* Cancel plan option (paid subscribers only) */}
+      {hasStripeSubscription && !isTrialing && !cancelAtPeriodEnd && (
         <div className="text-center">
           <button
             onClick={() => setShowCancelDialog(true)}
@@ -434,21 +848,34 @@ export default function BillingTab() {
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel your plan?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isTrialing ? 'Cancel your free trial?' : 'Cancel your plan?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Your subscription will remain active until{' '}
-              {currentPeriodEnd ? formatDate(currentPeriodEnd) : 'the end of your billing period'}.
-              After that, you'll lose access to AI agents, channels, and other paid features.
-              You can reactivate any time before then.
+              {isTrialing ? (
+                <>
+                  Your trial will be cancelled and you will <strong>not be charged</strong>.
+                  You'll keep access to trial features until{' '}
+                  {trialEndsAt ? formatDate(trialEndsAt) : 'the trial ends'}.
+                  You can reactivate before then if you change your mind.
+                </>
+              ) : (
+                <>
+                  Your subscription will remain active until{' '}
+                  {currentPeriodEnd ? formatDate(currentPeriodEnd) : 'the end of your billing period'}.
+                  After that, you'll lose access to AI agents, channels, and other paid features.
+                  You can reactivate any time before then.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep Plan</AlertDialogCancel>
+            <AlertDialogCancel>{isTrialing ? 'Keep Trial' : 'Keep Plan'}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancel}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Yes, Cancel Plan
+              {isTrialing ? 'Yes, Cancel Trial' : 'Yes, Cancel Plan'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

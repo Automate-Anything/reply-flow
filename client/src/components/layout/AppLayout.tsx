@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import BillingBanners from './BillingBanners';
 import { FormGuardProvider } from '@/contexts/FormGuardContext';
 
 export default function AppLayout() {
@@ -29,6 +30,7 @@ export default function AppLayout() {
 
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+          <BillingBanners />
           <main className="flex-1 overflow-auto">
             <Outlet />
           </main>

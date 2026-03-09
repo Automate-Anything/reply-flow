@@ -91,18 +91,22 @@ export async function waitForReady(channelToken: string, timeoutMs = 120_000, si
       await gate.get('/health', { params: { wakeup: true } });
       return; // 200 = channel is ready
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.status === 404) {
-        // Not provisioned yet — wait and retry
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(resolve, 5000);
-          signal?.addEventListener('abort', () => {
-            clearTimeout(timer);
-            reject(new DOMException('Provisioning cancelled', 'AbortError'));
-          }, { once: true });
-        });
-        continue;
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        // Retry on: no response (channel offline/unreachable), 404 (not provisioned yet), 5xx (starting up)
+        // Throw on: 4xx errors that won't self-resolve (e.g. 401, 402, 403)
+        if (!status || status === 404 || status >= 500) {
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(resolve, 5000);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
+              reject(new DOMException('Provisioning cancelled', 'AbortError'));
+            }, { once: true });
+          });
+          continue;
+        }
       }
-      throw err; // Unexpected error
+      throw err; // Unexpected error (e.g. auth failure)
     }
   }
   throw new Error('Channel provisioning timed out after 2 minutes');

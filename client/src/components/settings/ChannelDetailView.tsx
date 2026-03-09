@@ -131,10 +131,13 @@ export default function ChannelDetailPage() {
   useEffect(() => {
     if (effectiveStatus !== 'pending') return;
 
+    let done = false;
     const poll = setInterval(async () => {
+      if (done) return;
       try {
         const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
         if (data.status !== 'pending') {
+          done = true;
           setEffectiveStatus(data.status);
           if (data.status === 'connected') {
             toast.success('WhatsApp connected successfully');
@@ -146,7 +149,7 @@ export default function ChannelDetailPage() {
       }
     }, 5000);
 
-    return () => clearInterval(poll);
+    return () => { done = true; clearInterval(poll); };
   }, [effectiveStatus, numericChannelId, fetchChannel]);
 
   // When awaiting_scan: fetch QR, auto-refresh, poll for connection
@@ -159,6 +162,8 @@ export default function ChannelDetailPage() {
     const handleQRResponse = (data: { qr?: string; connected?: boolean }) => {
       if (cancelled) return;
       if (data.connected) {
+        cancelled = true;
+        cancelledRef.current = true;
         setEffectiveStatus('connected');
         setQrData(null);
         toast.success('WhatsApp connected successfully');
@@ -194,6 +199,8 @@ export default function ChannelDetailPage() {
       try {
         const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
         if (data.status === 'connected' && !cancelled) {
+          cancelled = true;
+          cancelledRef.current = true;
           setEffectiveStatus('connected');
           setQrData(null);
           toast.success('WhatsApp connected successfully');
@@ -423,7 +430,7 @@ export default function ChannelDetailPage() {
           )}
 
           {/* Danger zone — Delete */}
-          {!isProvisioning && (
+          {(
             <div className="rounded-lg border border-dashed border-destructive/30 p-4">
               <div className="flex items-center justify-between">
                 <div>

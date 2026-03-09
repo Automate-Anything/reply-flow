@@ -28,20 +28,12 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
     const channelName = req.body.name?.trim() || `reply-flow-${req.userId!.slice(0, 8)}-${Date.now()}`;
     const channel = await whapi.createChannel(channelName);
 
-    // 2. Fund the channel with 1 day so it becomes active
-    try {
-      await whapi.extendChannel(channel.id, 1);
-    } catch (err) {
-      // Clean up the orphaned channel on WhAPI if funding fails
-      await whapi.deleteChannel(channel.id).catch(() => {});
-      throw err;
-    }
-
     // 3. Save to DB with pending status
     const { data: insertedRow, error: dbError } = await supabaseAdmin
       .from('whatsapp_channels')
       .insert({
         company_id: companyId,
+        user_id: req.userId,
         created_by: req.userId,
         channel_id: channel.id,
         channel_token: channel.token,
@@ -76,6 +68,30 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
     } catch (err) {
       console.error('Failed to create channel AI settings:', err);
       // Non-fatal: channel works, AI settings can be configured later
+    }
+
+    // 4b. Extend the channel based on subscription status so it starts funded
+    try {
+      const { data: sub } = await supabaseAdmin
+        .from('subscriptions')
+        .select('status, trial_ends_at')
+        .eq('company_id', companyId)
+        .maybeSingle();
+
+      let extensionDays = 0;
+      if (sub?.status === 'trialing' && sub.trial_ends_at) {
+        const msRemaining = new Date(sub.trial_ends_at).getTime() - Date.now();
+        extensionDays = Math.max(1, Math.ceil(msRemaining / 86_400_000));
+      } else if (sub?.status === 'active') {
+        extensionDays = 30;
+      }
+
+      if (extensionDays > 0) {
+        await whapi.extendChannel(channel.id, extensionDays);
+        console.log(`Extended new channel ${channel.id} by ${extensionDays} days`);
+      }
+    } catch (err) {
+      console.error('Failed to extend channel on creation (non-fatal):', err instanceof Error ? err.message : err);
     }
 
     // 5. Return immediately — client will poll /health-check for provisioning status

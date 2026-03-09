@@ -53,6 +53,9 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     }
   }, []);
 
+  // Stop all polling when the component unmounts
+  useEffect(() => () => clearTimers(), [clearTimers]);
+
   const markConnected = useCallback(() => {
     clearTimers();
     setState('idle');
@@ -81,7 +84,18 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const startHealthPolling = useCallback((channelId: number) => {
     if (healthPollRef.current) clearInterval(healthPollRef.current);
 
+    const startTime = Date.now();
+    const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
     healthPollRef.current = setInterval(async () => {
+      // Stop polling and show error if stuck for too long
+      if (Date.now() - startTime > TIMEOUT_MS) {
+        clearTimers();
+        setError('Channel provisioning timed out. Please delete this channel and try again.');
+        setState('error');
+        return;
+      }
+
       try {
         const { data } = await api.get(`/whatsapp/health-check?channelId=${channelId}`);
 
@@ -129,10 +143,18 @@ export default function WhatsAppConnection({ onCreated }: Props) {
       const { data } = await api.post('/whatsapp/create-channel', { name: channelName.trim() || undefined });
       setDbChannelId(data.dbChannelId);
       startHealthPolling(data.dbChannelId);
-    } catch {
-      setError('Failed to create channel. Please try again.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string; used?: number; included?: number } } };
+      const serverMsg = axiosErr?.response?.data?.error;
+      const status = axiosErr?.response?.status;
+      let message = 'Failed to create channel. Please try again.';
+      if (status === 402 && serverMsg) {
+        const { used, included } = axiosErr.response!.data!;
+        message = `${serverMsg}. You are using ${used} of ${included} channel${included === 1 ? '' : 's'} on your current plan. Please upgrade to add more.`;
+      }
+      setError(message);
       setState('error');
-      toast.error('Failed to create WhatsApp channel');
+      toast.error(message);
     }
   };
 
@@ -148,6 +170,25 @@ export default function WhatsAppConnection({ onCreated }: Props) {
       toast.success('Channel deleted');
     } catch {
       toast.error('Failed to delete channel');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setDeleting(true);
+    try {
+      if (dbChannelId) {
+        await api.delete('/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
+      } else {
+        await api.post('/whatsapp/cancel-provisioning');
+      }
+      clearTimers();
+      setQrData(null);
+      setDbChannelId(null);
+      setState('idle');
+    } catch {
+      toast.error('Failed to cancel channel creation');
     } finally {
       setDeleting(false);
     }
@@ -216,13 +257,22 @@ export default function WhatsAppConnection({ onCreated }: Props) {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setError(null); setState('idle'); }}>
-              Dismiss
-            </Button>
-            <Button size="sm" onClick={handleCreateChannel}>
-              <RefreshCw className="mr-2 h-3 w-3" />
-              Retry
-            </Button>
+            {dbChannelId ? (
+              <Button variant="outline" size="sm" onClick={handleDelete} disabled={deleting}>
+                {deleting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Trash2 className="mr-2 h-3 w-3" />}
+                {deleting ? 'Deleting...' : 'Delete Channel'}
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => { setError(null); setState('idle'); }}>
+                  Dismiss
+                </Button>
+                <Button size="sm" onClick={handleCreateChannel}>
+                  <RefreshCw className="mr-2 h-3 w-3" />
+                  Retry
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -320,6 +370,13 @@ export default function WhatsAppConnection({ onCreated }: Props) {
                       : 'Almost there...'}
                   </span>
                 </div>
+              </div>
+
+              <div className="flex justify-end px-1">
+                <Button variant="ghost" size="sm" onClick={handleCancel} disabled={deleting}>
+                  {deleting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+                  Cancel
+                </Button>
               </div>
             </div>
           );

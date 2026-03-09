@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -106,13 +106,17 @@ export default function UsageTab() {
   const [data, setData] = useState<UsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab');
 
   useEffect(() => {
+    if (activeTab !== 'usage') return;
+    setLoading(true);
     api.get('/billing/usage')
       .then(({ data }) => setData(data))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeTab]);
 
   if (loading) {
     return <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>;

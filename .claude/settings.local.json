@@ -5,7 +5,13 @@
       "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/.env*)",
       "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/client/.env*)",
       "Bash(xargs grep -l \"billing\\\\|subscription\\\\|agent\\\\|channel\")",
-      "Bash(npm install stripe)"
+      "Bash(npm install stripe)",
+      "Bash(xargs grep -l \"AIMessage\\\\|generateResponse\\\\|callClaudeAI\\\\|anthropic\")",
+      "Bash(xargs grep -l \"webhook\")",
+      "Bash(xargs grep -l \"rate.*limit\\\\|rateLimit\\\\|throttle\")",
+      "Bash(grep -n \"checkPlanLimit\\\\|resource.*limit\" /c/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/src/routes/*.ts)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
