@@ -80,6 +80,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
       : `${session.chat_id}@s.whatsapp.net`;
 
     const result = await whapi.sendTextMessage(channel.channel_token, chatId, body, whapiQuotedId);
+    console.log('[send] whapi result:', JSON.stringify(result));
 
     // Store in DB
     const now = new Date().toISOString();
@@ -93,7 +94,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
         phone_number: session.phone_number,
         message_body: body,
         message_type: 'text',
-        message_id_normalized: (result as Record<string, string>)?.message_id || null,
+        message_id_normalized: (result as Record<string, unknown> & { message?: { id?: string } })?.message?.id || (result as Record<string, string>)?.message_id || null,
         direction: 'outbound',
         sender_type: 'human',
         status: 'sent',
