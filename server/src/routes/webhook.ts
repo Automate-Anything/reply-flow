@@ -10,26 +10,44 @@ router.post('/', async (req, res) => {
   try {
     const payload = req.body as WhapiWebhookPayload;
 
+    console.log('[webhook] received payload:', JSON.stringify(payload, null, 2));
+
     // Acknowledge immediately so Whapi doesn't retry
     res.status(200).json({ status: 'ok' });
 
-    if (!payload.messages || payload.messages.length === 0) return;
+    if (!payload.messages || payload.messages.length === 0) {
+      console.log('[webhook] no messages in payload, skipping');
+      return;
+    }
 
     for (const msg of payload.messages) {
+      console.log(`[webhook] processing msg id=${msg.id} from=${msg.from} to=${msg.to} type=${msg.type}`);
+
       // Skip outgoing messages (from us)
-      if (msg.from === msg.to) continue;
+      if (msg.from === msg.to) {
+        console.log(`[webhook] skipping outgoing message (from === to)`);
+        continue;
+      }
 
       // Find which user owns this channel by matching the "to" number
       const toPhone = msg.to?.replace(/@.*$/, '');
-      const { data: channel } = await supabaseAdmin
+      console.log(`[webhook] looking up channel for phone=${toPhone}`);
+
+      const { data: channel, error: channelError } = await supabaseAdmin
         .from('whatsapp_channels')
-        .select('id, company_id')
+        .select('id, company_id, channel_status, phone_number')
         .eq('phone_number', toPhone)
-        .eq('channel_status', 'connected')
         .single();
 
-      if (!channel) {
-        console.warn(`No connected channel found for incoming message to ${toPhone}`);
+      if (channelError || !channel) {
+        console.warn(`[webhook] no channel found at all for phone=${toPhone}`, channelError);
+        continue;
+      }
+
+      console.log(`[webhook] found channel id=${channel.id} status=${channel.channel_status} stored_phone=${channel.phone_number}`);
+
+      if (channel.channel_status !== 'connected') {
+        console.warn(`[webhook] channel ${channel.id} is not connected (status=${channel.channel_status}), skipping`);
         continue;
       }
 
