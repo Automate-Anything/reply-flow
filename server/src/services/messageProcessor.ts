@@ -114,7 +114,8 @@ async function createNewSession(
 export async function processIncomingMessage(
   msg: WhapiIncomingMessage,
   companyId: string,
-  channelId: number
+  channelId: number,
+  userId: string
 ): Promise<void> {
   const phoneNumber = normalizeChatId(msg.from);
   const chatId = normalizeChatId(msg.chat_id);
@@ -146,6 +147,7 @@ export async function processIncomingMessage(
       .from('contacts')
       .insert({
         company_id: companyId,
+        user_id: userId,
         phone_number: phoneNumber,
         whatsapp_name: msg.from_name || null,
         first_name: msg.from_name || null,

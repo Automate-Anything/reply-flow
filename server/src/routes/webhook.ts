@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
 
     const { data: channel, error: channelError } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, company_id, channel_status')
+      .select('id, user_id, company_id, channel_status')
       .eq('channel_id', whapiChannelId)
       .eq('channel_status', 'connected')
       .single();
@@ -49,7 +49,13 @@ router.post('/', async (req, res) => {
       // Skip outgoing messages
       if (msg.from_me) continue;
 
-      await processIncomingMessage(msg, channel.company_id, channel.id);
+      // Skip group messages (chat_id ends with @g.us)
+      if (msg.chat_id?.endsWith('@g.us')) {
+        console.log(`[webhook] skipping group message chat_id=${msg.chat_id}`);
+        continue;
+      }
+
+      await processIncomingMessage(msg, channel.company_id, channel.id, channel.user_id);
     }
   } catch (err) {
     console.error('Webhook processing error:', err);
