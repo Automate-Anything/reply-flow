@@ -258,13 +258,17 @@ export async function processIncomingMessage(
 
   const sessionUpdate: Record<string, unknown> = {
     contact_id: contactId,
-    contact_name: msg.from_name || phoneNumber,
     last_message: messageBody,
     last_message_at: messageTs,
-    last_message_direction: 'inbound',
-    last_message_sender: 'contact',
+    last_message_direction: isOutbound ? 'outbound' : 'inbound',
+    last_message_sender: isOutbound ? 'human' : 'contact',
     updated_at: new Date().toISOString(),
   };
+
+  // Only update contact_name from inbound messages — outbound msg.from_name is our own name
+  if (!isOutbound && msg.from_name) {
+    sessionUpdate.contact_name = msg.from_name;
+  }
 
   if (currentSession?.snoozed_until) {
     sessionUpdate.snoozed_until = null;

@@ -80,7 +80,6 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
       : `${session.chat_id}@s.whatsapp.net`;
 
     const result = await whapi.sendTextMessage(channel.channel_token, chatId, body, whapiQuotedId);
-    console.log('[send] whapi result:', JSON.stringify(result));
 
     // Store in DB
     const now = new Date().toISOString();

@@ -552,6 +552,7 @@ export async function sendOutsideHoursReply(
     : `${session.chat_id}@s.whatsapp.net`;
 
   const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
+  console.log('[ai] whapi send result:', JSON.stringify(result));
 
   const now = new Date().toISOString();
   await supabaseAdmin.from('chat_messages').insert({
@@ -611,6 +612,7 @@ async function sendAndStoreMessage(
     : `${session.chat_id}@s.whatsapp.net`;
 
   const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
+  console.log('[ai] whapi send result:', JSON.stringify(result));
 
   const now = new Date().toISOString();
   await supabaseAdmin.from('chat_messages').insert({
