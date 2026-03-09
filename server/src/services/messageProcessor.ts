@@ -231,6 +231,7 @@ export async function processIncomingMessage(
     .insert({
       session_id: sessionId,
       company_id: companyId,
+      user_id: userId,
       chat_id_normalized: chatId,
       phone_number: phoneNumber,
       message_body: messageBody,
