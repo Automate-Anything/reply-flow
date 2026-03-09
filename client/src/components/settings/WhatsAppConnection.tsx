@@ -161,6 +161,25 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     }
   };
 
+  const handleCancel = async () => {
+    setDeleting(true);
+    try {
+      if (dbChannelId) {
+        await api.delete('/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
+      } else {
+        await api.post('/whatsapp/cancel-provisioning');
+      }
+      clearTimers();
+      setQrData(null);
+      setDbChannelId(null);
+      setState('idle');
+    } catch {
+      toast.error('Failed to cancel channel creation');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleRefreshQR = async () => {
     if (!dbChannelId) return;
     setRefreshingQR(true);
@@ -328,6 +347,13 @@ export default function WhatsAppConnection({ onCreated }: Props) {
                       : 'Almost there...'}
                   </span>
                 </div>
+              </div>
+
+              <div className="flex justify-end px-1">
+                <Button variant="ghost" size="sm" onClick={handleCancel} disabled={deleting}>
+                  {deleting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+                  Cancel
+                </Button>
               </div>
             </div>
           );
