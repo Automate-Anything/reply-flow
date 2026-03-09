@@ -10,24 +10,13 @@ router.post('/', async (req, res) => {
   try {
     const payload = req.body as WhapiWebhookPayload;
 
-    console.log('[webhook] received payload:', JSON.stringify(payload, null, 2));
-
     // Acknowledge immediately so Whapi doesn't retry
     res.status(200).json({ status: 'ok' });
 
-    if (!payload.messages || payload.messages.length === 0) {
-      console.log('[webhook] no messages in payload, skipping');
-      return;
-    }
+    if (!payload.messages || payload.messages.length === 0) return;
 
-    // Look up the channel once using the top-level channel_id from the payload
     const whapiChannelId = payload.channel_id;
-    console.log(`[webhook] looking up channel for whapi channel_id=${whapiChannelId}`);
-
-    if (!whapiChannelId) {
-      console.warn('[webhook] no channel_id in payload, cannot route messages');
-      return;
-    }
+    if (!whapiChannelId) return;
 
     const { data: channel, error: channelError } = await supabaseAdmin
       .from('whatsapp_channels')
@@ -36,24 +25,11 @@ router.post('/', async (req, res) => {
       .eq('channel_status', 'connected')
       .single();
 
-    if (channelError || !channel) {
-      console.warn(`[webhook] no connected channel found for whapi channel_id=${whapiChannelId}`, channelError);
-      return;
-    }
-
-    console.log(`[webhook] matched channel id=${channel.id}`);
+    if (channelError || !channel) return;
 
     for (const msg of payload.messages) {
-      console.log(`[webhook] processing msg id=${msg.id} from=${msg.from} type=${msg.type}`);
-
-      // Skip outgoing messages
-      if (msg.from_me) continue;
-
       // Skip group messages (chat_id ends with @g.us)
-      if (msg.chat_id?.endsWith('@g.us')) {
-        console.log(`[webhook] skipping group message chat_id=${msg.chat_id}`);
-        continue;
-      }
+      if (msg.chat_id?.endsWith('@g.us')) continue;
 
       await processIncomingMessage(msg, channel.company_id, channel.id, channel.user_id);
     }

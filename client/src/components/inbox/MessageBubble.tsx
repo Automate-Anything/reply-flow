@@ -49,6 +49,7 @@ function groupReactions(reactions: Array<{ emoji: string; user_id: string }>): A
 export default function MessageBubble({ message, onCancelScheduled, onReply, isDebugMode }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const isAI = message.sender_type === 'ai';
+  const isHuman = message.sender_type === 'human';
   const isScheduled = message.status === 'scheduled' && message.scheduled_for;
   const reply = (message.metadata?.reply as ReplyMetadata) || null;
   const reactions = groupReactions(message.reactions || []);
@@ -121,6 +122,11 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
           {isAI && (
             <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wider opacity-70">
               AI
+            </span>
+          )}
+          {isHuman && (
+            <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wider opacity-70">
+              You
             </span>
           )}
           <p className="whitespace-pre-wrap text-sm leading-relaxed">

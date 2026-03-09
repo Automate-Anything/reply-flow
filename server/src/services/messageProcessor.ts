@@ -119,7 +119,9 @@ export async function processIncomingMessage(
   channelId: number,
   userId: string
 ): Promise<void> {
-  const phoneNumber = normalizeChatId(msg.from);
+  const isOutbound = msg.from_me === true;
+  // For outbound messages, msg.from is our own number — the contact is identified by chat_id
+  const phoneNumber = isOutbound ? normalizeChatId(msg.chat_id) : normalizeChatId(msg.from);
   const chatId = normalizeChatId(msg.chat_id);
   const messageBody = extractMessageBody(msg);
   const messageTs = new Date(msg.timestamp * 1000).toISOString();
@@ -237,9 +239,9 @@ export async function processIncomingMessage(
       message_body: messageBody,
       message_type: msg.type || 'text',
       message_id_normalized: msg.id,
-      direction: 'inbound',
-      sender_type: 'contact',
-      status: 'received',
+      direction: isOutbound ? 'outbound' : 'inbound',
+      sender_type: isOutbound ? 'human' : 'contact',
+      status: isOutbound ? 'sent' : 'received',
       read: false,
       message_ts: messageTs,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
@@ -273,7 +275,10 @@ export async function processIncomingMessage(
     .update(sessionUpdate)
     .eq('id', sessionId);
 
-  // 6. Check message allowance (billing limits + balance check) before triggering AI
+  // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed
+  if (isOutbound) return;
+
+  // Check message allowance (billing limits + balance check) before triggering AI
   let allowance;
   try {
     allowance = await checkMessageAllowance(companyId);
