@@ -71,12 +71,14 @@ async function createNewSession(
   contactId: string,
   chatId: string,
   phoneNumber: string,
+  userId: string,
   fromName?: string
 ): Promise<string> {
   const { data: newSession, error: sessionError } = await supabaseAdmin
     .from('chat_sessions')
     .insert({
       company_id: companyId,
+      user_id: userId,
       channel_id: channelId,
       contact_id: contactId,
       chat_id: chatId,
@@ -116,9 +118,12 @@ async function createNewSession(
 export async function processIncomingMessage(
   msg: WhapiIncomingMessage,
   companyId: string,
-  channelId: number
+  channelId: number,
+  userId: string
 ): Promise<void> {
-  const phoneNumber = normalizeChatId(msg.from);
+  const isOutbound = msg.from_me === true;
+  // For outbound messages, msg.from is our own number — the contact is identified by chat_id
+  const phoneNumber = isOutbound ? normalizeChatId(msg.chat_id) : normalizeChatId(msg.from);
   const chatId = normalizeChatId(msg.chat_id);
   const messageBody = extractMessageBody(msg);
   const messageTs = new Date(msg.timestamp * 1000).toISOString();
@@ -144,21 +149,15 @@ export async function processIncomingMessage(
         .eq('id', contactId);
     }
   } else {
-    // Look up the channel owner to set as contact owner
-    const { data: channelOwner } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('user_id')
-      .eq('id', channelId)
-      .single();
-
     const { data: newContact, error: contactError } = await supabaseAdmin
       .from('contacts')
       .insert({
         company_id: companyId,
+        user_id: userId,
         phone_number: phoneNumber,
         whatsapp_name: msg.from_name || null,
         first_name: msg.from_name || null,
-        owner_id: channelOwner?.user_id || null,
+        owner_id: userId,
       })
       .select('id')
       .single();
@@ -194,12 +193,12 @@ export async function processIncomingMessage(
       });
 
       // Create a fresh session
-      sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, msg.from_name);
+      sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
     } else {
       sessionId = activeSession.id;
     }
   } else {
-    sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, msg.from_name);
+    sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
   }
 
   // 3. Idempotency check — skip if message already exists
@@ -243,14 +242,15 @@ export async function processIncomingMessage(
     .insert({
       session_id: sessionId,
       company_id: companyId,
+      user_id: userId,
       chat_id_normalized: chatId,
       phone_number: phoneNumber,
       message_body: messageBody,
       message_type: msg.type || 'text',
       message_id_normalized: msg.id,
-      direction: 'inbound',
-      sender_type: 'contact',
-      status: 'received',
+      direction: isOutbound ? 'outbound' : 'inbound',
+      sender_type: isOutbound ? 'human' : 'contact',
+      status: isOutbound ? 'sent' : 'received',
       read: false,
       message_ts: messageTs,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
@@ -281,13 +281,17 @@ export async function processIncomingMessage(
 
   const sessionUpdate: Record<string, unknown> = {
     contact_id: contactId,
-    contact_name: msg.from_name || phoneNumber,
     last_message: messageBody,
     last_message_at: messageTs,
-    last_message_direction: 'inbound',
-    last_message_sender: 'contact',
+    last_message_direction: isOutbound ? 'outbound' : 'inbound',
+    last_message_sender: isOutbound ? 'human' : 'contact',
     updated_at: new Date().toISOString(),
   };
+
+  // Only update contact_name from inbound messages — outbound msg.from_name is our own name
+  if (!isOutbound && msg.from_name) {
+    sessionUpdate.contact_name = msg.from_name;
+  }
 
   if (currentSession?.snoozed_until) {
     sessionUpdate.snoozed_until = null;
@@ -298,7 +302,10 @@ export async function processIncomingMessage(
     .update(sessionUpdate)
     .eq('id', sessionId);
 
-  // 6. Check message allowance (billing limits + balance check) before triggering AI
+  // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed
+  if (isOutbound) return;
+
+  // Check message allowance (billing limits + balance check) before triggering AI
   let allowance;
   try {
     allowance = await checkMessageAllowance(companyId);

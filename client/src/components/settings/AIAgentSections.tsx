@@ -42,7 +42,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
   const {
     flow, dirty, updateFlow, updateDefaultStyle,
     addScenario, updateScenario, removeScenario,
-    setFallbackMode, setFallbackKBAttachments, reset,
+    setFallbackMode, setFallbackKBAttachments, reset, clearDirty,
   } = useResponseFlow(profileData);
 
   useFormDirtyGuard(dirty);
@@ -54,11 +54,12 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
     try {
       const merged = { ...profileData, response_flow: flow };
       await onSave({ profile_data: merged });
+      clearDirty();
       toast.success('Saved');
     } finally {
       setSaving(false);
     }
-  }, [profileData, flow, onSave]);
+  }, [profileData, flow, onSave, clearDirty]);
 
   const saveFooter = dirty ? (
     <div className="flex items-center justify-end border-t pt-4 gap-2">

@@ -94,7 +94,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
         phone_number: session.phone_number,
         message_body: body,
         message_type: 'text',
-        message_id_normalized: (result as Record<string, string>)?.message_id || null,
+        message_id_normalized: (result as Record<string, unknown> & { message?: { id?: string } })?.message?.id || (result as Record<string, string>)?.message_id || null,
         direction: 'outbound',
         sender_type: 'human',
         status: 'sent',

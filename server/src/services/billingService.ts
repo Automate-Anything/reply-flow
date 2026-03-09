@@ -74,11 +74,12 @@ export async function checkMessageAllowance(companyId: string): Promise<MessageA
   const isTrialing = sub.status === 'trialing';
   const includedMessages = isTrialing ? TRIAL_LIMITS.messages_per_month : plan.messages_per_month;
 
-  // Count messages in current billing period
+  // Count only AI-generated outbound messages in current billing period
   const { count: messagesUsed } = await supabaseAdmin
     .from('chat_messages')
     .select('id', { count: 'exact', head: true })
     .eq('company_id', companyId)
+    .eq('sender_type', 'ai')
     .gte('created_at', sub.current_period_start)
     .lte('created_at', sub.current_period_end);
 

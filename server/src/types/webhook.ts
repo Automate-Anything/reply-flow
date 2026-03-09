@@ -2,12 +2,14 @@
 export interface WhapiWebhookPayload {
   messages?: WhapiIncomingMessage[];
   statuses?: WhapiStatusUpdate[];
+  channel_id?: string;
 }
 
 export interface WhapiIncomingMessage {
   id: string;
   from: string;
-  to: string;
+  to?: string;
+  from_me?: boolean;
   timestamp: number;
   type: string;
   text?: {

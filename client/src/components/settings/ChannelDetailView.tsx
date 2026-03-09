@@ -86,11 +86,13 @@ export default function ChannelDetailPage() {
   const [toggling, setToggling] = useState(false);
 
   // Fetch channel data
-  const fetchChannel = useCallback(async () => {
+  const fetchChannel = useCallback(async (skipStatusUpdate = false) => {
     try {
       const { data } = await api.get(`/whatsapp/channels/${numericChannelId}`);
       setChannel(data.channel);
-      setEffectiveStatus(data.channel.channel_status);
+      if (!skipStatusUpdate) {
+        setEffectiveStatus(data.channel.channel_status);
+      }
     } catch {
       toast.error('Failed to load channel');
       navigate('/channels');
@@ -147,7 +149,7 @@ export default function ChannelDetailPage() {
           setEffectiveStatus(data.status);
           if (data.status === 'connected') {
             toast.success('WhatsApp connected successfully');
-            fetchChannel();
+            fetchChannel(true);
           }
         }
       } catch {
@@ -173,7 +175,7 @@ export default function ChannelDetailPage() {
         setEffectiveStatus('connected');
         setQrData(null);
         toast.success('WhatsApp connected successfully');
-        fetchChannel();
+        fetchChannel(true);
         return;
       }
       if (data.qr) setQrData(data.qr);
@@ -210,7 +212,7 @@ export default function ChannelDetailPage() {
           setEffectiveStatus('connected');
           setQrData(null);
           toast.success('WhatsApp connected successfully');
-          fetchChannel();
+          fetchChannel(true);
         }
       } catch {
         // ignore

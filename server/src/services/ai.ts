@@ -678,6 +678,7 @@ export async function sendOutsideHoursReply(
     : `${session.chat_id}@s.whatsapp.net`;
 
   const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
+  console.log('[ai] whapi send result:', JSON.stringify(result));
 
   const now = new Date().toISOString();
   await supabaseAdmin.from('chat_messages').insert({
@@ -687,7 +688,7 @@ export async function sendOutsideHoursReply(
     phone_number: session.phone_number,
     message_body: message,
     message_type: 'text',
-    message_id_normalized: (result as Record<string, string>)?.message_id || null,
+    message_id_normalized: (result as Record<string, unknown> & { message?: { id?: string } })?.message?.id || (result as Record<string, string>)?.message_id || null,
     direction: 'outbound',
     sender_type: 'ai',
     status: 'sent',
@@ -737,6 +738,7 @@ async function sendAndStoreMessage(
     : `${session.chat_id}@s.whatsapp.net`;
 
   const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
+  console.log('[ai] whapi send result:', JSON.stringify(result));
 
   const now = new Date().toISOString();
   await supabaseAdmin.from('chat_messages').insert({
@@ -746,7 +748,7 @@ async function sendAndStoreMessage(
     phone_number: session.phone_number,
     message_body: message,
     message_type: 'text',
-    message_id_normalized: (result as Record<string, string>)?.message_id || null,
+    message_id_normalized: (result as Record<string, unknown> & { message?: { id?: string } })?.message?.id || (result as Record<string, string>)?.message_id || null,
     direction: 'outbound',
     sender_type: 'ai',
     status: 'sent',

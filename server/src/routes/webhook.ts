@@ -15,25 +15,23 @@ router.post('/', async (req, res) => {
 
     if (!payload.messages || payload.messages.length === 0) return;
 
+    const whapiChannelId = payload.channel_id;
+    if (!whapiChannelId) return;
+
+    const { data: channel, error: channelError } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id, user_id, company_id, channel_status')
+      .eq('channel_id', whapiChannelId)
+      .eq('channel_status', 'connected')
+      .single();
+
+    if (channelError || !channel) return;
+
     for (const msg of payload.messages) {
-      // Skip outgoing messages (from us)
-      if (msg.from === msg.to) continue;
+      // Skip group messages (chat_id ends with @g.us)
+      if (msg.chat_id?.endsWith('@g.us')) continue;
 
-      // Find which user owns this channel by matching the "to" number
-      const toPhone = msg.to?.replace(/@.*$/, '');
-      const { data: channel } = await supabaseAdmin
-        .from('whatsapp_channels')
-        .select('id, company_id')
-        .eq('phone_number', toPhone)
-        .eq('channel_status', 'connected')
-        .single();
-
-      if (!channel) {
-        console.warn(`No connected channel found for incoming message to ${toPhone}`);
-        continue;
-      }
-
-      await processIncomingMessage(msg, channel.company_id, channel.id);
+      await processIncomingMessage(msg, channel.company_id, channel.id, channel.user_id);
     }
   } catch (err) {
     console.error('Webhook processing error:', err);

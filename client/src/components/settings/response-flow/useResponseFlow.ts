@@ -129,6 +129,8 @@ export function useResponseFlow(profileData: ProfileData) {
     setDirty(false);
   }, [profileData]);
 
+  const clearDirty = useCallback(() => setDirty(false), []);
+
   return {
     flow,
     dirty,
@@ -140,5 +142,6 @@ export function useResponseFlow(profileData: ProfileData) {
     setFallbackMode,
     setFallbackKBAttachments,
     reset,
+    clearDirty,
   };
 }
