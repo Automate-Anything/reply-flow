@@ -80,8 +80,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setRole(data.role?.name ?? null);
       setPermissions(new Set(data.permissions));
       setIsSuperAdmin(data.is_super_admin || false);
-    } catch {
+    } catch (err) {
       // User may not have a company yet (invitation flow)
+      console.error('[SessionContext] fetchMe failed:', err);
       setProfileFullName(null);
       setAvatarUrl(null);
       setCompanyId(null);
