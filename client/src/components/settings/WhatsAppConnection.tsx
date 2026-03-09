@@ -129,10 +129,18 @@ export default function WhatsAppConnection({ onCreated }: Props) {
       const { data } = await api.post('/whatsapp/create-channel', { name: channelName.trim() || undefined });
       setDbChannelId(data.dbChannelId);
       startHealthPolling(data.dbChannelId);
-    } catch {
-      setError('Failed to create channel. Please try again.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string; used?: number; included?: number } } };
+      const serverMsg = axiosErr?.response?.data?.error;
+      const status = axiosErr?.response?.status;
+      let message = 'Failed to create channel. Please try again.';
+      if (status === 402 && serverMsg) {
+        const { used, included } = axiosErr.response!.data!;
+        message = `${serverMsg}. You are using ${used} of ${included} channel${included === 1 ? '' : 's'} on your current plan. Please upgrade to add more.`;
+      }
+      setError(message);
       setState('error');
-      toast.error('Failed to create WhatsApp channel');
+      toast.error(message);
     }
   };
 
