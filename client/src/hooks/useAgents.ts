@@ -50,11 +50,21 @@ export function useAgents() {
     []
   );
 
+  const generateFromLogs = useCallback(async (files: File[]) => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    const { data } = await api.post('/agents/generate-from-logs', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data as { name: string; profile_data: ProfileData };
+  }, []);
+
   return {
     agents,
     loading,
     createAgent,
     deleteAgent,
+    generateFromLogs,
     refetch: fetchAgents,
   };
 }
