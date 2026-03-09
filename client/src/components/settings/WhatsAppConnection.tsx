@@ -81,7 +81,18 @@ export default function WhatsAppConnection({ onCreated }: Props) {
   const startHealthPolling = useCallback((channelId: number) => {
     if (healthPollRef.current) clearInterval(healthPollRef.current);
 
+    const startTime = Date.now();
+    const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
     healthPollRef.current = setInterval(async () => {
+      // Stop polling and show error if stuck for too long
+      if (Date.now() - startTime > TIMEOUT_MS) {
+        clearTimers();
+        setError('Channel provisioning timed out. Please delete this channel and try again.');
+        setState('error');
+        return;
+      }
+
       try {
         const { data } = await api.get(`/whatsapp/health-check?channelId=${channelId}`);
 
@@ -243,13 +254,22 @@ export default function WhatsAppConnection({ onCreated }: Props) {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setError(null); setState('idle'); }}>
-              Dismiss
-            </Button>
-            <Button size="sm" onClick={handleCreateChannel}>
-              <RefreshCw className="mr-2 h-3 w-3" />
-              Retry
-            </Button>
+            {dbChannelId ? (
+              <Button variant="outline" size="sm" onClick={handleDelete} disabled={deleting}>
+                {deleting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Trash2 className="mr-2 h-3 w-3" />}
+                {deleting ? 'Deleting...' : 'Delete Channel'}
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => { setError(null); setState('idle'); }}>
+                  Dismiss
+                </Button>
+                <Button size="sm" onClick={handleCreateChannel}>
+                  <RefreshCw className="mr-2 h-3 w-3" />
+                  Retry
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

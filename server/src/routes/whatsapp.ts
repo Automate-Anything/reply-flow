@@ -70,6 +70,30 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
       // Non-fatal: channel works, AI settings can be configured later
     }
 
+    // 4b. Extend the channel based on subscription status so it starts funded
+    try {
+      const { data: sub } = await supabaseAdmin
+        .from('subscriptions')
+        .select('status, trial_ends_at')
+        .eq('company_id', companyId)
+        .maybeSingle();
+
+      let extensionDays = 0;
+      if (sub?.status === 'trialing' && sub.trial_ends_at) {
+        const msRemaining = new Date(sub.trial_ends_at).getTime() - Date.now();
+        extensionDays = Math.max(1, Math.ceil(msRemaining / 86_400_000));
+      } else if (sub?.status === 'active') {
+        extensionDays = 30;
+      }
+
+      if (extensionDays > 0) {
+        await whapi.extendChannel(channel.id, extensionDays);
+        console.log(`Extended new channel ${channel.id} by ${extensionDays} days`);
+      }
+    } catch (err) {
+      console.error('Failed to extend channel on creation (non-fatal):', err instanceof Error ? err.message : err);
+    }
+
     // 5. Return immediately — client will poll /health-check for provisioning status
     res.json({ dbChannelId: insertedRow.id });
 
