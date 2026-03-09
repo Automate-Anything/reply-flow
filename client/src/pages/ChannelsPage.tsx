@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2, Smartphone, CheckCircle2, CircleX, QrCode, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
 import { formatChannelName, getStatusConfig, getCardBorder, type ChannelInfo } from '@/components/settings/channelHelpers';
+import { useSubscription } from '@/hooks/useSubscription';
 
 function getStatusIcon(status: string) {
   switch (status) {
@@ -38,6 +40,10 @@ export default function ChannelsPage() {
   const navigate = useNavigate();
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const { subscription, loading: subLoading } = useSubscription();
+
+  const channelLimit = subscription?.plan.channels ?? Infinity;
+  const atLimit = channels.length >= channelLimit;
 
   const fetchChannels = useCallback(async () => {
     setLoading(true);
@@ -62,7 +68,25 @@ export default function ChannelsPage() {
         <p className="text-sm text-muted-foreground">
           Connect and manage your WhatsApp lines.
         </p>
+        {!subLoading && subscription && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {channels.length} / {channelLimit} channels used
+          </p>
+        )}
       </div>
+
+      {atLimit && !loading && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+          <CardContent className="flex items-center justify-between py-3 px-4">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              You've reached the channel limit for your <span className="font-semibold">{subscription?.plan.name}</span> plan ({channelLimit} channel{channelLimit !== 1 ? 's' : ''}).
+            </p>
+            <Button size="sm" variant="outline" className="ml-4 shrink-0" onClick={() => navigate('/settings?tab=billing')}>
+              Upgrade
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Channel List */}
       {loading ? (
@@ -121,7 +145,7 @@ export default function ChannelsPage() {
             </Card>
           )}
 
-          <WhatsAppConnection onCreated={fetchChannels} />
+          {!atLimit && <WhatsAppConnection onCreated={fetchChannels} />}
         </div>
       )}
     </div>
