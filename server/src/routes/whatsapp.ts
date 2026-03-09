@@ -365,20 +365,37 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
   }
 });
 
-// Get all channels for the user
+// Get all channels the user can access (owned + shared)
 router.get('/channels', requirePermission('channels', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
+    const userId = req.userId!;
+
+    // Import dynamically to avoid circular deps at module load
+    const { getAccessibleChannelIds } = await import('../services/accessControl.js');
+    const accessibleIds = await getAccessibleChannelIds(userId, companyId);
+
+    if (accessibleIds.length === 0) {
+      res.json({ channels: [] });
+      return;
+    }
 
     const { data: channels, error } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
+      .in('id', accessibleIds)
       .eq('company_id', companyId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
 
-    res.json({ channels: channels || [] });
+    // Add is_owner flag for the client
+    const enriched = (channels || []).map((ch) => ({
+      ...ch,
+      is_owner: ch.user_id === userId,
+    }));
+
+    res.json({ channels: enriched });
   } catch (err) {
     next(err);
   }

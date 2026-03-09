@@ -7,6 +7,10 @@ export interface ChannelInfo {
   profile_picture_url: string | null;
   webhook_registered: boolean;
   created_at: string;
+  user_id?: string;
+  sharing_mode?: 'private' | 'specific_users' | 'all_members';
+  default_conversation_visibility?: 'all' | 'owner_only';
+  is_owner?: boolean;
 }
 
 export type StatusConfig = {

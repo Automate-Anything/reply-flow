@@ -144,6 +144,13 @@ export async function processIncomingMessage(
         .eq('id', contactId);
     }
   } else {
+    // Look up the channel owner to set as contact owner
+    const { data: channelOwner } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('user_id')
+      .eq('id', channelId)
+      .single();
+
     const { data: newContact, error: contactError } = await supabaseAdmin
       .from('contacts')
       .insert({
@@ -151,6 +158,7 @@ export async function processIncomingMessage(
         phone_number: phoneNumber,
         whatsapp_name: msg.from_name || null,
         first_name: msg.from_name || null,
+        owner_id: channelOwner?.user_id || null,
       })
       .select('id')
       .single();

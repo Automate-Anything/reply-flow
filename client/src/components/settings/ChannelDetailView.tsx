@@ -16,12 +16,14 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
-  Bot, ArrowLeft, Plus, AlertCircle,
+  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, Users, Eye, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanGate } from '@/components/auth/PlanGate';
 import { useChannelAgent, type ChannelAgentSettings } from '@/hooks/useChannelAgent';
 import { useAgents } from '@/hooks/useAgents';
+import { useChannelAccess } from '@/hooks/useAccessControl';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ScheduleSection from './sections/ScheduleSection';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
 import type { ChannelInfo } from './channelHelpers';
@@ -72,6 +74,10 @@ export default function ChannelDetailPage() {
 
   // Agents list for assignment dropdown
   const { agents, loading: loadingAgents } = useAgents();
+
+  // Access control
+  const channelAccess = useChannelAccess(numericChannelId);
+  const { members: teamMembers } = useTeamMembers();
 
   // Company timezone (still company-level)
   const [companyTimezone, setCompanyTimezone] = useState('UTC');
@@ -352,6 +358,12 @@ export default function ChannelDetailPage() {
         <TabsList className="w-full">
           <TabsTrigger value="connection" className="flex-1">Connection</TabsTrigger>
           <TabsTrigger value="ai-agent" className="flex-1">AI Agent</TabsTrigger>
+          {channel.is_owner && (
+            <TabsTrigger value="access" className="flex-1">
+              <Lock className="mr-1.5 h-3.5 w-3.5" />
+              Access
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Connection Tab */}
@@ -602,6 +614,188 @@ export default function ChannelDetailPage() {
             </div>
           )}
         </TabsContent>
+
+        {/* Access Tab — only visible to channel owner */}
+        {channel.is_owner && channelAccess.settings && (
+          <TabsContent value="access" className="mt-2 space-y-5">
+            {/* Who has access */}
+            <div>
+              <h3 className="text-sm font-medium mb-1">Who has access to this channel</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Controls who can see conversations and messages in this channel.
+                This is separate from assignment — assigning determines who is responsible for responding.
+              </p>
+              <div className="space-y-2">
+                {([
+                  { value: 'private' as const, label: 'Private', desc: 'Only you can see this channel', icon: Lock },
+                  { value: 'specific_users' as const, label: 'Specific people', desc: 'Only people you choose', icon: Users },
+                  { value: 'all_members' as const, label: 'All team members', desc: 'Everyone on the team', icon: Globe },
+                ] as const).map((option) => {
+                  const Icon = option.icon;
+                  const isActive = channelAccess.settings!.sharing_mode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={async () => {
+                        try {
+                          await channelAccess.updateSettings({ sharing_mode: option.value });
+                          toast.success(`Access updated to: ${option.label}`);
+                        } catch {
+                          toast.error('Failed to update access');
+                        }
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                        isActive ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium">{option.label}</div>
+                        <div className="text-xs text-muted-foreground">{option.desc}</div>
+                      </div>
+                      {isActive && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Conversation visibility default */}
+            <div>
+              <h3 className="text-sm font-medium mb-1">Default conversation visibility</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                When someone has access to this channel, can they see all conversations or only ones you specifically grant?
+              </p>
+              <div className="space-y-2">
+                {([
+                  { value: 'all' as const, label: 'All conversations', desc: 'Shared users see every conversation', icon: Eye },
+                  { value: 'owner_only' as const, label: 'Only granted conversations', desc: 'Conversations are private until you grant access to each one', icon: Lock },
+                ] as const).map((option) => {
+                  const Icon = option.icon;
+                  const isActive = channelAccess.settings!.default_conversation_visibility === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={async () => {
+                        try {
+                          await channelAccess.updateSettings({ default_conversation_visibility: option.value });
+                          toast.success(`Conversation visibility updated`);
+                        } catch {
+                          toast.error('Failed to update');
+                        }
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                        isActive ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium">{option.label}</div>
+                        <div className="text-xs text-muted-foreground">{option.desc}</div>
+                      </div>
+                      {isActive && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* User access list (for specific_users mode) */}
+            {channelAccess.settings.sharing_mode === 'specific_users' && (
+              <div>
+                <h3 className="text-sm font-medium mb-2">People with access</h3>
+
+                {channelAccess.settings.access_list.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {channelAccess.settings.access_list.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{entry.user?.full_name || 'Unknown'}</div>
+                          <div className="truncate text-xs text-muted-foreground">{entry.user?.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {entry.access_level === 'edit' ? (
+                              <><Pencil className="mr-1 h-2.5 w-2.5" /> Can edit</>
+                            ) : (
+                              <><Eye className="mr-1 h-2.5 w-2.5" /> Can view</>
+                            )}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={async () => {
+                              try {
+                                await channelAccess.revokeAccess(entry.user_id);
+                                toast.success('Access revoked');
+                              } catch {
+                                toast.error('Failed to revoke access');
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add member */}
+                {teamMembers.filter((m) => !channelAccess.settings!.access_list.some((a) => a.user_id === m.user_id)).length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Add team members:</p>
+                    <div className="space-y-1">
+                      {teamMembers
+                        .filter((m) => !channelAccess.settings!.access_list.some((a) => a.user_id === m.user_id))
+                        .map((member) => (
+                          <div key={member.user_id} className="flex items-center justify-between rounded-lg border p-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm">{member.full_name}</div>
+                              <div className="truncate text-xs text-muted-foreground">{member.email}</div>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={async () => {
+                                  try {
+                                    await channelAccess.grantAccess(member.user_id, 'view');
+                                    toast.success(`View access granted to ${member.full_name}`);
+                                  } catch {
+                                    toast.error('Failed to grant access');
+                                  }
+                                }}
+                              >
+                                <Eye className="mr-1 h-3 w-3" /> View
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={async () => {
+                                  try {
+                                    await channelAccess.grantAccess(member.user_id, 'edit');
+                                    toast.success(`Edit access granted to ${member.full_name}`);
+                                  } catch {
+                                    toast.error('Failed to grant access');
+                                  }
+                                }}
+                              >
+                                <Pencil className="mr-1 h-3 w-3" /> Edit
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </TabsContent>
+        )}
 
       </Tabs>
     </div>
