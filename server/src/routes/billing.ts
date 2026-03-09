@@ -1277,7 +1277,7 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
 
         const { data: sub } = await supabaseAdmin
           .from('subscriptions')
-          .select('id, company_id, first_paid_at')
+          .select('id, company_id, status, first_paid_at')
           .eq('stripe_customer_id', invoice.customer as string)
           .maybeSingle();
 
@@ -1296,8 +1296,9 @@ export async function stripeWebhookHandler(req: Request, res: Response, next: Ne
           .update(updates)
           .eq('id', sub.id);
 
-        // Extend all Whapi channels for the new billing period
-        await extendAllCompanyChannels(sub.company_id, 30);
+        // Extend all Whapi channels — 7 days for trial, 30 days for paid plans
+        const extensionDays = sub.status === 'trialing' ? 7 : 30;
+        await extendAllCompanyChannels(sub.company_id, extensionDays);
         break;
       }
 
