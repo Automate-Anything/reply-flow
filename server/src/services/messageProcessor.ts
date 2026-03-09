@@ -69,12 +69,14 @@ async function createNewSession(
   contactId: string,
   chatId: string,
   phoneNumber: string,
+  userId: string,
   fromName?: string
 ): Promise<string> {
   const { data: newSession, error: sessionError } = await supabaseAdmin
     .from('chat_sessions')
     .insert({
       company_id: companyId,
+      user_id: userId,
       channel_id: channelId,
       contact_id: contactId,
       chat_id: chatId,
@@ -186,12 +188,12 @@ export async function processIncomingMessage(
       });
 
       // Create a fresh session
-      sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, msg.from_name);
+      sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
     } else {
       sessionId = activeSession.id;
     }
   } else {
-    sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, msg.from_name);
+    sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
   }
 
   // 3. Idempotency check — skip if message already exists
