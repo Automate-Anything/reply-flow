@@ -20,36 +20,34 @@ router.post('/', async (req, res) => {
       return;
     }
 
+    // Look up the channel once using the top-level channel_id from the payload
+    const whapiChannelId = payload.channel_id;
+    console.log(`[webhook] looking up channel for whapi channel_id=${whapiChannelId}`);
+
+    if (!whapiChannelId) {
+      console.warn('[webhook] no channel_id in payload, cannot route messages');
+      return;
+    }
+
+    const { data: channel, error: channelError } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id, company_id, channel_status')
+      .eq('channel_id', whapiChannelId)
+      .eq('channel_status', 'connected')
+      .single();
+
+    if (channelError || !channel) {
+      console.warn(`[webhook] no connected channel found for whapi channel_id=${whapiChannelId}`, channelError);
+      return;
+    }
+
+    console.log(`[webhook] matched channel id=${channel.id}`);
+
     for (const msg of payload.messages) {
-      console.log(`[webhook] processing msg id=${msg.id} from=${msg.from} to=${msg.to} type=${msg.type}`);
+      console.log(`[webhook] processing msg id=${msg.id} from=${msg.from} type=${msg.type}`);
 
-      // Skip outgoing messages (from us)
-      if (msg.from === msg.to) {
-        console.log(`[webhook] skipping outgoing message (from === to)`);
-        continue;
-      }
-
-      // Find which user owns this channel by matching the "to" number
-      const toPhone = msg.to?.replace(/@.*$/, '');
-      console.log(`[webhook] looking up channel for phone=${toPhone}`);
-
-      const { data: channel, error: channelError } = await supabaseAdmin
-        .from('whatsapp_channels')
-        .select('id, company_id, channel_status, phone_number')
-        .eq('phone_number', toPhone)
-        .single();
-
-      if (channelError || !channel) {
-        console.warn(`[webhook] no channel found at all for phone=${toPhone}`, channelError);
-        continue;
-      }
-
-      console.log(`[webhook] found channel id=${channel.id} status=${channel.channel_status} stored_phone=${channel.phone_number}`);
-
-      if (channel.channel_status !== 'connected') {
-        console.warn(`[webhook] channel ${channel.id} is not connected (status=${channel.channel_status}), skipping`);
-        continue;
-      }
+      // Skip outgoing messages
+      if (msg.from_me) continue;
 
       await processIncomingMessage(msg, channel.company_id, channel.id);
     }
