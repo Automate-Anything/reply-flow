@@ -53,6 +53,9 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     }
   }, []);
 
+  // Stop all polling when the component unmounts
+  useEffect(() => () => clearTimers(), [clearTimers]);
+
   const markConnected = useCallback(() => {
     clearTimers();
     setState('idle');

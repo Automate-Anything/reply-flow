@@ -93,8 +93,9 @@ export async function waitForReady(channelToken: string, timeoutMs = 120_000, si
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status;
-        // Retry on 404 (not provisioned yet) or 5xx (channel starting up)
-        if (status === 404 || (status && status >= 500)) {
+        // Retry on: no response (channel offline/unreachable), 404 (not provisioned yet), 5xx (starting up)
+        // Throw on: 4xx errors that won't self-resolve (e.g. 401, 402, 403)
+        if (!status || status === 404 || status >= 500) {
           await new Promise<void>((resolve, reject) => {
             const timer = setTimeout(resolve, 5000);
             signal?.addEventListener('abort', () => {
