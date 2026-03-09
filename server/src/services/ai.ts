@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { ContentBlockParam, Base64ImageSource, TextBlockParam } from '@anthropic-ai/sdk/resources/messages';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { buildSystemPrompt, buildClassificationPrompt, buildScenarioResponsePrompt } from './promptBuilder.js';
@@ -8,6 +9,7 @@ import { classifyQuery } from './queryClassifier.js';
 import { getContactContext } from './sessionMemory.js';
 import type { ContactMemory } from './sessionMemory.js';
 import { isDebugModeEnabled } from './debugMode.js';
+import { downloadFromStorage } from './mediaStorage.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -26,13 +28,17 @@ interface DebugContext {
   kbFallbackUsed: boolean;
 }
 
+type AIMessage = { role: 'user' | 'assistant'; content: string | ContentBlockParam[] };
+
 interface AIContext {
   profileData: ProfileData;
   kbEntries: KBEntry[];
   kbLowConfidence?: boolean;
   channelOverrides?: ChannelOverrides;
   maxTokens: number;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: AIMessage[];
+  /** Text-only version for query reformulation and classification */
+  textMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
   contactMemories: ContactMemory[];
   debugContext?: DebugContext;
 }
@@ -152,6 +158,119 @@ async function reformulateQuery(
   }
 }
 
+// ── Multimodal message builder ─────────────────────
+
+interface RecentMessageRow {
+  message_body: string | null;
+  direction: string;
+  sender_type: string;
+  message_type: string;
+  media_storage_path: string | null;
+  media_mime_type: string | null;
+  media_transcript: string | null;
+  media_extracted_text: string | null;
+}
+
+const VISION_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const MAX_IMAGE_MESSAGES = 3; // Limit vision to the last N images to control token cost
+
+/**
+ * Builds multimodal message array for the Claude API.
+ * - Images: included as base64 image content blocks (Claude Vision)
+ * - Audio: transcript text is appended to the message
+ * - Documents: extracted text is appended to the message
+ * Messages are already in chronological order (reversed from the DB query).
+ */
+async function buildMultimodalMessages(rows: RecentMessageRow[]): Promise<AIMessage[]> {
+  // Count how many images we'll include (only the most recent N)
+  let imageCount = 0;
+  const imageEligible = new Set<number>();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row.message_type === 'image' && row.media_storage_path && row.media_mime_type && VISION_MIME_TYPES.has(row.media_mime_type)) {
+      if (imageCount < MAX_IMAGE_MESSAGES) {
+        imageEligible.add(i);
+        imageCount++;
+      }
+    }
+  }
+
+  const results: AIMessage[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const role = (row.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant';
+    const textContent = row.message_body || '';
+
+    // For assistant messages or non-media messages, use simple text
+    if (role === 'assistant' || row.message_type === 'text' || !row.media_storage_path) {
+      results.push({ role, content: textContent });
+      continue;
+    }
+
+    // Build content blocks for media messages
+    const blocks: ContentBlockParam[] = [];
+
+    // Image: include as vision content block
+    if (row.message_type === 'image' && imageEligible.has(i) && row.media_mime_type) {
+      try {
+        const buffer = await downloadFromStorage(row.media_storage_path);
+        if (buffer) {
+          blocks.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: row.media_mime_type as Base64ImageSource['media_type'],
+              data: buffer.toString('base64'),
+            },
+          });
+        }
+      } catch {
+        // Fall through to text-only
+      }
+    }
+
+    // Audio: include transcript
+    if (row.message_type === 'audio' && row.media_transcript) {
+      blocks.push({
+        type: 'text',
+        text: `[Voice message transcript]: ${row.media_transcript}`,
+      } as TextBlockParam);
+    }
+
+    // Document: include extracted text
+    if (row.message_type === 'document' && row.media_extracted_text) {
+      const filename = textContent.replace(/^\[Document:\s*|]$/g, '').trim() || 'document';
+      blocks.push({
+        type: 'text',
+        text: `[Document: ${filename}]\n\nContent:\n${row.media_extracted_text.slice(0, 10_000)}`,
+      } as TextBlockParam);
+    }
+
+    // Video: just include text caption if any
+    if (row.message_type === 'video') {
+      blocks.push({
+        type: 'text',
+        text: textContent || '[Video message]',
+      } as TextBlockParam);
+    }
+
+    // Add image caption if it's a real caption (not a placeholder like "[Image]")
+    if (textContent && row.message_type === 'image' && !/^\[.+\]$/.test(textContent.trim())) {
+      blocks.push({ type: 'text', text: textContent } as TextBlockParam);
+    }
+
+    // Fallback: if no blocks were created, use text
+    if (blocks.length === 0) {
+      results.push({ role, content: textContent });
+    } else {
+      results.push({ role, content: blocks });
+    }
+  }
+
+  return results;
+}
+
 // ── Main AI decision function ──────────────────────
 
 /**
@@ -232,29 +351,36 @@ export async function shouldAIRespond(
   // 7. Build message context from last 20 messages (needed for query reformulation)
   const { data: recentMessages } = await supabaseAdmin
     .from('chat_messages')
-    .select('message_body, direction, sender_type')
+    .select('message_body, direction, sender_type, message_type, media_storage_path, media_mime_type, media_transcript, media_extracted_text')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
     .limit(20);
 
   if (!recentMessages) return { action: 'skip' };
 
-  const messages = recentMessages.reverse().map((msg) => ({
+  // Reverse to chronological order (DB returns newest first)
+  const chronologicalMessages = [...recentMessages].reverse();
+
+  // Build text-only messages for reformulation/classification
+  const textMessages = chronologicalMessages.map((msg) => ({
     role: (msg.direction === 'inbound' ? 'user' : 'assistant') as 'user' | 'assistant',
     content: msg.message_body || '',
   }));
+
+  // Build multimodal messages for the response model (includes images for vision)
+  const messages: AIMessage[] = await buildMultimodalMessages(chronologicalMessages);
 
   // 8. Semantic search for relevant KB content (or fall back to loading all)
   const debugMode = await isDebugModeEnabled();
   let kbData: KBEntry[] = [];
   let kbLowConfidence = false;
   let kbFallbackUsed = false;
-  let searchQuery = messages[messages.length - 1]?.content || '';
+  let searchQuery = textMessages[textMessages.length - 1]?.content || '';
   let debugQC: DebugContext['queryClassification'] = null;
   let debugSearchResults: DebugContext['searchResults'] = [];
 
   if (isEmbeddingsAvailable()) {
-    searchQuery = await reformulateQuery(messages);
+    searchQuery = await reformulateQuery(textMessages);
     const qc = classifyQuery(searchQuery);
     const searchResults = await searchKnowledgeBase(companyId, searchQuery, {
       retrievalMethod: qc.method,
@@ -328,7 +454,7 @@ export async function shouldAIRespond(
 
   return {
     action: 'respond',
-    context: { profileData, kbEntries: kbData, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories, debugContext },
+    context: { profileData, kbEntries: kbData, kbLowConfidence, channelOverrides, maxTokens, messages, textMessages, contactMemories, debugContext },
   };
 }
 
@@ -444,7 +570,7 @@ export async function generateAndSendAIReply(
 ): Promise<void> {
   if (!anthropic) return;
 
-  const { profileData, kbEntries, kbLowConfidence, channelOverrides, maxTokens, messages, contactMemories, debugContext } = context;
+  const { profileData, kbEntries, kbLowConfidence, channelOverrides, maxTokens, messages, textMessages, contactMemories, debugContext } = context;
   const hasScenarios = !!(profileData.response_flow?.scenarios?.length);
 
   let systemPrompt: string;
@@ -454,7 +580,7 @@ export async function generateAndSendAIReply(
 
   if (hasScenarios) {
     try {
-      classification = await classifyMessage(profileData, messages);
+      classification = await classifyMessage(profileData, textMessages);
       systemPrompt = await buildScenarioResponsePrompt(
         profileData, kbEntries, classification.scenario_label, channelOverrides, onSection,
       );

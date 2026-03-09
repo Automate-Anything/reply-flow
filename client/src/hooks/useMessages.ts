@@ -17,6 +17,9 @@ export interface Message {
   is_starred: boolean;
   is_pinned: boolean;
   reactions: Array<{ emoji: string; user_id: string }>;
+  media_storage_path: string | null;
+  media_mime_type: string | null;
+  media_filename: string | null;
 }
 
 export function useMessages(sessionId: string | null) {

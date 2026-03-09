@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { extractSessionMemories } from '../services/sessionMemory.js';
+import { getAccessibleSessionFilter, getConversationAccess, ensureConversationAccessOnAssign } from '../services/accessControl.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -27,6 +28,9 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       offset = '0',
     } = req.query;
 
+    // Determine which conversations this user can access based on channel ownership + sharing
+    const accessFilter = await getAccessibleSessionFilter(req.userId!, companyId);
+
     let query = supabaseAdmin
       .from('chat_sessions')
       .select(
@@ -34,6 +38,27 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       )
       .eq('company_id', companyId)
       .is('deleted_at', null);
+
+    // Apply access-based filtering
+    if (accessFilter.mode === 'filtered') {
+      if (accessFilter.channelIds.length === 0 && accessFilter.extraSessionIds.length === 0) {
+        // User has no access to any conversations
+        res.json({ sessions: [], count: 0 });
+        return;
+      }
+
+      if (accessFilter.extraSessionIds.length > 0 && accessFilter.channelIds.length > 0) {
+        // User can see: all conversations in full-access channels OR specific granted conversations
+        query = query.or(
+          `channel_id.in.(${accessFilter.channelIds.join(',')}),id.in.(${accessFilter.extraSessionIds.join(',')})`
+        );
+      } else if (accessFilter.channelIds.length > 0) {
+        query = query.in('channel_id', accessFilter.channelIds);
+      } else {
+        query = query.in('id', accessFilter.extraSessionIds);
+      }
+    }
+    // mode === 'all' means no filtering needed (user sees everything)
 
     // Archived filter
     if (archived === 'true') {

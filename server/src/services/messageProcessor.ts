@@ -3,6 +3,8 @@ import type { WhapiIncomingMessage } from '../types/webhook.js';
 import { shouldAIRespond, generateAndSendAIReply, sendOutsideHoursReply } from './ai.js';
 import { checkMessageAllowance, deductOverageBalance, triggerAutoTopup } from './billingService.js';
 import { extractSessionMemories } from './sessionMemory.js';
+import { downloadAndStore } from './mediaStorage.js';
+import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 
 /**
  * Normalizes a WhatsApp chat_id to a phone number.
@@ -209,8 +211,9 @@ export async function processIncomingMessage(
 
   // 4. Build metadata (media + reply context)
   const metadata: Record<string, unknown> = {};
-  if (msg.image || msg.document || msg.audio || msg.video) {
-    metadata.media = msg.image || msg.document || msg.audio || msg.video;
+  const mediaPayload = msg.image || msg.document || msg.audio || msg.video;
+  if (mediaPayload) {
+    metadata.media = mediaPayload;
   }
   if (msg.context?.quoted_id) {
     metadata.reply = {
@@ -221,8 +224,13 @@ export async function processIncomingMessage(
     };
   }
 
+  // Extract media info for storage
+  const mediaLink = mediaPayload?.link as string | undefined;
+  const mediaMimeType = mediaPayload?.mime_type as string | undefined;
+  const mediaFilename = (mediaPayload as Record<string, unknown>)?.filename as string | undefined;
+
   // 5. Insert the message
-  const { error: messageError } = await supabaseAdmin
+  const { data: insertedMessage, error: messageError } = await supabaseAdmin
     .from('chat_messages')
     .insert({
       session_id: sessionId,
@@ -238,11 +246,25 @@ export async function processIncomingMessage(
       read: false,
       message_ts: messageTs,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
-    });
+      media_mime_type: mediaMimeType || null,
+      media_filename: mediaFilename || null,
+    })
+    .select('id')
+    .single();
 
   if (messageError) throw messageError;
 
-  // 5. Update session metadata
+  // 5a. Download, store, and extract media content BEFORE AI triggers
+  // This must complete so the AI has access to images, transcripts, and document text
+  if (mediaLink && mediaMimeType && insertedMessage) {
+    try {
+      await processMedia(insertedMessage.id, mediaLink, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
+    } catch (err) {
+      console.error('Media processing error:', err);
+    }
+  }
+
+  // 5b. Update session metadata
   const { data: currentSession } = await supabaseAdmin
     .from('chat_sessions')
     .select('snoozed_until')
@@ -318,4 +340,47 @@ export async function processIncomingMessage(
   } catch (err) {
     console.error('AI check error:', err);
   }
+}
+
+/**
+ * Downloads media from Whapi, stores in Supabase Storage, and extracts
+ * text content (transcripts for audio, text for documents) for AI use.
+ * Returns once storage and extraction are complete.
+ */
+async function processMedia(
+  messageId: string,
+  whapiLink: string,
+  companyId: string,
+  channelId: number,
+  mimeType: string,
+  filename: string | undefined,
+  messageType: string,
+): Promise<void> {
+  // 1. Download from Whapi and upload to Supabase Storage
+  const storagePath = await downloadAndStore(whapiLink, companyId, channelId, messageId, mimeType, filename);
+  if (!storagePath) return;
+
+  const updateFields: Record<string, unknown> = { media_storage_path: storagePath };
+
+  // 2. Extract content for AI based on message type
+  if (messageType === 'audio') {
+    const transcript = await extractAudioTranscript(storagePath, mimeType);
+    if (transcript) {
+      // Store transcript for AI only — don't overwrite message_body
+      // so the frontend shows the audio player, not text
+      updateFields.media_transcript = transcript;
+    }
+  } else if (messageType === 'document') {
+    const extractedText = await extractDocumentText(storagePath, mimeType, filename);
+    if (extractedText) {
+      updateFields.media_extracted_text = extractedText;
+    }
+  }
+  // Images and videos: no server-side extraction needed — Claude Vision handles these directly
+
+  // 3. Update the message record
+  await supabaseAdmin
+    .from('chat_messages')
+    .update(updateFields)
+    .eq('id', messageId);
 }

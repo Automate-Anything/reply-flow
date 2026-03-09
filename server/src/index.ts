@@ -28,6 +28,7 @@ import conversationStatusesRouter from './routes/conversationStatuses.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import seedRouter from './routes/seed.js';
+import accessRouter from './routes/access.js';
 import { startScheduler } from './services/scheduler.js';
 
 const app = express();
@@ -80,6 +81,7 @@ app.use('/api/conversation-statuses', conversationStatusesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/seed', seedRouter);
+app.use('/api/access', accessRouter);
 
 app.use(errorHandler);
 
