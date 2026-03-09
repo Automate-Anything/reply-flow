@@ -407,9 +407,11 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
     const companyId = req.companyId!;
     const { channelId } = req.params;
 
+    const userId = req.userId!;
+
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
@@ -419,7 +421,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
       return;
     }
 
-    res.json({ channel });
+    res.json({ channel: { ...channel, is_owner: channel.user_id === userId } });
   } catch (err) {
     next(err);
   }
