@@ -423,7 +423,7 @@ export default function ChannelDetailPage() {
           )}
 
           {/* Danger zone — Delete */}
-          {!isProvisioning && (
+          {(
             <div className="rounded-lg border border-dashed border-destructive/30 p-4">
               <div className="flex items-center justify-between">
                 <div>
