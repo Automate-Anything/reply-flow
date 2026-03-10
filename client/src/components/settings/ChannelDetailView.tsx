@@ -17,7 +17,7 @@ import {
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
   Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, Users, Eye, Pencil,
-  Shield, UserPlus,
+  Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanGate } from '@/components/auth/PlanGate';

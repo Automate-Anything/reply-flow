@@ -14,7 +14,6 @@ import {
   Loader2,
   X,
   FileText,
-  CheckCircle2,
   MessageSquare,
   Bot,
 } from 'lucide-react';
