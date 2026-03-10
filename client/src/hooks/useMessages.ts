@@ -31,21 +31,12 @@ export function useMessages(sessionId: string | null) {
       setMessages([]);
       return;
     }
+    setMessages([]);
     setLoading(true);
     try {
       const { data } = await api.get(`/conversations/${sessionId}/messages`);
       const msgs: Message[] = data.messages || [];
-      const seen = new Set<string>();
-      const deduped = msgs.filter((m) => {
-        if (seen.has(m.id)) {
-          console.warn('[useMessages] duplicate message id in fetch response:', m.id);
-          return false;
-        }
-        seen.add(m.id);
-        return true;
-      });
-      console.log('[useMessages] fetch complete, setting', deduped.length, 'messages for sessionId:', sessionId);
-      setMessages(deduped);
+      setMessages(msgs);
     } catch (err) {
       console.error('Failed to fetch messages:', err);
     } finally {
@@ -54,7 +45,6 @@ export function useMessages(sessionId: string | null) {
   }, [sessionId]);
 
   useEffect(() => {
-    console.log('[useMessages] effect running for sessionId:', sessionId);
     fetchMessages();
   }, [fetchMessages]);
 

@@ -185,14 +185,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
-    const uniqueIds = new Set((data || []).map((s) => s.id));
-    if ((data || []).length !== uniqueIds.size) {
-      console.warn(`[conversations] Supabase returned ${(data || []).length} rows but only ${uniqueIds.size} unique session IDs — deduplicating`);
-    }
-
-    const sessions = filteredData
-      .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
-      .map((s) => ({
+    const sessions = filteredData.map((s) => ({
         ...s,
         unread_count: unreadMap[s.id] || 0,
         contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
@@ -237,16 +230,8 @@ router.get('/:sessionId/messages', requirePermission('conversations', 'view'), a
     const { data: messages, error } = await query;
     if (error) throw error;
 
-    const rawMessages = messages || [];
-    const uniqueMessageIds = new Set(rawMessages.map((m) => m.id));
-    if (rawMessages.length !== uniqueMessageIds.size) {
-      console.warn(`[messages] Supabase returned ${rawMessages.length} rows but only ${uniqueMessageIds.size} unique message IDs — deduplicating`);
-    }
-
-    const dedupedMessages = rawMessages.filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i);
-
     // Return in chronological order
-    res.json({ messages: dedupedMessages.reverse() });
+    res.json({ messages: (messages || []).reverse() });
   } catch (err) {
     next(err);
   }

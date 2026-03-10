@@ -78,17 +78,7 @@ export function useConversations(
       if (filters?.sort) params.set('sort', filters.sort);
       if (filters?.labelId) params.set('labelId', filters.labelId);
       const { data } = await api.get(`/conversations?${params}`);
-      const sessions: Conversation[] = data.sessions || [];
-      const seen = new Set<string>();
-      const deduped = sessions.filter((s) => {
-        if (seen.has(s.id)) {
-          console.warn('[useConversations] duplicate session id in fetch response:', s.id);
-          return false;
-        }
-        seen.add(s.id);
-        return true;
-      });
-      setConversations(deduped);
+      setConversations(data.sessions || []);
     } catch (err) {
       console.error('Failed to fetch conversations:', err);
     } finally {
