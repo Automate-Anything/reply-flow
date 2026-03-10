@@ -32,15 +32,24 @@ router.get('/channels/:channelId', async (req, res, next) => {
       return;
     }
 
-    // Get access list
+    // Get access list (exclude owner — shown separately)
     const { data: accessList } = await supabaseAdmin
       .from('channel_access')
       .select('id, user_id, access_level, created_at, user:user_id(id, full_name, email, avatar_url)')
-      .eq('channel_id', channelId);
+      .eq('channel_id', channelId)
+      .neq('user_id', channel.user_id);
+
+    // Fetch owner profile
+    const { data: ownerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, email, avatar_url')
+      .eq('id', channel.user_id)
+      .single();
 
     res.json({
       sharing_mode: channel.sharing_mode,
       default_conversation_visibility: channel.default_conversation_visibility,
+      owner: ownerProfile || { id: channel.user_id, full_name: 'Owner', email: '', avatar_url: null },
       access_list: accessList || [],
     });
   } catch (err) {

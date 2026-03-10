@@ -18,9 +18,17 @@ export interface AccessEntry {
 // Channel Access
 // ────────────────────────────────────────────────────────────
 
+export interface OwnerInfo {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_url: string | null;
+}
+
 export interface ChannelAccessSettings {
   sharing_mode: 'private' | 'specific_users' | 'all_members';
   default_conversation_visibility: 'all' | 'owner_only';
+  owner: OwnerInfo;
   access_list: AccessEntry[];
 }
 
@@ -49,9 +57,17 @@ export function useChannelAccess(channelId: number | null) {
     sharing_mode?: string;
     default_conversation_visibility?: string;
   }) => {
-    if (!channelId) return;
-    await api.patch(`/access/channels/${channelId}`, updates);
-    await fetchSettings();
+    if (!channelId || !settings) return;
+    // Optimistic update
+    setSettings({ ...settings, ...updates } as ChannelAccessSettings);
+    try {
+      await api.patch(`/access/channels/${channelId}`, updates);
+      await fetchSettings();
+    } catch (err) {
+      // Revert on failure
+      setSettings(settings);
+      throw err;
+    }
   };
 
   const grantAccess = async (userId: string, accessLevel: 'view' | 'edit') => {

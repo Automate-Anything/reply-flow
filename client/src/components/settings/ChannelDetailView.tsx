@@ -17,6 +17,7 @@ import {
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
   Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, Users, Eye, Pencil,
+  Shield, UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanGate } from '@/components/auth/PlanGate';
@@ -660,10 +661,133 @@ export default function ChannelDetailPage() {
                   );
                 })}
               </div>
+
+              {/* People with access — inline under sharing mode when specific_users */}
+              {channelAccess.settings!.sharing_mode === 'specific_users' && (
+                <div className="mt-3 space-y-2">
+                  <h3 className="text-sm font-medium">People with access</h3>
+
+                  {/* Owner row — always first, not editable */}
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{channelAccess.settings!.owner.full_name}</div>
+                      <div className="truncate text-xs text-muted-foreground">{channelAccess.settings!.owner.email}</div>
+                    </div>
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      <Shield className="mr-1 h-2.5 w-2.5" /> Owner
+                    </Badge>
+                  </div>
+
+                  {/* Other users with access */}
+                  {channelAccess.settings!.access_list.map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{entry.user?.full_name || 'Unknown'}</div>
+                        <div className="truncate text-xs text-muted-foreground">{entry.user?.email}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={entry.access_level}
+                          onValueChange={async (value) => {
+                            try {
+                              await channelAccess.grantAccess(entry.user_id, value as 'view' | 'edit');
+                              toast.success(`Access updated to ${value}`);
+                            } catch {
+                              toast.error('Failed to update access');
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-auto gap-1 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="view">
+                              <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> Can view</span>
+                            </SelectItem>
+                            <SelectItem value="edit">
+                              <span className="flex items-center gap-1"><Pencil className="h-3 w-3" /> Can edit</span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={async () => {
+                            try {
+                              await channelAccess.revokeAccess(entry.user_id);
+                              toast.success('Access revoked');
+                            } catch {
+                              toast.error('Failed to revoke access');
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add member */}
+                  {(() => {
+                    const availableMembers = teamMembers.filter(
+                      (m) => m.user_id !== channel.user_id && !channelAccess.settings!.access_list.some((a) => a.user_id === m.user_id)
+                    );
+                    if (availableMembers.length === 0) return null;
+                    return (
+                      <div className="pt-2 border-t">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Add team members</p>
+                        <div className="space-y-1">
+                          {availableMembers.map((member) => (
+                            <div key={member.user_id} className="flex items-center justify-between rounded-lg border border-dashed p-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm">{member.full_name}</div>
+                                <div className="truncate text-xs text-muted-foreground">{member.email}</div>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={async () => {
+                                    try {
+                                      await channelAccess.grantAccess(member.user_id, 'view');
+                                      toast.success(`View access granted to ${member.full_name}`);
+                                    } catch {
+                                      toast.error('Failed to grant access');
+                                    }
+                                  }}
+                                >
+                                  <Eye className="mr-1 h-3 w-3" /> View
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={async () => {
+                                    try {
+                                      await channelAccess.grantAccess(member.user_id, 'edit');
+                                      toast.success(`Edit access granted to ${member.full_name}`);
+                                    } catch {
+                                      toast.error('Failed to grant access');
+                                    }
+                                  }}
+                                >
+                                  <Pencil className="mr-1 h-3 w-3" /> Edit
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
 
-            {/* Conversation visibility default */}
-            <div>
+            {/* Conversation visibility default — only relevant when sharing */}
+            {channelAccess.settings.sharing_mode !== 'private' && <div>
               <h3 className="text-sm font-medium mb-1">Default conversation visibility</h3>
               <p className="text-xs text-muted-foreground mb-3">
                 When someone has access to this channel, can they see all conversations or only ones you specifically grant?
@@ -700,102 +824,7 @@ export default function ChannelDetailPage() {
                   );
                 })}
               </div>
-            </div>
-
-            {/* User access list (for specific_users mode) */}
-            {channelAccess.settings.sharing_mode === 'specific_users' && (
-              <div>
-                <h3 className="text-sm font-medium mb-2">People with access</h3>
-
-                {channelAccess.settings.access_list.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {channelAccess.settings.access_list.map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">{entry.user?.full_name || 'Unknown'}</div>
-                          <div className="truncate text-xs text-muted-foreground">{entry.user?.email}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            {entry.access_level === 'edit' ? (
-                              <><Pencil className="mr-1 h-2.5 w-2.5" /> Can edit</>
-                            ) : (
-                              <><Eye className="mr-1 h-2.5 w-2.5" /> Can view</>
-                            )}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={async () => {
-                              try {
-                                await channelAccess.revokeAccess(entry.user_id);
-                                toast.success('Access revoked');
-                              } catch {
-                                toast.error('Failed to revoke access');
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add member */}
-                {teamMembers.filter((m) => !channelAccess.settings!.access_list.some((a) => a.user_id === m.user_id)).length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Add team members:</p>
-                    <div className="space-y-1">
-                      {teamMembers
-                        .filter((m) => !channelAccess.settings!.access_list.some((a) => a.user_id === m.user_id))
-                        .map((member) => (
-                          <div key={member.user_id} className="flex items-center justify-between rounded-lg border p-2">
-                            <div className="min-w-0">
-                              <div className="truncate text-sm">{member.full_name}</div>
-                              <div className="truncate text-xs text-muted-foreground">{member.email}</div>
-                            </div>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={async () => {
-                                  try {
-                                    await channelAccess.grantAccess(member.user_id, 'view');
-                                    toast.success(`View access granted to ${member.full_name}`);
-                                  } catch {
-                                    toast.error('Failed to grant access');
-                                  }
-                                }}
-                              >
-                                <Eye className="mr-1 h-3 w-3" /> View
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={async () => {
-                                  try {
-                                    await channelAccess.grantAccess(member.user_id, 'edit');
-                                    toast.success(`Edit access granted to ${member.full_name}`);
-                                  } catch {
-                                    toast.error('Failed to grant access');
-                                  }
-                                }}
-                              >
-                                <Pencil className="mr-1 h-3 w-3" /> Edit
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            </div>}
           </TabsContent>
         )}
 

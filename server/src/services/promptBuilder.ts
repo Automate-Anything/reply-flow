@@ -60,8 +60,8 @@ export interface ResponseFlow {
 // ── Profile & KB types ──────────────────────────────
 
 export interface ProfileData {
-  // Identity
-  use_case?: 'business' | 'personal' | 'organization';
+  // Business Details
+  use_case?: 'business';
   business_name?: string;
   business_type?: string;
   business_description?: string;
@@ -131,10 +131,7 @@ const DEFAULT_CORE_RULES = `## Core Rules
 - If a conversation requires human attention (complaints, complex issues, urgent matters), politely let the customer know that a team member will follow up.`;
 
 const DEFAULT_IDENTITY: Record<string, string> = {
-  business: 'You are an AI assistant for {name}. You help manage WhatsApp conversations on behalf of this business.',
-  organization: 'You are an AI assistant for {name}. You help manage WhatsApp conversations on behalf of this organization.',
-  personal: 'You are a personal AI assistant managing WhatsApp conversations.',
-  default: 'You are a helpful AI assistant managing WhatsApp conversations. Respond professionally and concisely.',
+  business: 'You are the AI-powered WhatsApp assistant for {name}. You represent this business in customer conversations — answering questions, providing information, and ensuring every customer feels heard and helped.',
 };
 
 const DEFAULT_LANGUAGE: Record<string, string> = {
@@ -266,28 +263,14 @@ function buildAudienceSection(profile: ProfileData): string | null {
 function buildIdentitySection(profile: ProfileData, t: PromptTemplateCache): string {
   const sections: string[] = [];
 
-  switch (profile.use_case) {
-    case 'business': {
-      const name = profile.business_name || 'the business';
-      sections.push(t.identity.business.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Business\n${profile.business_description}`);
-      if (profile.business_type) sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
-      break;
-    }
-    case 'organization': {
-      const name = profile.business_name || 'the organization';
-      sections.push(t.identity.organization.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Organization\n${profile.business_description}`);
-      break;
-    }
-    case 'personal':
-      sections.push(t.identity.personal);
-      if (profile.business_description) sections.push(`## Context\n${profile.business_description}`);
-      break;
-    default:
-      sections.push(t.identity.default);
-      break;
-  }
+  const name = profile.business_name || 'the business';
+  sections.push(t.identity.business.replace('{name}', name));
+
+  // Combine type and description into a single "About" block
+  const aboutParts: string[] = [];
+  if (profile.business_type) aboutParts.push(`${name} is a ${profile.business_type} business.`);
+  if (profile.business_description) aboutParts.push(profile.business_description);
+  if (aboutParts.length) sections.push(`## About ${name}\n${aboutParts.join(' ')}`);
 
   return sections.join('\n\n');
 }
@@ -461,28 +444,13 @@ function buildResponseFlowPrompt(
 function buildLegacyIdentitySection(profile: ProfileData, t: PromptTemplateCache): string {
   const sections: string[] = [];
 
-  switch (profile.use_case) {
-    case 'business': {
-      const name = profile.business_name || 'the business';
-      sections.push(t.identity.business.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Business\n${profile.business_description}`);
-      if (profile.business_type) sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
-      break;
-    }
-    case 'organization': {
-      const name = profile.business_name || 'the organization';
-      sections.push(t.identity.organization.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Organization\n${profile.business_description}`);
-      break;
-    }
-    case 'personal':
-      sections.push(t.identity.personal);
-      if (profile.business_description) sections.push(`## Context\n${profile.business_description}`);
-      break;
-    default:
-      sections.push(t.identity.default);
-      break;
-  }
+  const name = profile.business_name || 'the business';
+  sections.push(t.identity.business.replace('{name}', name));
+
+  const aboutParts: string[] = [];
+  if (profile.business_type) aboutParts.push(`${name} is a ${profile.business_type} business.`);
+  if (profile.business_description) aboutParts.push(profile.business_description);
+  if (aboutParts.length) sections.push(`## About ${name}\n${aboutParts.join(' ')}`);
 
   const audience = buildAudienceSection(profile);
   if (audience) sections.push(audience);

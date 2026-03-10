@@ -21,7 +21,7 @@ Return a JSON object with this EXACT structure. Every field is explained below.
 {
   "name": "<string> A short suggested agent name, e.g. 'Acme Support Agent'",
   "profile_data": {
-    "use_case": "<REQUIRED> One of: 'business', 'personal', 'organization'. Infer from conversation context.",
+    "use_case": "business",
     "business_name": "<string|null> The company/business name. Extract from conversations if mentioned.",
     "business_type": "<string|null> The type/industry of business, e.g. 'E-commerce', 'Restaurant', 'SaaS', 'Real Estate'. Infer from conversation topics.",
     "business_description": "<string|null> A 1-3 sentence description of what this business does, based on the conversations. What products/services do they offer? Who are their customers?",
@@ -81,7 +81,7 @@ Return a JSON object with this EXACT structure. Every field is explained below.
 
 // ── Valid enum values for validation ─────────────────
 
-const VALID_USE_CASES = new Set(['business', 'personal', 'organization']);
+const VALID_USE_CASES = new Set(['business']);
 const VALID_TONES = new Set(['professional', 'friendly', 'casual', 'formal']);
 const VALID_LENGTHS = new Set(['concise', 'moderate', 'detailed']);
 const VALID_EMOJIS = new Set(['none', 'minimal', 'moderate']);

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { PlanGate } from '@/components/auth/PlanGate';
@@ -11,6 +12,7 @@ import { useDebugMode } from '@/hooks/useDebugMode';
 import IdentitySection from './sections/IdentitySection';
 import ResponseFlowSection from './response-flow/ResponseFlowSection';
 import FallbackToggle from './response-flow/FallbackToggle';
+import { OptionButton } from './response-flow/StyleFields';
 import { useResponseFlow } from './response-flow/useResponseFlow';
 import PromptPreviewPanel from './PromptPreviewPanel';
 
@@ -25,7 +27,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
   const { knowledgeBases } = useCompanyKB();
   const { debugMode } = useDebugMode();
 
-  // Identity
+  // Business Details
   const [identityExpanded, setIdentityExpanded] = useState(false);
 
   const saveProfileFields = useCallback(
@@ -38,7 +40,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
     [profileData, onSave]
   );
 
-  // Response flow (shared between Response Flow and Unmatched Messages tabs)
+  // Response flow (shared between Response Flow and Fallback Behavior tabs)
   const {
     flow, dirty, updateFlow, updateDefaultStyle,
     addScenario, updateScenario, removeScenario,
@@ -75,15 +77,32 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
     </div>
   ) : null;
 
+  // Language preference (agent-level setting)
+  const [langPref, setLangPref] = useState(profileData.language_preference);
+  const [savingLang, setSavingLang] = useState(false);
+
+  const handleLangChange = useCallback(async (value: string) => {
+    setLangPref(value);
+    setSavingLang(true);
+    try {
+      const merged = { ...profileData, language_preference: value };
+      await onSave({ profile_data: merged });
+      toast.success('Saved');
+    } finally {
+      setSavingLang(false);
+    }
+  }, [profileData, onSave]);
+
   return (
-    <Tabs defaultValue="identity">
+    <Tabs defaultValue="business-details">
       <TabsList className="w-full">
-        <TabsTrigger value="identity" className="flex-1">Identity</TabsTrigger>
+        <TabsTrigger value="business-details" className="flex-1">Business Details</TabsTrigger>
         <TabsTrigger value="response-flow" className="flex-1">Response Flow</TabsTrigger>
-        <TabsTrigger value="unmatched" className="flex-1">Unmatched Messages</TabsTrigger>
+        <TabsTrigger value="fallback" className="flex-1">Fallback Behavior</TabsTrigger>
+        <TabsTrigger value="language" className="flex-1">Language</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="identity">
+      <TabsContent value="business-details">
         <IdentitySection
           profileData={profileData}
           isExpanded={identityExpanded}
@@ -111,9 +130,9 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
         )}
       </TabsContent>
 
-      <TabsContent value="unmatched" className="space-y-4 pt-1">
+      <TabsContent value="fallback" className="space-y-4 pt-1">
         <p className="text-sm text-muted-foreground">
-          What should happen when a message doesn't match any scenario?
+          How should your agent respond when a message doesn't match any scenario?
         </p>
         <FallbackToggle
           mode={flow.fallback_mode}
@@ -122,17 +141,53 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
           greetingMessage={flow.greeting_message}
           responseRules={flow.response_rules}
           topicsToAvoid={flow.topics_to_avoid}
-          humanPhone={flow.human_phone}
           knowledgeBases={knowledgeBases}
           fallbackKBAttachments={flow.fallback_kb_attachments}
           onStyleChange={updateDefaultStyle}
           onGreetingChange={(v) => updateFlow({ greeting_message: v || undefined })}
           onRulesChange={(v) => updateFlow({ response_rules: v || undefined })}
           onTopicsChange={(v) => updateFlow({ topics_to_avoid: v || undefined })}
-          onPhoneChange={(v) => updateFlow({ human_phone: v || undefined })}
           onFallbackKBChange={setFallbackKBAttachments}
         />
         {saveFooter}
+      </TabsContent>
+
+      <TabsContent value="language" className="space-y-4 pt-1">
+        <p className="text-sm text-muted-foreground">
+          Choose which language your agent responds in.
+        </p>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <OptionButton
+              selected={langPref === 'match_customer'}
+              onClick={() => handleLangChange('match_customer')}
+            >
+              <div>
+                <p className="text-xs font-medium">Match customer</p>
+                <p className="text-xs text-muted-foreground">Respond in their language</p>
+              </div>
+            </OptionButton>
+            <OptionButton
+              selected={langPref !== undefined && langPref !== 'match_customer'}
+              onClick={() => handleLangChange('English')}
+            >
+              <div>
+                <p className="text-xs font-medium">Specific language</p>
+                <p className="text-xs text-muted-foreground">Always use one language</p>
+              </div>
+            </OptionButton>
+          </div>
+          {langPref && langPref !== 'match_customer' && (
+            <Input
+              value={langPref}
+              onChange={(e) => setLangPref(e.target.value)}
+              onBlur={() => langPref && handleLangChange(langPref)}
+              placeholder="e.g. English, Spanish, Hebrew"
+              className="mt-2 h-9"
+              disabled={savingLang}
+            />
+          )}
+        </div>
       </TabsContent>
     </Tabs>
   );

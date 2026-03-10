@@ -1,10 +1,8 @@
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { FallbackMode, CommunicationStyle, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
 import type { KnowledgeBase } from '@/hooks/useCompanyKB';
 import StyleFields from './StyleFields';
 import KBPicker from '../KBPicker';
-import { Phone } from 'lucide-react';
 
 interface Props {
   mode: FallbackMode;
@@ -13,22 +11,20 @@ interface Props {
   greetingMessage?: string;
   responseRules?: string;
   topicsToAvoid?: string;
-  humanPhone?: string;
   knowledgeBases?: KnowledgeBase[];
   fallbackKBAttachments?: ScenarioKBAttachment[];
   onStyleChange: (style: CommunicationStyle) => void;
   onGreetingChange: (value: string) => void;
   onRulesChange: (value: string) => void;
   onTopicsChange: (value: string) => void;
-  onPhoneChange: (value: string) => void;
   onFallbackKBChange?: (attachments: ScenarioKBAttachment[]) => void;
 }
 
 export default function FallbackToggle({
   mode, onChange,
-  style, greetingMessage, responseRules, topicsToAvoid, humanPhone,
+  style, greetingMessage, responseRules, topicsToAvoid,
   knowledgeBases = [], fallbackKBAttachments = [],
-  onStyleChange, onGreetingChange, onRulesChange, onTopicsChange, onPhoneChange,
+  onStyleChange, onGreetingChange, onRulesChange, onTopicsChange,
   onFallbackKBChange,
 }: Props) {
   return (
@@ -53,9 +49,9 @@ export default function FallbackToggle({
               {mode === 'respond_basics' && <span className="h-2 w-2 rounded-full bg-primary" />}
             </span>
             <div>
-              <p className="text-xs font-medium">AI responds using unmatched style</p>
+              <p className="text-xs font-medium">AI responds using fallback style</p>
               <p className="text-xs text-muted-foreground">
-                Uses the communication style below and knowledge base to handle unmatched messages.
+                Uses the communication style below and knowledge base to handle messages that don't match a scenario.
               </p>
             </div>
           </button>
@@ -107,7 +103,7 @@ export default function FallbackToggle({
                     value={fallbackKBAttachments}
                     onChange={onFallbackKBChange}
                     knowledgeBases={knowledgeBases}
-                    description="Attach knowledge bases the AI should reference when handling unmatched messages."
+                    description="Attach knowledge bases the AI should reference when handling fallback messages."
                     createHref="/knowledge-base"
                   />
                 </div>
@@ -137,28 +133,10 @@ export default function FallbackToggle({
             <div>
               <p className="text-xs font-medium">Let a human handle it</p>
               <p className="text-xs text-muted-foreground">
-                AI directs the customer to a team member.
+                The AI won't respond. A team member can reply manually.
               </p>
             </div>
           </button>
-
-          {mode === 'human_handle' && (
-            <div className="border-t border-primary/20 bg-muted/30 p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                <Label className="text-xs">Handoff Phone Number</Label>
-              </div>
-              <Input
-                value={humanPhone || ''}
-                onChange={(e) => onPhoneChange(e.target.value)}
-                placeholder="e.g. +1 (555) 123-4567"
-                className="h-9"
-              />
-              <p className="text-xs text-muted-foreground">
-                The AI will direct customers to contact this number for help.
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>

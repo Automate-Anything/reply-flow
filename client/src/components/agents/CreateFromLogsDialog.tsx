@@ -272,10 +272,10 @@ export default function CreateFromLogsDialog({
             </div>
 
             <div className="space-y-3 rounded-lg border p-4">
-              {/* Identity */}
+              {/* Business Details */}
               {(generatedProfile.business_name || generatedProfile.business_type) && (
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">Identity</p>
+                  <p className="text-xs font-medium text-muted-foreground">Business Details</p>
                   <p className="text-sm">
                     {[generatedProfile.business_name, generatedProfile.business_type].filter(Boolean).join(' — ')}
                   </p>

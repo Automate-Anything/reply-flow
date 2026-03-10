@@ -72,8 +72,8 @@ export interface ResponseFlow {
 // ── Profile data ────────────────────────────────────
 
 export interface ProfileData {
-  // Identity
-  use_case?: 'business' | 'personal' | 'organization';
+  // Business Details
+  use_case?: 'business';
   business_name?: string;
   business_type?: string;
   business_description?: string;
