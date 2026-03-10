@@ -185,16 +185,23 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
-    const sessions = filteredData.map((s) => ({
-      ...s,
-      unread_count: unreadMap[s.id] || 0,
-      contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
-      labels:
-        s.conversation_labels
-          ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
-          .filter(Boolean) || [],
-      assigned_user: s.assigned_user || null,
-    }));
+    const uniqueIds = new Set((data || []).map((s) => s.id));
+    if ((data || []).length !== uniqueIds.size) {
+      console.warn(`[conversations] Supabase returned ${(data || []).length} rows but only ${uniqueIds.size} unique session IDs — deduplicating`);
+    }
+
+    const sessions = filteredData
+      .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+      .map((s) => ({
+        ...s,
+        unread_count: unreadMap[s.id] || 0,
+        contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
+        labels:
+          s.conversation_labels
+            ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
+            .filter(Boolean) || [],
+        assigned_user: s.assigned_user || null,
+      }));
 
     res.json({ sessions, count });
   } catch (err) {
@@ -230,8 +237,16 @@ router.get('/:sessionId/messages', requirePermission('conversations', 'view'), a
     const { data: messages, error } = await query;
     if (error) throw error;
 
+    const rawMessages = messages || [];
+    const uniqueMessageIds = new Set(rawMessages.map((m) => m.id));
+    if (rawMessages.length !== uniqueMessageIds.size) {
+      console.warn(`[messages] Supabase returned ${rawMessages.length} rows but only ${uniqueMessageIds.size} unique message IDs — deduplicating`);
+    }
+
+    const dedupedMessages = rawMessages.filter((m, i, arr) => arr.findIndex((x) => x.id === m.id) === i);
+
     // Return in chronological order
-    res.json({ messages: (messages || []).reverse() });
+    res.json({ messages: dedupedMessages.reverse() });
   } catch (err) {
     next(err);
   }
