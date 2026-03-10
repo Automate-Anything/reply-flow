@@ -670,7 +670,7 @@ export async function sendOutsideHoursReply(
 ): Promise<void> {
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
-    .select('chat_id, phone_number')
+    .select('chat_id, phone_number, user_id')
     .eq('id', sessionId)
     .single();
 
@@ -695,6 +695,7 @@ export async function sendOutsideHoursReply(
   const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
     session_id: sessionId,
     company_id: companyId,
+    user_id: session.user_id,
     chat_id_normalized: session.chat_id,
     phone_number: session.phone_number,
     message_body: message,
@@ -738,7 +739,7 @@ async function sendAndStoreMessage(
 ): Promise<void> {
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
-    .select('chat_id, phone_number, channel_id')
+    .select('chat_id, phone_number, channel_id, user_id')
     .eq('id', sessionId)
     .single();
 
@@ -763,6 +764,7 @@ async function sendAndStoreMessage(
   const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
     session_id: sessionId,
     company_id: companyId,
+    user_id: session.user_id,
     chat_id_normalized: session.chat_id,
     phone_number: session.phone_number,
     message_body: message,
