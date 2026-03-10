@@ -31,7 +31,17 @@ export function useMessages(sessionId: string | null) {
     setLoading(true);
     try {
       const { data } = await api.get(`/conversations/${sessionId}/messages`);
-      setMessages(data.messages || []);
+      const msgs: Message[] = data.messages || [];
+      const seen = new Set<string>();
+      const deduped = msgs.filter((m) => {
+        if (seen.has(m.id)) {
+          console.warn('[useMessages] duplicate message id in fetch response:', m.id);
+          return false;
+        }
+        seen.add(m.id);
+        return true;
+      });
+      setMessages(deduped);
     } catch (err) {
       console.error('Failed to fetch messages:', err);
     } finally {
