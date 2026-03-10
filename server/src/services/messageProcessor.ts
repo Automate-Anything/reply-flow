@@ -7,11 +7,47 @@ import { downloadAndStore } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 
 /**
- * Normalizes a WhatsApp chat_id to a phone number.
+ * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
  * e.g. "1234567890@s.whatsapp.net" -> "1234567890"
  */
-function normalizeChatId(chatId: string): string {
+function normalizeChatId(chatId?: string | null): string | null {
+  if (!chatId) return null;
   return chatId.replace(/@.*$/, '');
+}
+
+function pickCounterpartyId(
+  candidates: Array<string | null>,
+  channelPhone: string | null
+): string | null {
+  for (const candidate of candidates) {
+    if (candidate && candidate !== channelPhone) return candidate;
+  }
+  return candidates.find(Boolean) ?? null;
+}
+
+function resolveMessageRouting(
+  msg: WhapiIncomingMessage,
+  channelPhone: string | null
+): { isOutbound: boolean; phoneNumber: string | null; chatId: string | null } {
+  const normalizedFrom = normalizeChatId(msg.from);
+  const normalizedTo = normalizeChatId(msg.to);
+  const normalizedChat = normalizeChatId(msg.chat_id);
+
+  const isOutbound = msg.from_me === true || (
+    channelPhone !== null &&
+    (normalizedFrom === channelPhone || normalizedTo === channelPhone) &&
+    [normalizedFrom, normalizedTo, normalizedChat].some((value) => value && value !== channelPhone)
+  );
+
+  const counterpartyId = isOutbound
+    ? pickCounterpartyId([normalizedTo, normalizedChat, normalizedFrom], channelPhone)
+    : pickCounterpartyId([normalizedFrom, normalizedChat, normalizedTo], channelPhone);
+
+  return {
+    isOutbound,
+    phoneNumber: counterpartyId,
+    chatId: counterpartyId,
+  };
 }
 
 /**
