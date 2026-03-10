@@ -201,7 +201,7 @@ export async function processIncomingMessage(
     sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
   }
 
-  // 3. Idempotency check — skip if message already exists
+  // 3. Idempotency check — skip if message already exists (by WhatsApp message ID)
   if (msg.id) {
     const { data: existing } = await supabaseAdmin
       .from('chat_messages')
@@ -211,7 +211,32 @@ export async function processIncomingMessage(
       .maybeSingle();
 
     if (existing) {
-      console.log(`Duplicate message skipped: ${msg.id}`);
+      console.log(`[webhook] Duplicate skipped (id match): ${msg.id}`);
+      return;
+    }
+  }
+
+  // 3b. Secondary dedup: Whapi echoes API-sent messages back through the webhook.
+  // This catches two failure modes:
+  //   (a) Echo arrives with from_me=true but message_id_normalized format doesn't match → primary dedup misses it
+  //   (b) Echo arrives with from_me absent/false → treated as inbound, primary dedup misses it
+  // In both cases, an outbound message with the same body already exists in the session.
+  // We only compare against outbound messages so a contact legitimately sending the same
+  // message twice is never suppressed.
+  {
+    const windowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: existingOutbound } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('company_id', companyId)
+      .eq('direction', 'outbound')
+      .eq('message_body', messageBody)
+      .gte('created_at', windowStart)
+      .maybeSingle();
+
+    if (existingOutbound) {
+      console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}`);
       return;
     }
   }
