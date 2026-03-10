@@ -51,6 +51,8 @@ export default function InboxPage() {
   const { messages, setMessages, loading: msgsLoading, sendMessage, scheduleMessage, cancelScheduledMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );
+
+  console.log('[InboxPage render] messages count:', messages.length, 'ids:', messages.map(m => m.id));
   const {
     scheduledMessages,
     loading: scheduledLoading,
