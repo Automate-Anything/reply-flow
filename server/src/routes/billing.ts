@@ -574,6 +574,7 @@ router.get('/usage', requirePermission('billing', 'view'), async (req, res, next
       .from('chat_messages')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId)
+      .eq('sender_type', 'ai')
       .gte('created_at', sub.current_period_start)
       .lte('created_at', sub.current_period_end);
 
