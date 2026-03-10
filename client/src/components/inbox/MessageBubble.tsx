@@ -300,8 +300,8 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
             </p>
           )}
 
-          {/* Regular text message */}
-          {!isMediaType && (
+          {/* Regular text message (only when showCaption hasn't already rendered the body) */}
+          {!isMediaType && !showCaption && (
             <p className="whitespace-pre-wrap text-sm leading-relaxed">
               {message.message_body}
             </p>
