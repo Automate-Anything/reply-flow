@@ -25,6 +25,13 @@ export interface WhapiContactProfile {
   icon_full: string;
 }
 
+export interface WhapiUserProfile {
+  name: string;
+  icon: string;
+  icon_full: string;
+  about?: string;
+}
+
 export interface WhapiWebhookSettings {
   webhooks: Array<{
     url: string;

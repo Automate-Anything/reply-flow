@@ -5,6 +5,7 @@ export interface ChannelInfo {
   channel_status: string;
   phone_number: string | null;
   profile_picture_url: string | null;
+  profile_name: string | null;
   webhook_registered: boolean;
   created_at: string;
   user_id?: string;

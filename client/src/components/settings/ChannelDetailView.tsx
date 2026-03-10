@@ -343,7 +343,7 @@ export default function ChannelDetailPage() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-lg font-semibold">{displayName}</h2>
+            <h2 className="truncate text-lg font-semibold">{channel.profile_name || displayName}</h2>
             <Badge variant="outline" className={`shrink-0 ${statusConfig.badgeClass}`}>
               <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${statusConfig.dotClass}`} />
               {statusConfig.label}

@@ -186,12 +186,10 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
           phone = health.phone || null;
         } catch { /* best effort */ }
 
-        // Fetch profile picture
-        let profilePictureUrl: string | null = null;
-        if (phone) {
-          const profile = await whapi.getContactProfile(channel.channel_token, phone);
-          profilePictureUrl = profile?.icon_full || profile?.icon || null;
-        }
+        // Fetch the connected user's own profile (name + picture)
+        const userProfile = await whapi.getUserProfile(channel.channel_token);
+        const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
+        const profileName = userProfile?.name || null;
 
         // Update DB status to connected
         await supabaseAdmin
@@ -200,6 +198,7 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
             channel_status: 'connected',
             ...(phone ? { phone_number: phone } : {}),
             profile_picture_url: profilePictureUrl,
+            profile_name: profileName,
             updated_at: new Date().toISOString(),
           })
           .eq('id', Number(channelId))
@@ -266,9 +265,11 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         const newStatus = isConnected ? 'connected' : 'awaiting_scan';
 
         let profilePictureUrl: string | null = null;
-        if (isConnected && health.phone) {
-          const profile = await whapi.getContactProfile(channel.channel_token, health.phone);
-          profilePictureUrl = profile?.icon_full || profile?.icon || null;
+        let profileName: string | null = null;
+        if (isConnected) {
+          const userProfile = await whapi.getUserProfile(channel.channel_token);
+          profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
+          profileName = userProfile?.name || null;
         }
 
         await supabaseAdmin
@@ -277,6 +278,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
             channel_status: newStatus,
             ...(isConnected ? { phone_number: health.phone || null } : {}),
             ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
+            ...(profileName ? { profile_name: profileName } : {}),
             updated_at: new Date().toISOString(),
           })
           .eq('id', Number(channelId));
@@ -326,11 +328,9 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
     const isConnected = statusText === 'AUTH';
 
     if (isConnected && channel.channel_status !== 'connected') {
-      let profilePictureUrl: string | null = null;
-      if (health.phone) {
-        const profile = await whapi.getContactProfile(channel.channel_token, health.phone);
-        profilePictureUrl = profile?.icon_full || profile?.icon || null;
-      }
+      const userProfile = await whapi.getUserProfile(channel.channel_token);
+      const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
+      const profileName = userProfile?.name || null;
 
       await supabaseAdmin
         .from('whatsapp_channels')
@@ -338,6 +338,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
           channel_status: 'connected',
           phone_number: health.phone || null,
           ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
+          ...(profileName ? { profile_name: profileName } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', Number(channelId));
@@ -382,7 +383,7 @@ router.get('/channels', requirePermission('channels', 'view'), async (req, res, 
 
     const { data: channels, error } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
       .in('id', accessibleIds)
       .eq('company_id', companyId)
       .order('created_at', { ascending: true });
@@ -411,7 +412,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();

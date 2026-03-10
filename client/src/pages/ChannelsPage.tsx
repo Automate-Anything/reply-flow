@@ -45,8 +45,8 @@ export default function ChannelsPage() {
   const channelLimit = subscription?.plan.channels ?? Infinity;
   const atLimit = channels.length >= channelLimit;
 
-  const fetchChannels = useCallback(async () => {
-    setLoading(true);
+  const fetchChannels = useCallback(async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     try {
       const { data } = await api.get('/whatsapp/channels');
       setChannels(data.channels || []);
@@ -58,7 +58,7 @@ export default function ChannelsPage() {
   }, []);
 
   useEffect(() => {
-    fetchChannels();
+    fetchChannels(true);
   }, [fetchChannels]);
 
   return (
@@ -123,9 +123,11 @@ export default function ChannelsPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">
-                          {ch.phone_number ? formatPhone(ch.phone_number) : formatChannelName(ch)}
+                          {ch.profile_name || (ch.phone_number ? formatPhone(ch.phone_number) : formatChannelName(ch))}
                         </p>
-                        <p className={`text-xs ${ch.channel_status === 'disconnected' ? 'text-destructive' : 'text-muted-foreground'}`}>{status.label}</p>
+                        <p className={`text-xs ${ch.channel_status === 'disconnected' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                          {ch.phone_number && ch.profile_name ? `${formatPhone(ch.phone_number)} · ` : ''}{status.label}
+                        </p>
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
                     </CardContent>
