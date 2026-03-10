@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/contexts/SessionContext';
 import type { Message } from './useMessages';
@@ -11,6 +11,11 @@ interface UseRealtimeOptions {
 
 export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealtimeOptions) {
   const { companyId } = useSession();
+  const onNewMessageRef = useRef(onNewMessage);
+  const onSessionUpdateRef = useRef(onSessionUpdate);
+
+  onNewMessageRef.current = onNewMessage;
+  onSessionUpdateRef.current = onSessionUpdate;
 
   useEffect(() => {
     if (!companyId) return;
@@ -26,7 +31,7 @@ export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealti
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
-          onNewMessage?.(payload.new as Message);
+          onNewMessageRef.current?.(payload.new as Message);
         }
       )
       .on(
@@ -38,7 +43,7 @@ export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealti
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
-          onSessionUpdate?.(payload.new as Partial<Conversation> & { id: string });
+          onSessionUpdateRef.current?.(payload.new as Partial<Conversation> & { id: string });
         }
       )
       .subscribe();
@@ -46,5 +51,5 @@ export function useRealtimeMessages({ onNewMessage, onSessionUpdate }: UseRealti
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [companyId, onNewMessage, onSessionUpdate]);
+  }, [companyId]);
 }
