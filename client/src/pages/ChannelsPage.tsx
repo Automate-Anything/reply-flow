@@ -49,7 +49,27 @@ export default function ChannelsPage() {
     if (showLoader) setLoading(true);
     try {
       const { data } = await api.get('/whatsapp/channels');
-      setChannels(data.channels || []);
+      const nextChannels = data.channels || [];
+      setChannels(nextChannels);
+
+      const channelsNeedingMetadata = nextChannels.filter((channel: ChannelInfo) =>
+        channel.channel_status === 'connected' && (
+          !channel.phone_number ||
+          !channel.profile_name ||
+          !channel.profile_picture_url
+        )
+      );
+
+      if (channelsNeedingMetadata.length > 0) {
+        await Promise.allSettled(
+          channelsNeedingMetadata.map((channel: ChannelInfo) =>
+            api.get(`/whatsapp/health-check?channelId=${channel.id}`)
+          )
+        );
+
+        const { data: refreshedData } = await api.get('/whatsapp/channels');
+        setChannels(refreshedData.channels || []);
+      }
     } catch {
       toast.error('Failed to load channels');
     } finally {

@@ -8,6 +8,31 @@ import { checkPlanLimit } from './billing.js';
 
 const router = Router();
 
+async function syncConnectedChannelMetadata(
+  companyId: string,
+  channelId: number,
+  channelToken: string,
+  phone: string | null
+) {
+  const userProfile = await whapi.getUserProfile(channelToken);
+  const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
+  const profileName = userProfile?.name || null;
+
+  await supabaseAdmin
+    .from('whatsapp_channels')
+    .update({
+      channel_status: 'connected',
+      phone_number: phone,
+      profile_picture_url: profilePictureUrl,
+      profile_name: profileName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', channelId)
+    .eq('company_id', companyId);
+
+  return { profilePictureUrl, profileName };
+}
+
 // All routes require auth
 router.use(requireAuth);
 
@@ -187,22 +212,12 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
         } catch { /* best effort */ }
 
         // Fetch the connected user's own profile (name + picture)
-        const userProfile = await whapi.getUserProfile(channel.channel_token);
-        const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
-        const profileName = userProfile?.name || null;
-
-        // Update DB status to connected
-        await supabaseAdmin
-          .from('whatsapp_channels')
-          .update({
-            channel_status: 'connected',
-            ...(phone ? { phone_number: phone } : {}),
-            profile_picture_url: profilePictureUrl,
-            profile_name: profileName,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', Number(channelId))
-          .eq('company_id', companyId);
+        await syncConnectedChannelMetadata(
+          companyId,
+          Number(channelId),
+          channel.channel_token,
+          phone
+        );
 
         // Register webhook while we're here
         try {
@@ -242,7 +257,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_token, channel_id, channel_status')
+      .select('channel_token, channel_id, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
@@ -264,24 +279,22 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         const isConnected = statusText === 'AUTH';
         const newStatus = isConnected ? 'connected' : 'awaiting_scan';
 
-        let profilePictureUrl: string | null = null;
-        let profileName: string | null = null;
         if (isConnected) {
-          const userProfile = await whapi.getUserProfile(channel.channel_token);
-          profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
-          profileName = userProfile?.name || null;
+          await syncConnectedChannelMetadata(
+            companyId,
+            Number(channelId),
+            channel.channel_token,
+            health.phone || null
+          );
+        } else {
+          await supabaseAdmin
+            .from('whatsapp_channels')
+            .update({
+              channel_status: newStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', Number(channelId));
         }
-
-        await supabaseAdmin
-          .from('whatsapp_channels')
-          .update({
-            channel_status: newStatus,
-            ...(isConnected ? { phone_number: health.phone || null } : {}),
-            ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
-            ...(profileName ? { profile_name: profileName } : {}),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', Number(channelId));
 
         if (isConnected) {
           const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
@@ -327,28 +340,30 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
     const statusText = health.status?.text?.toUpperCase() || '';
     const isConnected = statusText === 'AUTH';
 
-    if (isConnected && channel.channel_status !== 'connected') {
-      const userProfile = await whapi.getUserProfile(channel.channel_token);
-      const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
-      const profileName = userProfile?.name || null;
+    const shouldSyncConnectedMetadata =
+      isConnected && (
+        channel.channel_status !== 'connected' ||
+        !channel.phone_number ||
+        !channel.profile_picture_url ||
+        !channel.profile_name
+      );
 
-      await supabaseAdmin
-        .from('whatsapp_channels')
-        .update({
-          channel_status: 'connected',
-          phone_number: health.phone || null,
-          ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
-          ...(profileName ? { profile_name: profileName } : {}),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', Number(channelId));
+    if (shouldSyncConnectedMetadata) {
+      await syncConnectedChannelMetadata(
+        companyId,
+        Number(channelId),
+        channel.channel_token,
+        health.phone || null
+      );
 
-      const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
-      await whapi.registerWebhook(channel.channel_token, webhookUrl);
-      await supabaseAdmin
-        .from('whatsapp_channels')
-        .update({ webhook_registered: true })
-        .eq('id', Number(channelId));
+      if (!channel.webhook_registered) {
+        const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
+        await whapi.registerWebhook(channel.channel_token, webhookUrl);
+        await supabaseAdmin
+          .from('whatsapp_channels')
+          .update({ webhook_registered: true })
+          .eq('id', Number(channelId));
+      }
     } else if (!isConnected && channel.channel_status === 'connected') {
       await supabaseAdmin
         .from('whatsapp_channels')
