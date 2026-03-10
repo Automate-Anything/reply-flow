@@ -41,6 +41,7 @@ export function useMessages(sessionId: string | null) {
         seen.add(m.id);
         return true;
       });
+      console.log('[useMessages] fetch complete, setting', deduped.length, 'messages for sessionId:', sessionId);
       setMessages(deduped);
     } catch (err) {
       console.error('Failed to fetch messages:', err);
@@ -50,6 +51,7 @@ export function useMessages(sessionId: string | null) {
   }, [sessionId]);
 
   useEffect(() => {
+    console.log('[useMessages] effect running for sessionId:', sessionId);
     fetchMessages();
   }, [fetchMessages]);
 

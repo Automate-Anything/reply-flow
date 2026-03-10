@@ -100,9 +100,12 @@ export default function InboxPage() {
   useRealtimeMessages({
     onNewMessage: useCallback(
       (msg: Message) => {
+        console.log('[onNewMessage] fired for msg:', msg.id, 'session:', msg.session_id, 'active:', activeConversation?.id);
         if (activeConversation && msg.session_id === activeConversation.id) {
           setMessages((prev) => {
-            if (prev.some((m) => m.id === msg.id)) return prev;
+            const isDupe = prev.some((m) => m.id === msg.id);
+            console.log('[onNewMessage] adding to thread, isDupe:', isDupe, 'prevCount:', prev.length);
+            if (isDupe) return prev;
             return [...prev, msg];
           });
           markRead();
