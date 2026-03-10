@@ -30,6 +30,8 @@ interface Company {
   logo_url: string | null;
   timezone: string;
   session_timeout_hours: number;
+  business_type: string | null;
+  business_description: string | null;
 }
 
 const TIMEZONES = (() => {
@@ -58,6 +60,8 @@ export default function CompanySettingsPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState('');
+  const [businessType, setBusinessType] = useState('');
+  const [businessDescription, setBusinessDescription] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [tzInput, setTzInput] = useState('UTC');
   const [sessionTimeout, setSessionTimeout] = useState(24);
@@ -68,6 +72,8 @@ export default function CompanySettingsPage() {
       const { data } = await api.get('/company');
       setCompany(data.company);
       setName(data.company.name);
+      setBusinessType(data.company.business_type || '');
+      setBusinessDescription(data.company.business_description || '');
       setTimezone(data.company.timezone || 'UTC');
       setTzInput(data.company.timezone || 'UTC');
       setSessionTimeout(data.company.session_timeout_hours ?? 24);
@@ -94,8 +100,13 @@ export default function CompanySettingsPage() {
 
   const hasChanges = useMemo(() => {
     if (!company) return false;
-    return name.trim() !== company.name || timezone !== (company.timezone || 'UTC');
-  }, [company, name, timezone]);
+    return (
+      name.trim() !== company.name ||
+      businessType.trim() !== (company.business_type || '') ||
+      businessDescription.trim() !== (company.business_description || '') ||
+      timezone !== (company.timezone || 'UTC')
+    );
+  }, [company, name, businessType, businessDescription, timezone]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -106,6 +117,8 @@ export default function CompanySettingsPage() {
     try {
       const { data } = await api.put('/company', {
         name: name.trim(),
+        business_type: businessType.trim() || null,
+        business_description: businessDescription.trim() || null,
         timezone,
       });
       setCompany(data.company);
@@ -160,6 +173,30 @@ export default function CompanySettingsPage() {
               onChange={(e) => setName(e.target.value)}
               disabled={!canEdit}
               placeholder="Your company name"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="business-type">Business Type</Label>
+            <Input
+              id="business-type"
+              value={businessType}
+              onChange={(e) => setBusinessType(e.target.value)}
+              disabled={!canEdit}
+              placeholder="e.g. Restaurant, E-commerce, Consulting"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="business-description">About</Label>
+            <textarea
+              id="business-description"
+              value={businessDescription}
+              onChange={(e) => setBusinessDescription(e.target.value)}
+              disabled={!canEdit}
+              rows={3}
+              placeholder="Briefly describe what your company does..."
+              className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
             />
           </div>
 

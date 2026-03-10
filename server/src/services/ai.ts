@@ -441,6 +441,18 @@ export async function shouldAIRespond(
       profileData = (agent.profile_data || {}) as ProfileData;
     }
   }
+
+  // 9b. Merge company-level business details into profileData
+  const { data: companyInfo } = await supabaseAdmin
+    .from('companies')
+    .select('name, business_type, business_description')
+    .eq('id', companyId)
+    .single();
+  if (companyInfo) {
+    if (!profileData.business_name) profileData.business_name = companyInfo.name;
+    if (!profileData.business_type) profileData.business_type = companyInfo.business_type ?? undefined;
+    if (!profileData.business_description) profileData.business_description = companyInfo.business_description ?? undefined;
+  }
   const channelOverrides = channelSettings.custom_instructions
     ? { custom_instructions: channelSettings.custom_instructions }
     : undefined;

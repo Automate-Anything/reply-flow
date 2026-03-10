@@ -120,7 +120,7 @@ router.get('/', requirePermission('company_settings', 'view'), async (req, res, 
 router.put('/', requirePermission('company_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { name, slug, logo_url, timezone, default_language, business_hours, session_timeout_hours } = req.body;
+    const { name, slug, logo_url, timezone, default_language, business_hours, session_timeout_hours, business_type, business_description } = req.body;
 
     const updates: Record<string, unknown> = {};
     if (name !== undefined) updates.name = name;
@@ -129,6 +129,8 @@ router.put('/', requirePermission('company_settings', 'edit'), async (req, res, 
     if (timezone !== undefined) updates.timezone = timezone;
     if (default_language !== undefined) updates.default_language = default_language;
     if (business_hours !== undefined) updates.business_hours = business_hours;
+    if (business_type !== undefined) updates.business_type = business_type;
+    if (business_description !== undefined) updates.business_description = business_description;
     if (session_timeout_hours !== undefined) {
       const hours = Number(session_timeout_hours);
       if (isNaN(hours) || hours < 1 || hours > 720) {

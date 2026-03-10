@@ -30,11 +30,12 @@ interface Props {
   addScenario: (label: string) => Scenario;
   updateScenario: (id: string, updates: Partial<Scenario>) => void;
   removeScenario: (id: string) => void;
+  onAutoSave?: (updatedFlow: ResponseFlow) => void;
 }
 
 export default function ResponseFlowSection({
   profileData, channelId, agentId,
-  flow, knowledgeBases, addScenario, updateScenario, removeScenario,
+  flow, knowledgeBases, addScenario, updateScenario, removeScenario, onAutoSave,
 }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
@@ -66,8 +67,19 @@ export default function ResponseFlowSection({
   const handleDialogSave = (data: Omit<Scenario, 'id'>) => {
     if (editingScenario) {
       updateScenario(editingScenario.id, data);
+      // Auto-save: compute the new flow inline since state hasn't updated yet
+      const isNew = !flow.scenarios.some(s => s.id === editingScenario.id);
+      const newScenarios = isNew
+        ? [...flow.scenarios, { ...data, id: editingScenario.id }]
+        : flow.scenarios.map(s => s.id === editingScenario.id ? { ...s, ...data } : s);
+      onAutoSave?.({ ...flow, scenarios: newScenarios });
     }
     setEditingScenario(null);
+  };
+
+  const handleDeleteScenario = (id: string) => {
+    removeScenario(id);
+    onAutoSave?.({ ...flow, scenarios: flow.scenarios.filter(s => s.id !== id) });
   };
 
   const availableSuggestions = PRESET_SUGGESTIONS.filter((s) => !hasLabel(s));
@@ -91,7 +103,7 @@ export default function ResponseFlowSection({
                 scenario={scenario}
                 defaultStyle={flow.default_style}
                 onEdit={() => handleEditScenario(scenario)}
-                onDelete={() => removeScenario(scenario.id)}
+                onDelete={() => handleDeleteScenario(scenario.id)}
               />
             ))}
           </div>

@@ -29,6 +29,7 @@ export default function IdentitySection({
         business_type: draft.business_type,
         business_description: draft.business_description,
       });
+      onToggle();
     } finally {
       setSaving(false);
     }

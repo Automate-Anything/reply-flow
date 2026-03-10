@@ -32,9 +32,6 @@ Return a JSON object with this EXACT structure. Every field is explained below.
         "response_length": "<REQUIRED> One of: 'concise', 'moderate', 'detailed'. Based on how long the business's replies typically are.",
         "emoji_usage": "<REQUIRED> One of: 'none', 'minimal', 'moderate'. Based on whether/how much the business uses emojis."
       },
-      "greeting_message": "<string|null> A greeting for new contacts, based on how the business greets customers in the logs. Example: 'Hi! Welcome to Acme. How can I help you today?'",
-      "response_rules": "<string|null> General guidelines for how to respond, extracted from consistent patterns in the conversations. Example: 'Always confirm the customer\\'s order number before looking up details. End messages with an offer to help further.'",
-      "topics_to_avoid": "<string|null> Topics the business should NOT discuss, inferred from conversations where the business deflects or redirects. Example: 'Internal pricing strategies, competitor comparisons, employee information'",
       "scenarios": [
         {
           "id": "<string> Generate a unique UUID v4 for each scenario",
@@ -66,16 +63,13 @@ Return a JSON object with this EXACT structure. Every field is explained below.
    - Any rules or patterns they follow
    - When they escalate to a human
    - Include a real example response if possible
-4. **Greeting**: Look at how conversations start — is there a standard greeting?
-5. **Rules**: Look for consistent patterns — do they always confirm an order number? Always offer follow-up help?
-6. **Topics to Avoid**: Any topics the business deflects or refuses to discuss?
-7. **Language**: What language(s) are the conversations in?
+4. **Language**: What language(s) are the conversations in?
 
 ## Important Rules
 
 - Only include fields you can confidently infer from the conversations. Set optional fields to null if uncertain.
 - Do NOT include kb_attachments or fallback_kb_attachments fields (these reference knowledge bases that don't exist yet).
-- Do NOT include deprecated fields: response_rules (on scenario), escalation_rules (on scenario), audiences, target_audience.
+- Do NOT include deprecated fields: response_rules (on scenario), escalation_rules (on scenario), audiences, target_audience, greeting_message, response_rules (on response_flow), topics_to_avoid.
 - Scenario style overrides (tone/response_length/emoji_usage) should only be set when a scenario clearly needs a DIFFERENT style than the default.
 - Return ONLY valid JSON. No markdown fencing, no explanation text, no comments.`;
 
@@ -222,16 +216,6 @@ function sanitizeResponseFlow(raw: Record<string, unknown>) {
       ? (raw.fallback_mode as 'respond_basics' | 'human_handle')
       : 'respond_basics',
   };
-
-  if (typeof raw.greeting_message === 'string' && raw.greeting_message.trim()) {
-    rf!.greeting_message = raw.greeting_message.trim();
-  }
-  if (typeof raw.response_rules === 'string' && raw.response_rules.trim()) {
-    rf!.response_rules = raw.response_rules.trim();
-  }
-  if (typeof raw.topics_to_avoid === 'string' && raw.topics_to_avoid.trim()) {
-    rf!.topics_to_avoid = raw.topics_to_avoid.trim();
-  }
 
   // Scenarios
   if (Array.isArray(raw.scenarios)) {

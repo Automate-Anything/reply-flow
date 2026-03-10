@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { PlanGate } from '@/components/auth/PlanGate';
@@ -9,10 +8,11 @@ import type { ProfileData } from '@/hooks/useCompanyAI';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
 import { useDebugMode } from '@/hooks/useDebugMode';
-import IdentitySection from './sections/IdentitySection';
 import ResponseFlowSection from './response-flow/ResponseFlowSection';
 import FallbackToggle from './response-flow/FallbackToggle';
-import { OptionButton } from './response-flow/StyleFields';
+import StyleFields from './response-flow/StyleFields';
+import StylePreview from './response-flow/StylePreview';
+import LanguageSection from './sections/LanguageSection';
 import { useResponseFlow } from './response-flow/useResponseFlow';
 import PromptPreviewPanel from './PromptPreviewPanel';
 
@@ -27,24 +27,20 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
   const { knowledgeBases } = useCompanyKB();
   const { debugMode } = useDebugMode();
 
-  // Business Details
-  const [identityExpanded, setIdentityExpanded] = useState(false);
-
   const saveProfileFields = useCallback(
     async (fields: Partial<ProfileData>) => {
       const merged = { ...profileData, ...fields };
       await onSave({ profile_data: merged });
       toast.success('Saved');
-      setIdentityExpanded(false);
     },
     [profileData, onSave]
   );
 
   // Response flow (shared between Response Flow and Fallback Behavior tabs)
   const {
-    flow, dirty, updateFlow, updateDefaultStyle,
+    flow, dirty, updateDefaultStyle,
     addScenario, updateScenario, removeScenario,
-    setFallbackMode, setFallbackKBAttachments, reset, clearDirty,
+    setFallbackMode, setFallbackStyle, reset, clearDirty,
   } = useResponseFlow(profileData);
 
   useFormDirtyGuard(dirty);
@@ -77,39 +73,17 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
     </div>
   ) : null;
 
-  // Language preference (agent-level setting)
-  const [langPref, setLangPref] = useState(profileData.language_preference);
-  const [savingLang, setSavingLang] = useState(false);
-
-  const handleLangChange = useCallback(async (value: string) => {
-    setLangPref(value);
-    setSavingLang(true);
-    try {
-      const merged = { ...profileData, language_preference: value };
-      await onSave({ profile_data: merged });
-      toast.success('Saved');
-    } finally {
-      setSavingLang(false);
-    }
-  }, [profileData, onSave]);
+  // Language preference
+  const [langExpanded, setLangExpanded] = useState(false);
 
   return (
-    <Tabs defaultValue="business-details">
+    <Tabs defaultValue="response-flow">
       <TabsList className="w-full">
-        <TabsTrigger value="business-details" className="flex-1">Business Details</TabsTrigger>
         <TabsTrigger value="response-flow" className="flex-1">Response Flow</TabsTrigger>
+        <TabsTrigger value="style" className="flex-1">Communication Style</TabsTrigger>
+        <TabsTrigger value="language" className="flex-1">Language Preferences</TabsTrigger>
         <TabsTrigger value="fallback" className="flex-1">Fallback Behavior</TabsTrigger>
-        <TabsTrigger value="language" className="flex-1">Language</TabsTrigger>
       </TabsList>
-
-      <TabsContent value="business-details">
-        <IdentitySection
-          profileData={profileData}
-          isExpanded={identityExpanded}
-          onToggle={() => setIdentityExpanded((prev) => !prev)}
-          onSave={saveProfileFields}
-        />
-      </TabsContent>
 
       <TabsContent value="response-flow" className="space-y-5 pt-1">
         <p className="text-xs text-muted-foreground">
@@ -123,11 +97,33 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
           addScenario={addScenario}
           updateScenario={updateScenario}
           removeScenario={removeScenario}
+          onAutoSave={async (updatedFlow) => {
+            const merged = { ...profileData, response_flow: updatedFlow };
+            await onSave({ profile_data: merged });
+            clearDirty();
+          }}
         />
-        {saveFooter}
         {debugMode && (
           <PromptPreviewPanel profileData={{ ...profileData, response_flow: flow }} agentId={agentId} />
         )}
+      </TabsContent>
+
+      <TabsContent value="style" className="space-y-5 pt-3">
+        <p className="text-xs text-muted-foreground">
+          Set the tone and style for your AI agent. Scenarios and fallback behavior can override these individually.
+        </p>
+        <StyleFields style={flow.default_style} onChange={updateDefaultStyle} />
+        <StylePreview style={flow.default_style} />
+        {saveFooter}
+      </TabsContent>
+
+      <TabsContent value="language" className="space-y-5 pt-1">
+        <LanguageSection
+          profileData={profileData}
+          isExpanded={langExpanded}
+          onToggle={() => setLangExpanded((prev) => !prev)}
+          onSave={saveProfileFields}
+        />
       </TabsContent>
 
       <TabsContent value="fallback" className="space-y-4 pt-1">
@@ -137,57 +133,10 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
         <FallbackToggle
           mode={flow.fallback_mode}
           onChange={setFallbackMode}
-          style={flow.default_style}
-          greetingMessage={flow.greeting_message}
-          responseRules={flow.response_rules}
-          topicsToAvoid={flow.topics_to_avoid}
-          knowledgeBases={knowledgeBases}
-          fallbackKBAttachments={flow.fallback_kb_attachments}
-          onStyleChange={updateDefaultStyle}
-          onGreetingChange={(v) => updateFlow({ greeting_message: v || undefined })}
-          onRulesChange={(v) => updateFlow({ response_rules: v || undefined })}
-          onTopicsChange={(v) => updateFlow({ topics_to_avoid: v || undefined })}
-          onFallbackKBChange={setFallbackKBAttachments}
+          fallbackStyle={flow.fallback_style}
+          onFallbackStyleChange={setFallbackStyle}
         />
         {saveFooter}
-      </TabsContent>
-
-      <TabsContent value="language" className="space-y-4 pt-1">
-        <p className="text-sm text-muted-foreground">
-          Choose which language your agent responds in.
-        </p>
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <OptionButton
-              selected={langPref === 'match_customer'}
-              onClick={() => handleLangChange('match_customer')}
-            >
-              <div>
-                <p className="text-xs font-medium">Match customer</p>
-                <p className="text-xs text-muted-foreground">Respond in their language</p>
-              </div>
-            </OptionButton>
-            <OptionButton
-              selected={langPref !== undefined && langPref !== 'match_customer'}
-              onClick={() => handleLangChange('English')}
-            >
-              <div>
-                <p className="text-xs font-medium">Specific language</p>
-                <p className="text-xs text-muted-foreground">Always use one language</p>
-              </div>
-            </OptionButton>
-          </div>
-          {langPref && langPref !== 'match_customer' && (
-            <Input
-              value={langPref}
-              onChange={(e) => setLangPref(e.target.value)}
-              onBlur={() => langPref && handleLangChange(langPref)}
-              placeholder="e.g. English, Spanish, Hebrew"
-              className="mt-2 h-9"
-              disabled={savingLang}
-            />
-          )}
-        </div>
       </TabsContent>
     </Tabs>
   );

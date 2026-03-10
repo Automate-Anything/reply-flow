@@ -316,9 +316,7 @@ function TemplatesTab() {
     length: 'Response Length Descriptions',
     emoji: 'Emoji Usage Descriptions',
     language: 'Language Instructions',
-    greeting: 'Greeting Format',
     kb_context: 'Knowledge Base Context',
-    topics_to_avoid: 'Topics to Avoid',
     scenario: 'Scenario Instructions',
     classifier: 'Message Classifier',
     core_rules: 'Core Rules',
@@ -327,9 +325,7 @@ function TemplatesTab() {
   const categoryDescriptions: Record<string, string> = {
     identity: 'Opening intro sentences for each use case. Use {name} as placeholder for the business/org name.',
     language: 'Language instructions. Use {language} as placeholder for the specific language name.',
-    greeting: 'Format for first-contact greeting. Use {greeting_message} as placeholder.',
     kb_context: 'Introduction text shown before knowledge base context is injected into the prompt.',
-    topics_to_avoid: 'Prefix text shown before the list of topics the agent should avoid.',
     scenario: 'Headers and fallback messages for the scenario system. Use {human_phone} as placeholder in phone fallback.',
     classifier: 'Full prompt sent to the classifier model. Use {business_context} and {scenario_list} as placeholders.',
   };
@@ -337,7 +333,7 @@ function TemplatesTab() {
   // Categories that need larger textareas
   const largeCategories = new Set(['core_rules', 'classifier', 'scenario']);
 
-  const categoryOrder = ['identity', 'tone', 'length', 'emoji', 'language', 'greeting', 'kb_context', 'topics_to_avoid', 'scenario', 'classifier', 'core_rules'];
+  const categoryOrder = ['identity', 'tone', 'length', 'emoji', 'language', 'kb_context', 'scenario', 'classifier', 'core_rules'];
 
   return (
     <div className="space-y-6">

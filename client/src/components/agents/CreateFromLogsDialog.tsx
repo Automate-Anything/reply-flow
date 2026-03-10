@@ -329,29 +329,6 @@ export default function CreateFromLogsDialog({
                 </div>
               )}
 
-              {/* Greeting */}
-              {flow?.greeting_message && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Greeting</p>
-                  <p className="text-sm italic">"{flow.greeting_message}"</p>
-                </div>
-              )}
-
-              {/* Response Rules */}
-              {flow?.response_rules && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Response Rules</p>
-                  <p className="text-sm whitespace-pre-line">{flow.response_rules}</p>
-                </div>
-              )}
-
-              {/* Topics to Avoid */}
-              {flow?.topics_to_avoid && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Topics to Avoid</p>
-                  <p className="text-sm">{flow.topics_to_avoid}</p>
-                </div>
-              )}
             </div>
 
             <p className="text-xs text-muted-foreground">

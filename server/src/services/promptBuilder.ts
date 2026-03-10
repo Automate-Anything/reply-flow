@@ -44,15 +44,13 @@ export interface Scenario {
   escalation_rules?: string;
 }
 
-export type FallbackMode = 'respond_basics' | 'human_handle';
+export type FallbackMode = 'respond_basics' | 'respond_custom' | 'human_handle';
 
 export interface ResponseFlow {
   default_style: CommunicationStyle;
-  greeting_message?: string;
-  response_rules?: string;
-  topics_to_avoid?: string;
   scenarios: Scenario[];
   fallback_mode: FallbackMode;
+  fallback_style?: CommunicationStyle;
   human_phone?: string;
   fallback_kb_attachments?: { kb_id: string; instructions?: string }[];
 }
@@ -75,10 +73,7 @@ export interface ProfileData {
   tone?: 'professional' | 'friendly' | 'casual' | 'formal';
   response_length?: 'concise' | 'moderate' | 'detailed';
   emoji_usage?: 'none' | 'minimal' | 'moderate';
-  response_rules?: string;
-  greeting_message?: string;
   escalation_rules?: string;
-  topics_to_avoid?: string;
 }
 
 export interface KBEntry {
@@ -141,10 +136,6 @@ const DEFAULT_LANGUAGE: Record<string, string> = {
 
 const DEFAULT_KB_CONTEXT = 'The following is the most relevant information retrieved from the knowledge base for this query. Use it to answer questions accurately. If a question isn\'t covered by this information, say so honestly.';
 
-const DEFAULT_GREETING = 'When this is the first message from a new contact, greet them with: "{greeting_message}"';
-
-const DEFAULT_TOPICS_TO_AVOID_PREFIX = 'Never discuss or share information about the following:';
-
 const DEFAULT_SCENARIO: Record<string, string> = {
   header: 'When you receive a message, identify which scenario best matches and apply its specific rules.\nIf multiple scenarios could match, choose the most specific one.',
   fallback_respond: 'Respond using your default communication style and the knowledge base.',
@@ -177,8 +168,6 @@ export interface PromptTemplateCache {
   identity: Record<string, string>;
   language: Record<string, string>;
   kbContext: string;
-  greeting: string;
-  topicsToAvoidPrefix: string;
   scenario: Record<string, string>;
   classifier: string;
   loadedAt: number;
@@ -196,8 +185,6 @@ function buildDefaultCache(): PromptTemplateCache {
     identity: { ...DEFAULT_IDENTITY },
     language: { ...DEFAULT_LANGUAGE },
     kbContext: DEFAULT_KB_CONTEXT,
-    greeting: DEFAULT_GREETING,
-    topicsToAvoidPrefix: DEFAULT_TOPICS_TO_AVOID_PREFIX,
     scenario: { ...DEFAULT_SCENARIO },
     classifier: DEFAULT_CLASSIFIER,
     loadedAt: Date.now(),
@@ -226,8 +213,6 @@ export async function getPromptTemplates(): Promise<PromptTemplateCache> {
         case 'identity': if (subKey) cache.identity[subKey] = row.content; break;
         case 'language': if (subKey) cache.language[subKey] = row.content; break;
         case 'kb_context': cache.kbContext = row.content; break;
-        case 'greeting': cache.greeting = row.content; break;
-        case 'topics_to_avoid': cache.topicsToAvoidPrefix = row.content; break;
         case 'scenario': if (subKey) cache.scenario[subKey] = row.content; break;
         case 'classifier': cache.classifier = row.content; break;
       }
@@ -318,7 +303,7 @@ function resolveScenarioStyle(scenario: Scenario, defaults: CommunicationStyle):
 }
 
 function buildFallbackText(flow: ResponseFlow, t: PromptTemplateCache): string {
-  if (flow.fallback_mode === 'respond_basics') {
+  if (flow.fallback_mode === 'respond_basics' || flow.fallback_mode === 'respond_custom') {
     return t.scenario.fallback_respond;
   }
   if (flow.human_phone) {
@@ -398,21 +383,6 @@ function buildResponseFlowPrompt(
   const styleDesc = formatStyleDescription(flow.default_style, t);
   if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
-  // Greeting
-  if (flow.greeting_message) {
-    track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
-  }
-
-  // General response rules
-  if (flow.response_rules) {
-    track('ResponseGuidelines', `## Response Guidelines\n${flow.response_rules}`);
-  }
-
-  // Topics to avoid
-  if (flow.topics_to_avoid) {
-    track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
-  }
-
   // Scenarios (pass KB entries so per-scenario attachments are inlined)
   const scenarios = buildScenariosSection(flow, kbEntries, t);
   if (scenarios) track('Scenarios', scenarios);
@@ -488,10 +458,7 @@ function buildLegacyPrompt(
   }
   if (styleRules.length > 0) track('CommunicationStyle', `## Communication Style\n${styleRules.join('\n')}`);
 
-  if (profile.response_rules) track('ResponseGuidelines', `## Response Guidelines\n${profile.response_rules}`);
-  if (profile.topics_to_avoid) track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${profile.topics_to_avoid}`);
   if (profile.escalation_rules) track('EscalationGuidelines', `## Escalation Guidelines\n${profile.escalation_rules}`);
-  if (profile.greeting_message) track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', profile.greeting_message)}`);
 
   const kb = buildKBSection(kbEntries, t);
   if (kb) track('KBContext', kb);
@@ -564,21 +531,6 @@ export async function buildScenarioResponsePrompt(
   const lang = buildLanguageSection(profile, t);
   if (lang) track('Language', lang);
 
-  // Greeting
-  if (flow.greeting_message) {
-    track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
-  }
-
-  // General response rules
-  if (flow.response_rules) {
-    track('ResponseGuidelines', `## Response Guidelines\n${flow.response_rules}`);
-  }
-
-  // Topics to avoid
-  if (flow.topics_to_avoid) {
-    track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
-  }
-
   // Find matched scenario
   const matchedScenario = matchedScenarioLabel
     ? flow.scenarios.find((sc) => sc.label === matchedScenarioLabel)
@@ -628,8 +580,11 @@ export async function buildScenarioResponsePrompt(
 
     track('ActiveScenario', scenarioLines.join('\n'));
   } else {
-    // No scenario matched — use default style + fallback behavior
-    const styleDesc = formatStyleDescription(flow.default_style, t);
+    // No scenario matched — use fallback style (custom or default)
+    const fallbackStyle = flow.fallback_mode === 'respond_custom' && flow.fallback_style
+      ? flow.fallback_style
+      : flow.default_style;
+    const styleDesc = formatStyleDescription(fallbackStyle, t);
     if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
     if (flow.fallback_mode === 'human_handle') {
