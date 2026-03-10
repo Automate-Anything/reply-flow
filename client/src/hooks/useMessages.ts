@@ -50,7 +50,10 @@ export function useMessages(sessionId: string | null) {
     async (body: string, quotedMessageId?: string) => {
       if (!sessionId) return;
       const { data } = await api.post('/messages/send', { sessionId, body, quotedMessageId });
-      setMessages((prev) => [...prev, data.message]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === data.message.id)) return prev;
+        return [...prev, data.message];
+      });
       return data.message;
     },
     [sessionId]
@@ -60,7 +63,10 @@ export function useMessages(sessionId: string | null) {
     async (body: string, scheduledFor: string) => {
       if (!sessionId) return;
       const { data } = await api.post('/messages/schedule', { sessionId, body, scheduledFor });
-      setMessages((prev) => [...prev, data.message]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === data.message.id)) return prev;
+        return [...prev, data.message];
+      });
       return data.message;
     },
     [sessionId]
