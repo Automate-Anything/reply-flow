@@ -692,7 +692,7 @@ export async function sendOutsideHoursReply(
   const now = new Date().toISOString();
   // Insert to DB before sending so the record exists when Whapi echoes the message back,
   // preventing the echo from being saved as sender_type: 'human' in the webhook handler.
-  const { data: insertedMsg } = await supabaseAdmin.from('chat_messages').insert({
+  const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
     session_id: sessionId,
     company_id: companyId,
     chat_id_normalized: session.chat_id,
@@ -705,6 +705,8 @@ export async function sendOutsideHoursReply(
     read: true,
     message_ts: now,
   }).select('id').single();
+
+  if (insertError) throw insertError;
 
   const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
   console.log('[ai] whapi send result:', JSON.stringify(result));
@@ -758,7 +760,7 @@ async function sendAndStoreMessage(
   const now = new Date().toISOString();
   // Insert to DB before sending so the record exists when Whapi echoes the message back,
   // preventing the echo from being saved as sender_type: 'human' in the webhook handler.
-  const { data: insertedMsg } = await supabaseAdmin.from('chat_messages').insert({
+  const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
     session_id: sessionId,
     company_id: companyId,
     chat_id_normalized: session.chat_id,
@@ -772,6 +774,8 @@ async function sendAndStoreMessage(
     message_ts: now,
     metadata: metadata ?? null,
   }).select('id').single();
+
+  if (insertError) throw insertError;
 
   const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
   console.log('[ai] whapi send result:', JSON.stringify(result));
