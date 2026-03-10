@@ -20,7 +20,7 @@ router.post('/', async (req, res) => {
 
     const { data: channel, error: channelError } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, user_id, company_id, channel_status')
+      .select('id, user_id, company_id, channel_status, phone_number')
       .eq('channel_id', whapiChannelId)
       .eq('channel_status', 'connected')
       .single();
@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
       // Skip group messages (chat_id ends with @g.us)
       if (msg.chat_id?.endsWith('@g.us')) continue;
 
-      await processIncomingMessage(msg, channel.company_id, channel.id, channel.user_id);
+      await processIncomingMessage(msg, channel.company_id, channel.id, channel.user_id, channel.phone_number ?? undefined);
     }
   } catch (err) {
     console.error('Webhook processing error:', err);

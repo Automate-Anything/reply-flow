@@ -119,9 +119,13 @@ export async function processIncomingMessage(
   msg: WhapiIncomingMessage,
   companyId: string,
   channelId: number,
-  userId: string
+  userId: string,
+  channelPhoneNumber?: string
 ): Promise<void> {
-  const isOutbound = msg.from_me === true;
+  // If msg.from matches the channel's own number, it's an outbound message even if from_me is missing/false.
+  // This happens with linked WhatsApp devices where Whapi doesn't always set from_me correctly.
+  const channelPhone = channelPhoneNumber ? normalizeChatId(channelPhoneNumber) : null;
+  const isOutbound = msg.from_me === true || (channelPhone !== null && normalizeChatId(msg.from) === channelPhone);
   // For outbound messages, msg.from is our own number — the contact is identified by chat_id
   const phoneNumber = isOutbound ? normalizeChatId(msg.chat_id) : normalizeChatId(msg.from);
   const chatId = normalizeChatId(msg.chat_id);
@@ -181,10 +185,15 @@ export async function processIncomingMessage(
     const shouldEnd = await checkSessionShouldEnd(activeSession, companyId);
 
     if (shouldEnd) {
-      // End the old session
+      // End the old session. If it's ending due to timeout (status is still open/pending),
+      // also archive it so it doesn't linger in the inbox alongside the new session.
+      const endUpdate: Record<string, unknown> = { ended_at: new Date().toISOString() };
+      if (activeSession.status !== 'resolved' && activeSession.status !== 'closed') {
+        endUpdate.is_archived = true;
+      }
       await supabaseAdmin
         .from('chat_sessions')
-        .update({ ended_at: new Date().toISOString() })
+        .update(endUpdate)
         .eq('id', activeSession.id);
 
       // Extract memories from the ended session (async, never blocks)

@@ -11,7 +11,8 @@
       "Bash(xargs grep -l \"rate.*limit\\\\|rateLimit\\\\|throttle\")",
       "Bash(grep -n \"checkPlanLimit\\\\|resource.*limit\" /c/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/src/routes/*.ts)",
       "Bash(npx tsc --noEmit)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
     ]
   }
 }
