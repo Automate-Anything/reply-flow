@@ -46,9 +46,27 @@ export interface ContactNote {
   updated_at: string;
 }
 
+const CONTACTS_CACHE_KEY = 'reply-flow-contacts';
+
+function getCachedContacts(): Contact[] | null {
+  try {
+    const cached = localStorage.getItem(CONTACTS_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isDefaultContactQuery(search?: string, filters?: ContactFilters): boolean {
+  return !search && (!filters || Object.keys(filters).length === 0 ||
+    (Object.keys(filters).length === 1 && (filters.sortBy !== undefined || filters.sortOrder !== undefined)));
+}
+
 export function useContacts(search?: string, filters?: ContactFilters) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
+  const isDefault = isDefaultContactQuery(search, filters);
+  const cached = isDefault ? getCachedContacts() : null;
+  const [contacts, setContacts] = useState<Contact[]>(cached || []);
+  const [loading, setLoading] = useState(!cached);
 
   const fetchContacts = useCallback(async () => {
     try {
@@ -69,7 +87,15 @@ export function useContacts(search?: string, filters?: ContactFilters) {
         }
       }
       const { data } = await api.get(`/contacts?${params}`);
-      setContacts(data.contacts || []);
+      const contactList = data.contacts || [];
+      setContacts(contactList);
+      if (isDefaultContactQuery(search, filters)) {
+        try {
+          localStorage.setItem(CONTACTS_CACHE_KEY, JSON.stringify(contactList));
+        } catch {
+          // localStorage full — ignore
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch contacts:', err);
     } finally {

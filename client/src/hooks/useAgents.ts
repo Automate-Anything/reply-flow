@@ -13,14 +13,32 @@ export interface AIAgent {
   updated_at: string;
 }
 
+const AGENTS_CACHE_KEY = 'reply-flow-agents';
+
+function getCachedAgents(): AIAgent[] | null {
+  try {
+    const cached = localStorage.getItem(AGENTS_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useAgents() {
-  const [agents, setAgents] = useState<AIAgent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = getCachedAgents();
+  const [agents, setAgents] = useState<AIAgent[]>(cached || []);
+  const [loading, setLoading] = useState(!cached);
 
   const fetchAgents = useCallback(async () => {
     try {
       const { data } = await api.get('/agents');
-      setAgents(data.agents || []);
+      const agentList = data.agents || [];
+      setAgents(agentList);
+      try {
+        localStorage.setItem(AGENTS_CACHE_KEY, JSON.stringify(agentList));
+      } catch {
+        // localStorage full — ignore
+      }
     } catch (err) {
       console.error('Failed to fetch agents:', err);
     } finally {
@@ -29,7 +47,6 @@ export function useAgents() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
     fetchAgents();
   }, [fetchAgents]);
 

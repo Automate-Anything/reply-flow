@@ -31,9 +31,21 @@ const DEFAULT_DATA: DashboardData = {
   totalChannelCount: 0,
 };
 
+const DASHBOARD_CACHE_KEY = 'reply-flow-dashboard';
+
+function getCachedDashboard(): DashboardData | null {
+  try {
+    const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useDashboardData() {
-  const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
-  const [loading, setLoading] = useState(true);
+  const cached = getCachedDashboard();
+  const [data, setData] = useState<DashboardData>(cached || DEFAULT_DATA);
+  const [loading, setLoading] = useState(!cached);
 
   const fetchAll = useCallback(async () => {
     const [convsRes, contactsRes, channelsRes] = await Promise.all([
@@ -46,7 +58,7 @@ export function useDashboardData() {
     const contacts = contactsRes.data.contacts || [];
     const channels: ChannelInfo[] = channelsRes.data.channels || [];
 
-    setData({
+    const dashboardData = {
       totalConversations: allConversations.length,
       unreadCount: allConversations.reduce(
         (sum: number, c: Conversation) => sum + c.unread_count,
@@ -57,7 +69,13 @@ export function useDashboardData() {
       channels,
       connectedChannelCount: channels.filter((c) => c.channel_status === 'connected').length,
       totalChannelCount: channels.length,
-    });
+    };
+    setData(dashboardData);
+    try {
+      localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(dashboardData));
+    } catch {
+      // localStorage full — ignore
+    }
 
     setLoading(false);
   }, []);

@@ -3,6 +3,8 @@ import { CalendarClock, Clock, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { usePageReady } from '@/hooks/usePageReady';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useConversations, type Conversation, type ConversationFilters } from '@/hooks/useConversations';
 import { useMessages, type Message } from '@/hooks/useMessages';
 import { useScheduledMessages } from '@/hooks/useScheduledMessages';
@@ -23,6 +25,7 @@ import { useDebugMode } from '@/hooks/useDebugMode';
 type InboxTab = 'all' | 'snoozed' | 'scheduled';
 
 export default function InboxPage() {
+  const pageReady = usePageReady();
   const [activeTab, setActiveTab] = useState<InboxTab>('all');
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ConversationFilters>({});
@@ -289,8 +292,25 @@ export default function InboxPage() {
     </div>
   );
 
+  if (!pageReady) {
+    return (
+      <div className="flex h-full" data-component="InboxPage">
+        <div className="flex h-full w-full flex-col border-r md:w-[320px]">
+          <div className="space-y-2 p-3">
+            <Skeleton className="h-8 w-full rounded-md" />
+            <Skeleton className="h-10 w-full rounded-md" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-md" />
+            ))}
+          </div>
+        </div>
+        <div className="hidden flex-1 md:block" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full" data-component="InboxPage">
+    <div className="flex h-full animate-in fade-in duration-150" data-component="InboxPage">
       {/* Left panel */}
       <div className={`${activeConversation && showConversationList ? 'hidden md:flex' : 'flex'} h-full w-full flex-col border-r md:w-[320px]`}>
         <div className="min-h-0 flex-1">

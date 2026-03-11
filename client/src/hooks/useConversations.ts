@@ -52,12 +52,31 @@ export interface ConversationFilters {
   labelId?: string;
 }
 
+const CONVS_CACHE_KEY = 'reply-flow-conversations';
+
+function getCachedConversations(): Conversation[] | null {
+  try {
+    const cached = localStorage.getItem(CONVS_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isDefaultQuery(search?: string, filters?: ConversationFilters): boolean {
+  return !search && (!filters || Object.keys(filters).length === 0 ||
+    (Object.keys(filters).length === 1 && filters.sort !== undefined));
+}
+
 export function useConversations(
   search?: string,
   filters?: ConversationFilters
 ) {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const isDefault = isDefaultQuery(search, filters);
+  const cached = isDefault ? getCachedConversations() : null;
+
+  const [conversations, setConversations] = useState<Conversation[]>(cached || []);
+  const [loading, setLoading] = useState(!cached);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -82,7 +101,16 @@ export function useConversations(
       if (filters?.sort) params.set('sort', filters.sort);
       if (filters?.labelId) params.set('labelId', filters.labelId);
       const { data } = await api.get(`/conversations?${params}`);
-      setConversations(data.sessions || []);
+      const sessions = data.sessions || [];
+      setConversations(sessions);
+      // Cache default query results for instant load next time
+      if (isDefaultQuery(search, filters)) {
+        try {
+          localStorage.setItem(CONVS_CACHE_KEY, JSON.stringify(sessions));
+        } catch {
+          // localStorage full — ignore
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch conversations:', err);
     } finally {

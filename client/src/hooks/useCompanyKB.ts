@@ -55,16 +55,34 @@ export interface KBSearchResult {
   snippet?: string;
 }
 
+const KB_CACHE_KEY = 'reply-flow-kbs';
+
+function getCachedKBs(): KnowledgeBase[] | null {
+  try {
+    const cached = localStorage.getItem(KB_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useCompanyKB() {
-  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = getCachedKBs();
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>(cached || []);
+  const [loading, setLoading] = useState(!cached);
 
   // ── Knowledge Bases ──
 
   const fetchKnowledgeBases = useCallback(async () => {
     try {
       const { data } = await api.get('/ai/kbs');
-      setKnowledgeBases(data.knowledge_bases);
+      const kbs = data.knowledge_bases;
+      setKnowledgeBases(kbs);
+      try {
+        localStorage.setItem(KB_CACHE_KEY, JSON.stringify(kbs));
+      } catch {
+        // localStorage full — ignore
+      }
     } catch (err) {
       console.error('Failed to fetch knowledge bases:', err);
     } finally {

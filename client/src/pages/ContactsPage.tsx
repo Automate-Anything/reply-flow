@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, Settings2, Tag, ListPlus, List, Upload, Download, GitMerge } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePageReady } from '@/hooks/usePageReady';
+import { Skeleton } from '@/components/ui/skeleton';
 import api from '@/lib/api';
 import { useContacts, type Contact, type ContactFilters } from '@/hooks/useContacts';
 import { useContactTags } from '@/hooks/useContactTags';
@@ -34,6 +36,7 @@ import PermissionGate from '@/components/auth/PermissionGate';
 type View = 'detail' | 'new' | 'edit';
 
 export default function ContactsPage() {
+  const pageReady = usePageReady();
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ContactFilters>({});
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
@@ -236,8 +239,25 @@ export default function ContactsPage() {
 
   const showingDetail = activeContact || view === 'new' || view === 'edit';
 
+  if (!pageReady) {
+    return (
+      <div className="flex h-full">
+        <div className="flex h-full w-full flex-col md:w-[320px] border-r">
+          <div className="space-y-2 p-3">
+            <Skeleton className="h-8 w-full rounded-md" />
+            <Skeleton className="h-10 w-full rounded-md" />
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-md" />
+            ))}
+          </div>
+        </div>
+        <div className="hidden flex-1 md:block" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full animate-in fade-in duration-150">
       {/* Contact list — hidden on mobile when detail/form is shown */}
       <div className={`${showingDetail ? 'hidden md:flex' : 'flex'} h-full w-full md:w-auto`}>
         <ContactList

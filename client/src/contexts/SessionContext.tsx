@@ -41,28 +41,42 @@ interface SessionContextType {
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 const CACHE_KEY = 'reply-flow-session';
+const ME_CACHE_KEY = 'reply-flow-me';
 const LOADING_TIMEOUT = 10_000;
 
+function getCachedMe(): MeResponse | null {
+  try {
+    const cached = localStorage.getItem(ME_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(() => {
+  const cachedSession = (() => {
     try {
       const cached = localStorage.getItem(CACHE_KEY);
-      return cached ? JSON.parse(cached) : null;
+      return cached ? JSON.parse(cached) as Session : null;
     } catch {
       return null;
     }
-  });
-  const [loading, setLoading] = useState(true);
+  })();
+  const cachedMe = getCachedMe();
+  const hasCachedData = !!(cachedSession && cachedMe);
+
+  const [session, setSession] = useState<Session | null>(cachedSession);
+  const [loading, setLoading] = useState(!hasCachedData);
   const [error, setError] = useState<string | null>(null);
-  const [profileFullName, setProfileFullName] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  const [companyName, setCompanyName] = useState<string | null>(null);
-  const [companyTimezone, setCompanyTimezone] = useState('UTC');
-  const [role, setRole] = useState<string | null>(null);
-  const [permissions, setPermissions] = useState<Set<string>>(new Set());
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const hasLoadedOnceRef = useRef(false);
+  const [profileFullName, setProfileFullName] = useState<string | null>(cachedMe?.profile?.full_name ?? null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(cachedMe?.profile?.avatar_url ?? null);
+  const [companyId, setCompanyId] = useState<string | null>(cachedMe?.company?.id ?? null);
+  const [companyName, setCompanyName] = useState<string | null>(cachedMe?.company?.name ?? null);
+  const [companyTimezone, setCompanyTimezone] = useState(cachedMe?.company?.timezone || 'UTC');
+  const [role, setRole] = useState<string | null>(cachedMe?.role?.name ?? null);
+  const [permissions, setPermissions] = useState<Set<string>>(new Set(cachedMe?.permissions));
+  const [isSuperAdmin, setIsSuperAdmin] = useState(cachedMe?.is_super_admin || false);
+  const hasLoadedOnceRef = useRef(hasCachedData);
   const sessionRef = useRef(session);
 
   const hasPermission = useCallback(
@@ -85,6 +99,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setRole(data.role?.name ?? null);
       setPermissions(new Set(data.permissions));
       setIsSuperAdmin(data.is_super_admin || false);
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify(data));
     } catch (err) {
       console.error('[SessionContext] fetchMe failed:', err);
       setError('Failed to refresh profile data');
@@ -98,6 +113,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(CACHE_KEY, JSON.stringify(newSession));
     } else {
       localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(ME_CACHE_KEY);
+      localStorage.removeItem('reply-flow-plan');
+      localStorage.removeItem('reply-flow-conversations');
+      localStorage.removeItem('reply-flow-dashboard');
+      localStorage.removeItem('reply-flow-agents');
+      localStorage.removeItem('reply-flow-contacts');
+      localStorage.removeItem('reply-flow-kbs');
+      localStorage.removeItem('reply-flow-channels');
       setProfileFullName(null);
       setAvatarUrl(null);
       setCompanyId(null);

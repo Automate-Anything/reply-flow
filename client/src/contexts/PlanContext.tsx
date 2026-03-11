@@ -2,6 +2,17 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 
+const PLAN_CACHE_KEY = 'reply-flow-plan';
+
+function getCachedPlan(): boolean | null {
+  try {
+    const cached = localStorage.getItem(PLAN_CACHE_KEY);
+    return cached !== null ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
 interface PlanContextType {
   hasActivePlan: boolean;
   planLoading: boolean;
@@ -16,16 +27,24 @@ const PlanContext = createContext<PlanContextType>({
 
 export function PlanProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const [hasActivePlan, setHasActivePlan] = useState(true);
-  const [planLoading, setPlanLoading] = useState(true);
+  const cachedPlan = getCachedPlan();
+  // Default to true so we never block rendering — worst case, PlanGate buttons
+  // are briefly enabled then disabled if the user has no plan.
+  const [hasActivePlan, setHasActivePlan] = useState(cachedPlan ?? true);
+  const [planLoading, setPlanLoading] = useState(cachedPlan === null);
 
   useEffect(() => {
     api.get('/billing/subscription')
       .then(({ data }) => {
         const sub = data.subscription;
-        setHasActivePlan(!!sub && (sub.status === 'active' || sub.status === 'trialing'));
+        const active = !!sub && (sub.status === 'active' || sub.status === 'trialing');
+        setHasActivePlan(active);
+        localStorage.setItem(PLAN_CACHE_KEY, JSON.stringify(active));
       })
-      .catch(() => setHasActivePlan(false))
+      .catch(() => {
+        setHasActivePlan(false);
+        localStorage.setItem(PLAN_CACHE_KEY, JSON.stringify(false));
+      })
       .finally(() => setPlanLoading(false));
   }, []);
 
@@ -39,14 +58,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const openNoPlanModal = useCallback(() => {
     navigate('/plans');
   }, [navigate]);
-
-  if (planLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
-  }
 
   return (
     <PlanContext.Provider value={{ hasActivePlan, planLoading, openNoPlanModal }}>

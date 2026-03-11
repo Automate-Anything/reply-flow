@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { useDashboardData } from '@/hooks/useDashboardData';
+import { usePageReady } from '@/hooks/usePageReady';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,10 +37,11 @@ function formatRelativeTime(dateStr: string | null): string {
 export default function DashboardPage() {
   const { fullName } = useSession();
   const { data, loading } = useDashboardData();
+  const pageReady = usePageReady();
   const navigate = useNavigate();
   const firstName = fullName.split(' ')[0] || 'there';
 
-  if (loading) {
+  if (loading || !pageReady) {
     return (
       <div className="mx-auto max-w-5xl space-y-6 p-6">
         <div className="space-y-1">
@@ -57,7 +59,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-6 animate-in fade-in duration-150">
       {/* Welcome */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">

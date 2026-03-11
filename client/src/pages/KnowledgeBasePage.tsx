@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
+import { usePageReady } from '@/hooks/usePageReady';
 import { PlanGate } from '@/components/auth/PlanGate';
 import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
@@ -22,13 +23,15 @@ export default function KnowledgeBasePage() {
   const backPath = fromChannelId ? `/channels/${fromChannelId}?tab=knowledge-base` : null;
 
   const {
-    knowledgeBases, loading,
+    knowledgeBases, loading: kbLoading,
     createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase,
     fetchKBEntries, addKBEntry, uploadKBFile, uploadKBFileStream, addKBEntryStream,
     updateKBEntry, deleteKBEntry,
     fetchEntryChunks, updateChunk, deleteChunk, reembedEntry, searchKB,
   } = useCompanyKB();
   const { debugMode } = useDebugMode();
+  const pageReady = usePageReady();
+  const loading = kbLoading || !pageReady;
 
   // Create KB form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -264,7 +267,7 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6" data-component="KnowledgeBasePage">
+    <div className="mx-auto max-w-3xl space-y-6 p-6 animate-in fade-in duration-150" data-component="KnowledgeBasePage">
       <div className="flex items-center gap-3">
         {backPath && (
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(backPath)}>

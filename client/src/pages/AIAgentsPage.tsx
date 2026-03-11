@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePageReady } from '@/hooks/usePageReady';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,9 @@ import CreateFromLogsDialog from '@/components/agents/CreateFromLogsDialog';
 
 export default function AIAgentsPage() {
   const navigate = useNavigate();
-  const { agents, loading, createAgent, generateFromLogs } = useAgents();
+  const { agents, loading: agentsLoading, createAgent, generateFromLogs } = useAgents();
+  const pageReady = usePageReady();
+  const loading = agentsLoading || !pageReady;
   const { subscription, loading: subLoading } = useSubscription();
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
 
@@ -41,7 +44,7 @@ export default function AIAgentsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="mx-auto max-w-3xl space-y-6 p-6 animate-in fade-in duration-150">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">AI Agents</h2>

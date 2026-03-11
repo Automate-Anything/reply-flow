@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { usePageReady } from '@/hooks/usePageReady';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,10 +37,24 @@ function formatPhone(phone: string): string {
   return `+${digits}`;
 }
 
+const CHANNELS_CACHE_KEY = 'reply-flow-channels';
+
+function getCachedChannels(): ChannelInfo[] | null {
+  try {
+    const cached = localStorage.getItem(CHANNELS_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ChannelsPage() {
   const navigate = useNavigate();
-  const [channels, setChannels] = useState<ChannelInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedChannels = getCachedChannels();
+  const [channels, setChannels] = useState<ChannelInfo[]>(cachedChannels || []);
+  const [channelsLoading, setLoading] = useState(!cachedChannels);
+  const pageReady = usePageReady();
+  const loading = channelsLoading || !pageReady;
   const { subscription, loading: subLoading } = useSubscription();
 
   const channelLimit = subscription?.plan.channels ?? Infinity;
@@ -51,6 +66,11 @@ export default function ChannelsPage() {
       const { data } = await api.get('/whatsapp/channels');
       const nextChannels = data.channels || [];
       setChannels(nextChannels);
+      try {
+        localStorage.setItem(CHANNELS_CACHE_KEY, JSON.stringify(nextChannels));
+      } catch {
+        // localStorage full — ignore
+      }
       if (showLoader) setLoading(false);
 
       const channelsNeedingMetadata = nextChannels.filter((channel: ChannelInfo) =>
@@ -81,11 +101,11 @@ export default function ChannelsPage() {
   }, []);
 
   useEffect(() => {
-    fetchChannels(true);
+    fetchChannels(!cachedChannels);
   }, [fetchChannels]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="mx-auto max-w-3xl space-y-6 p-6 animate-in fade-in duration-150">
       <div>
         <h2 className="text-lg font-semibold">Channels</h2>
         <p className="text-sm text-muted-foreground">
