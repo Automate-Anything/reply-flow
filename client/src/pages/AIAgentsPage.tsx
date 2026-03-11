@@ -1,18 +1,27 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Bot, Plus, Smartphone } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Bot, Plus, Smartphone, ChevronDown, FileText, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAgents } from '@/hooks/useAgents';
 import { useSubscription } from '@/hooks/useSubscription';
 import { PlanGate } from '@/components/auth/PlanGate';
+import CreateFromLogsDialog from '@/components/agents/CreateFromLogsDialog';
 
 export default function AIAgentsPage() {
   const navigate = useNavigate();
-  const { agents, loading, createAgent } = useAgents();
+  const { agents, loading, createAgent, generateFromLogs } = useAgents();
   const { subscription, loading: subLoading } = useSubscription();
+  const [logsDialogOpen, setLogsDialogOpen] = useState(false);
 
   const agentLimit = subscription?.plan.agents ?? Infinity;
   const atLimit = agents.length >= agentLimit;
@@ -46,15 +55,29 @@ export default function AIAgentsPage() {
           )}
         </div>
         <PlanGate>
-          <Button
-            size="sm"
-            onClick={handleCreate}
-            disabled={atLimit || loading}
-            title={atLimit ? `Agent limit reached (${agentLimit}). Upgrade your plan to add more.` : undefined}
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            Create Agent
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                disabled={atLimit || loading}
+                title={atLimit ? `Agent limit reached (${agentLimit}). Upgrade your plan to add more.` : undefined}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Create Agent
+                <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleCreate}>
+                <PenLine className="mr-2 h-4 w-4" />
+                Create from scratch
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLogsDialogOpen(true)}>
+                <FileText className="mr-2 h-4 w-4" />
+                Create from conversations
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </PlanGate>
       </div>
 
@@ -85,10 +108,16 @@ export default function AIAgentsPage() {
               Create your first AI agent to get started.
             </p>
             <PlanGate>
-              <Button size="sm" variant="outline" className="mt-2" onClick={handleCreate} disabled={atLimit}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                Create Agent
-              </Button>
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" variant="outline" onClick={handleCreate} disabled={atLimit}>
+                  <PenLine className="mr-1.5 h-4 w-4" />
+                  Create from scratch
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setLogsDialogOpen(true)} disabled={atLimit}>
+                  <FileText className="mr-1.5 h-4 w-4" />
+                  Create from conversations
+                </Button>
+              </div>
             </PlanGate>
           </CardContent>
         </Card>
@@ -131,6 +160,17 @@ export default function AIAgentsPage() {
           })}
         </div>
       )}
+
+      <CreateFromLogsDialog
+        open={logsDialogOpen}
+        onOpenChange={setLogsDialogOpen}
+        onGenerate={generateFromLogs}
+        onCreate={async (body) => {
+          const agent = await createAgent(body);
+          navigate(`/ai-agents/${agent.id}`);
+          return agent;
+        }}
+      />
     </div>
   );
 }

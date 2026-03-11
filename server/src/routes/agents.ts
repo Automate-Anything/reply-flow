@@ -1,11 +1,56 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { checkPlanLimit } from './billing.js';
+import { analyzeConversationLogs } from '../services/conversationLogAnalyzer.js';
 
 const router = Router();
 router.use(requireAuth);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
+});
+
+// Generate agent config from conversation logs (does NOT create the agent)
+router.post(
+  '/generate-from-logs',
+  requirePermission('ai_settings', 'create'),
+  upload.array('files', 5),
+  async (req, res, next) => {
+    try {
+      const companyId = req.companyId!;
+
+      // Check plan limit before the expensive AI call
+      const limit = await checkPlanLimit(companyId, 'agents');
+      if (!limit.allowed) {
+        res.status(402).json({ error: 'Agent limit reached', used: limit.used, included: limit.included });
+        return;
+      }
+
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        res.status(400).json({ error: 'Please upload at least one file' });
+        return;
+      }
+
+      const result = await analyzeConversationLogs(
+        files.map((f) => ({ buffer: f.buffer, originalname: f.originalname, mimetype: f.mimetype })),
+      );
+
+      res.json(result);
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      if (status && status >= 400 && status < 500) {
+        res.status(status).json({ error: (err as Error).message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
 
 // List all agents for the company
 router.get('/', requirePermission('ai_settings', 'view'), async (req, res, next) => {

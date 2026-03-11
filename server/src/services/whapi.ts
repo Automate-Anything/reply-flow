@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { env } from '../config/env.js';
-import type { WhapiChannel, WhapiHealthResponse, WhapiContactProfile } from '../types/whapi.js';
+import type { WhapiChannel, WhapiHealthResponse, WhapiContactProfile, WhapiUserProfile } from '../types/whapi.js';
 
 const MANAGER_URL = 'https://manager.whapi.cloud';
 const GATE_URL = 'https://gate.whapi.cloud';
@@ -48,6 +48,17 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
       throw new Error(`WhAPI create channel error (${status}): ${extractErrorDetail(err.response.data)}`);
     }
     throw err;
+  }
+}
+
+export async function getChannelPhone(channelId: string): Promise<string | null> {
+  try {
+    const { data } = await managerApi.get(`/channels/${channelId}`);
+    if (!data.phone) return null;
+    // Ensure E.164 format with + prefix
+    return data.phone.startsWith('+') ? data.phone : `+${data.phone}`;
+  } catch {
+    return null;
   }
 }
 
@@ -169,6 +180,28 @@ export async function getContactProfile(
   try {
     const { data } = await gate.get(`/contacts/${phone}/profile`);
     return { icon: data.icon || '', icon_full: data.icon_full || '' };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the authenticated user's own WhatsApp profile (name, picture, about).
+ * This is different from getContactProfile which fetches other contacts.
+ */
+export async function getUserProfile(
+  channelToken: string
+): Promise<WhapiUserProfile | null> {
+  const gate = gateApi(channelToken);
+  try {
+    const { data } = await gate.get('/users/profile');
+    return {
+      name: data.name || '',
+      icon: data.icon || '',
+      icon_full: data.icon_full || '',
+      about: data.about || '',
+      phone: data.phone || '',
+    };
   } catch {
     return null;
   }

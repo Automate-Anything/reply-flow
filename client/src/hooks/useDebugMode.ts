@@ -2,20 +2,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSession } from '@/contexts/SessionContext';
 import api from '@/lib/api';
 
-export function useDebugMode() {
+export function useDebugMode(enabled = true) {
   const { isSuperAdmin } = useSession();
   const [debugMode, setDebugMode] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const fetchDebugMode = useCallback(async () => {
-    if (!isSuperAdmin) return;
+    if (!enabled || !isSuperAdmin) {
+      setDebugMode(false);
+      return;
+    }
     try {
       const { data } = await api.get<{ enabled: boolean }>('/super-admin/debug-mode');
       setDebugMode(data.enabled);
     } catch {
       // Silently fail — debug mode stays off
     }
-  }, [isSuperAdmin]);
+  }, [enabled, isSuperAdmin]);
 
   const toggleDebugMode = useCallback(async (enabled: boolean) => {
     setLoading(true);
@@ -29,8 +32,12 @@ export function useDebugMode() {
   }, []);
 
   useEffect(() => {
+    if (!enabled || !isSuperAdmin) {
+      setDebugMode(false);
+      return;
+    }
     fetchDebugMode();
-  }, [fetchDebugMode]);
+  }, [enabled, fetchDebugMode, isSuperAdmin]);
 
   return { debugMode: isSuperAdmin && debugMode, toggleDebugMode, loading };
 }

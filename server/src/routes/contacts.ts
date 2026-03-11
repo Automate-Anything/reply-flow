@@ -72,6 +72,7 @@ router.get('/', requirePermission('contacts', 'view'), async (req, res, next) =>
       tags, listId, company, city, country,
       createdAfter, createdBefore,
       sortBy = 'updated_at', sortOrder = 'desc',
+      ids,
     } = req.query;
 
     // If filtering by list, pre-fetch contact IDs from junction table
@@ -127,16 +128,51 @@ router.get('/', requirePermission('contacts', 'view'), async (req, res, next) =>
       cfContactIds = candidateIds;
     }
 
+    // Determine which contacts this user can access
+    // 1. Contacts they own
+    // 2. Contacts shared with all_members
+    // 3. Contacts shared with specific_users where they have access
+    const userId = req.userId!;
+
+    // Get IDs of contacts shared specifically with this user
+    const { data: specificContactAccess } = await supabaseAdmin
+      .from('contact_access')
+      .select('contact_id')
+      .eq('user_id', userId);
+
+    const specificContactIds = (specificContactAccess || []).map((a) => a.contact_id);
+
     let query = supabaseAdmin
       .from('contacts')
       .select('*', { count: 'exact' })
       .eq('company_id', companyId)
       .eq('is_deleted', false);
 
+    // Apply access filter: owner OR sharing_mode=all_members OR specific access
+    if (specificContactIds.length > 0) {
+      query = query.or(
+        `owner_id.eq.${userId},sharing_mode.eq.all_members,id.in.(${specificContactIds.join(',')})`
+      );
+    } else {
+      query = query.or(`owner_id.eq.${userId},sharing_mode.eq.all_members`);
+    }
+
     if (cfContactIds) {
       query = query.in('id', cfContactIds);
     } else if (listContactIds) {
       query = query.in('id', listContactIds);
+    }
+
+    if (ids) {
+      const requestedIds = String(ids)
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (requestedIds.length === 0) {
+        res.json({ contacts: [], count: 0 });
+        return;
+      }
+      query = query.in('id', requestedIds);
     }
 
     if (tags) {
@@ -525,6 +561,13 @@ router.get('/:contactId', requirePermission('contacts', 'view'), async (req, res
     const companyId = req.companyId!;
     const { contactId } = req.params;
 
+    const { getContactAccess } = await import('../services/accessControl.js');
+    const access = await getContactAccess(req.userId!, String(contactId), companyId);
+    if (!access) {
+      res.status(404).json({ error: 'Contact not found' });
+      return;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('contacts')
       .select('*')
@@ -576,6 +619,7 @@ router.post('/', requirePermission('contacts', 'create'), async (req, res, next)
       .insert({
         company_id: companyId,
         user_id: req.userId,
+        owner_id: req.userId,
         phone_number: phoneResult.e164,
         first_name: first_name || null,
         last_name: last_name || null,

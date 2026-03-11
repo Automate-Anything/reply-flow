@@ -13,6 +13,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Archive,
   ArrowLeft,
   Check,
@@ -20,6 +26,7 @@ import {
   Clock,
   Flag,
   Loader2,
+  Lock,
   Mail,
   MoreHorizontal,
   Pin,
@@ -38,6 +45,8 @@ import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import AIToggle from '@/components/ai/AIToggle';
+import AccessManager from '@/components/access/AccessManager';
+import { useConversationAccess } from '@/hooks/useAccessControl';
 
 interface ConversationHeaderProps {
   conversation: Conversation;
@@ -192,6 +201,13 @@ export default function ConversationHeader({
     }
   };
 
+  const conversationAccess = useConversationAccess(conversation.id);
+
+  // Determine if there's an "all" entry (user_id=null) in the access list
+  const hasAllAccess = (conversationAccess.settings?.access_list || []).some(
+    (entry) => !entry.user_id
+  );
+
   const statusOptions = statuses.length > 0
     ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
     : FALLBACK_STATUSES;
@@ -237,6 +253,40 @@ export default function ConversationHeader({
           humanTakeover={conversation.human_takeover}
           onUpdate={onLabelsChange}
         />
+
+        {/* Manage Access — controls who can see this conversation */}
+        {conversationAccess.settings && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <AccessManager
+                    title="Manage access"
+                    description="Control who can see this conversation and its messages. This is separate from assignment — assigning determines who is responsible for responding."
+                    sharingMode="specific_users"
+                    accessList={conversationAccess.settings.access_list}
+                    teamMembers={teamMembers}
+                    onSharingModeChange={async () => {}}
+                    onGrantAccess={conversationAccess.grantAccess}
+                    onRevokeAccess={conversationAccess.revokeAccess}
+                    showGrantToAll
+                    onGrantToAll={conversationAccess.grantAccessToAll}
+                    onRevokeFromAll={conversationAccess.revokeAccessFromAll}
+                    hasAllAccess={hasAllAccess}
+                    trigger={
+                      <Button variant="ghost" size="icon" className="h-8 w-8" title="Manage access">
+                        <Lock className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Manage access — who can see this conversation</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         {/* Labels */}
         <DropdownMenu>

@@ -9,10 +9,14 @@ export interface ChannelAgentSettings {
   profile_data: ProfileData;
   max_tokens: number;
   schedule_mode: ScheduleMode;
+  schedule_configured: boolean;
   ai_schedule: BusinessHours | null;
   outside_hours_message: string | null;
   default_language: string;
   agent_id: string | null;
+  response_mode: 'live' | 'test';
+  test_contact_ids: string[];
+  excluded_contact_ids: string[];
 }
 
 const DEFAULT_SETTINGS: ChannelAgentSettings = {
@@ -21,10 +25,14 @@ const DEFAULT_SETTINGS: ChannelAgentSettings = {
   profile_data: {},
   max_tokens: 500,
   schedule_mode: 'always_on',
+  schedule_configured: false,
   ai_schedule: null,
   outside_hours_message: null,
   default_language: 'en',
   agent_id: null,
+  response_mode: 'live',
+  test_contact_ids: [],
+  excluded_contact_ids: [],
 };
 
 export function useChannelAgent(channelId: number | undefined) {

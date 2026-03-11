@@ -1,8 +1,10 @@
+import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { Clock, Pin, Reply, Star, X } from 'lucide-react';
+import { Clock, Download, FileText, Image as ImageIcon, Loader2, Pin, Play, Reply, Star, X } from 'lucide-react';
 import type { Message } from '@/hooks/useMessages';
 import AIDebugPanel from './AIDebugPanel';
 import type { AIDebugData } from './AIDebugPanel';
+import api from '@/lib/api';
 
 interface ReplyMetadata {
   quoted_message_id: string | null;
@@ -46,6 +48,145 @@ function groupReactions(reactions: Array<{ emoji: string; user_id: string }>): A
   return Array.from(map, ([emoji, count]) => ({ emoji, count }));
 }
 
+// ── Media URL cache (avoids re-fetching signed URLs for the same message) ────
+const mediaUrlCache = new Map<string, { url: string; fetchedAt: number }>();
+const CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (signed URLs last 60 min)
+
+function useMediaUrl(message: Message) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const hasMedia = !!message.media_storage_path;
+  const messageId = message.id;
+
+  const fetchUrl = useCallback(async () => {
+    if (!hasMedia) return;
+
+    // Check cache
+    const cached = mediaUrlCache.get(messageId);
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      setUrl(cached.url);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/messages/${messageId}/media`);
+      if (data.url) {
+        mediaUrlCache.set(messageId, { url: data.url, fetchedAt: Date.now() });
+        setUrl(data.url);
+      }
+    } catch {
+      // Silently fail — media just won't show
+    } finally {
+      setLoading(false);
+    }
+  }, [messageId, hasMedia]);
+
+  useEffect(() => {
+    fetchUrl();
+  }, [fetchUrl]);
+
+  return { url, loading };
+}
+
+// ── Media renderers ──────────────────────────────────────────────────────────
+
+function MediaContent({ message, mediaUrl, mediaLoading }: { message: Message; mediaUrl: string | null; mediaLoading: boolean }) {
+  const [imageExpanded, setImageExpanded] = useState(false);
+  const mime = message.media_mime_type || '';
+  const type = message.message_type;
+
+  if (mediaLoading) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-xs opacity-60">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>Loading media...</span>
+      </div>
+    );
+  }
+
+  if (!mediaUrl) {
+    // No media URL yet — show placeholder based on type
+    if (type === 'image') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><ImageIcon className="h-4 w-4" /><span>Image</span></div>;
+    if (type === 'video') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Play className="h-4 w-4" /><span>Video</span></div>;
+    if (type === 'audio') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Play className="h-4 w-4" /><span>Audio</span></div>;
+    if (type === 'document') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><FileText className="h-4 w-4" /><span>{message.media_filename || 'Document'}</span></div>;
+    return null;
+  }
+
+  if (type === 'image' || mime.startsWith('image/')) {
+    return (
+      <>
+        <img
+          src={mediaUrl}
+          alt={message.media_filename || 'Image'}
+          className="max-h-64 max-w-full cursor-pointer rounded-lg object-contain"
+          onClick={() => setImageExpanded(true)}
+          loading="lazy"
+        />
+        {/* Lightbox */}
+        {imageExpanded && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+            onClick={() => setImageExpanded(false)}
+          >
+            <button className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20" onClick={() => setImageExpanded(false)}>
+              <X className="h-5 w-5" />
+            </button>
+            <img
+              src={mediaUrl}
+              alt={message.media_filename || 'Image'}
+              className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
+            />
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (type === 'video' || mime.startsWith('video/')) {
+    return (
+      <video
+        src={mediaUrl}
+        controls
+        className="max-h-64 max-w-full rounded-lg"
+        preload="metadata"
+      />
+    );
+  }
+
+  if (type === 'audio' || mime.startsWith('audio/')) {
+    return (
+      <audio
+        src={mediaUrl}
+        controls
+        className="w-full max-w-[240px]"
+        preload="metadata"
+      />
+    );
+  }
+
+  if (type === 'document') {
+    return (
+      <a
+        href={mediaUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-2 rounded-lg border border-current/10 px-3 py-2 text-xs transition-colors hover:bg-current/5"
+      >
+        <FileText className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 truncate">{message.media_filename || 'Document'}</span>
+        <Download className="ml-auto h-3.5 w-3.5 shrink-0 opacity-60" />
+      </a>
+    );
+  }
+
+  return null;
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+
 export default function MessageBubble({ message, onCancelScheduled, onReply, isDebugMode }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const isAI = message.sender_type === 'ai';
@@ -54,6 +195,14 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
   const reply = (message.metadata?.reply as ReplyMetadata) || null;
   const reactions = groupReactions(message.reactions || []);
   const debugData = isDebugMode && isAI ? (message.metadata?.debug as AIDebugData | undefined) : undefined;
+
+  const hasMedia = !!message.media_storage_path;
+  const { url: mediaUrl, loading: mediaLoading } = useMediaUrl(message);
+  const isMediaType = ['image', 'video', 'audio', 'document'].includes(message.message_type);
+  const caption = message.message_body;
+  // Don't show placeholder text as caption (e.g. "[Image]", "[Audio message]")
+  const isPlaceholder = caption && /^\[.+\]$/.test(caption.trim());
+  const showCaption = caption && !isPlaceholder;
 
   return (
     <div
@@ -129,9 +278,34 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
               You
             </span>
           )}
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {message.message_body}
-          </p>
+
+          {/* Media content */}
+          {isMediaType && hasMedia && (
+            <div className="mb-1">
+              <MediaContent message={message} mediaUrl={mediaUrl} mediaLoading={mediaLoading} />
+            </div>
+          )}
+
+          {/* Text body / caption */}
+          {showCaption && (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {caption}
+            </p>
+          )}
+
+          {/* Fallback: no media stored yet, show the placeholder text */}
+          {isMediaType && !hasMedia && (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {message.message_body}
+            </p>
+          )}
+
+          {/* Regular text message (only when showCaption hasn't already rendered the body) */}
+          {!isMediaType && !showCaption && (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {message.message_body}
+            </p>
+          )}
           {!isScheduled && (
             <div
               className={cn(

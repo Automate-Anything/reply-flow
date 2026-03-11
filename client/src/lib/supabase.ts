@@ -34,6 +34,12 @@ const safeLock = async <R>(
             return await fn();
           }
         );
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          // Treat lock wait timeouts as a soft failure and continue without the lock.
+          return await fn();
+        }
+        throw error;
       } finally {
         clearTimeout(timeout);
       }

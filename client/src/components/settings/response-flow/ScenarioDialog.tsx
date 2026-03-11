@@ -10,10 +10,11 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ChevronDown } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Scenario, CommunicationStyle, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
 import type { KnowledgeBase } from '@/hooks/useCompanyKB';
-import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 import StyleFields from './StyleFields';
 import { getPlaceholders } from './scenarioPlaceholders';
 import KBPicker from '../KBPicker';
@@ -56,7 +57,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
   const [rules, setRules] = useState('');
   const [exampleResponse, setExampleResponse] = useState('');
   const [escalationTrigger, setEscalationTrigger] = useState('');
-  const [escalationMessage, setEscalationMessage] = useState('');
+  const [doNotRespond, setDoNotRespond] = useState(false);
   const [style, setStyle] = useState<CommunicationStyle>({});
   const [showStyle, setShowStyle] = useState(false);
 
@@ -73,7 +74,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         setRules(scenario.rules || '');
         setExampleResponse(scenario.example_response || '');
         setEscalationTrigger(scenario.escalation_trigger || '');
-        setEscalationMessage(scenario.escalation_message || '');
+        setDoNotRespond(!!scenario.do_not_respond);
         setStyle({
           tone: scenario.tone ?? defaultStyle.tone,
           response_length: scenario.response_length ?? defaultStyle.response_length,
@@ -91,7 +92,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         setRules('');
         setExampleResponse('');
         setEscalationTrigger('');
-        setEscalationMessage('');
+        setDoNotRespond(false);
         setStyle({ ...defaultStyle });
         setShowStyle(false);
       }
@@ -106,13 +107,13 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
     onSave({
       label: label.trim(),
       detection_criteria: criteria.trim(),
+      do_not_respond: doNotRespond || undefined,
       goal: goal.trim() || undefined,
       instructions: instructions.trim() || undefined,
       kb_attachments: kbAttachments.length > 0 ? kbAttachments : undefined,
       rules: rules.trim() || undefined,
       example_response: exampleResponse.trim() || undefined,
       escalation_trigger: escalationTrigger.trim() || undefined,
-      escalation_message: escalationMessage.trim() || undefined,
       tone,
       response_length,
       emoji_usage,
@@ -149,7 +150,22 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
 
           {/* Detection Criteria */}
           <div className="space-y-1.5">
-            <Label className="text-xs">When to Activate *</Label>
+            <div className="flex items-center gap-1">
+              <Label className="text-xs">Trigger Condition *</Label>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[260px] text-xs">
+                    The AI reads each incoming message and uses this description to decide if it matches this scenario. Be specific about keywords, intents, or message patterns.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Describe the types of messages the AI should classify under this scenario.
+            </p>
             <textarea
               value={criteria}
               onChange={(e) => setCriteria(e.target.value)}
@@ -157,13 +173,22 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
               placeholder={ph.detection_criteria}
               className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
-            <p className="text-xs text-muted-foreground">
-              Describe the types of messages that should trigger this scenario.
-            </p>
           </div>
 
           {/* ── How to Respond ── */}
-          <SectionHeader label="How to Respond" />
+          <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 px-3 py-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Do not respond automatically</Label>
+              <p className="text-xs text-muted-foreground">
+                When this scenario matches, the AI will stay silent and switch the conversation into human takeover.
+              </p>
+            </div>
+            <Switch checked={doNotRespond} onCheckedChange={setDoNotRespond} />
+          </div>
+
+          {!doNotRespond && (
+            <>
+              <SectionHeader label="How to Respond" />
 
           <div className="space-y-1.5">
             <Label className="text-xs">Goal</Label>
@@ -191,6 +216,27 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
               The steps the AI should follow when handling this conversation.
             </p>
           </div>
+
+          {/* ── Communication Style ── */}
+          <SectionHeader label="Communication Style" />
+          <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 px-3 py-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Override default communication style</Label>
+              <p className="text-xs text-muted-foreground">
+                Turn this on to customize tone, response length, and emoji usage for this scenario only.
+              </p>
+            </div>
+            <Switch checked={showStyle} onCheckedChange={setShowStyle} />
+          </div>
+          {showStyle ? (
+            <div>
+              <StyleFields style={style} onChange={setStyle} compact />
+            </div>
+          ) : (
+            <p className="text-center text-[10px] text-muted-foreground">
+              Using the default communication style for this scenario.
+            </p>
+          )}
 
           {/* ── Knowledge Base ── */}
           <div className="space-y-2">
@@ -235,11 +281,10 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
             </p>
           </div>
 
-          {/* ── Escalation ── */}
-          <SectionHeader label="Escalation" />
-
+          {/* ── Human Takeover ── */}
+          <SectionHeader label="Human Takeover" />
           <div className="space-y-1.5">
-            <Label className="text-xs">When to Escalate</Label>
+            <Label className="text-xs">Pause Condition</Label>
             <textarea
               value={escalationTrigger}
               onChange={(e) => setEscalationTrigger(e.target.value)}
@@ -248,41 +293,12 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
               className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
             <p className="text-xs text-muted-foreground">
-              Conditions under which the AI should hand off to a human.
+              When these conditions are met, the AI will stop responding and wait for a team member to reply.
             </p>
           </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs">Handoff Message</Label>
-            <Input
-              value={escalationMessage}
-              onChange={(e) => setEscalationMessage(e.target.value)}
-              placeholder={ph.escalation_message}
-              className="h-9"
-            />
-            <p className="text-xs text-muted-foreground">
-              What the AI says when transferring to a human.
-            </p>
-          </div>
-
-          {/* ── Communication Style ── */}
-          <SectionHeader
-            label="Communication Style"
-            onClick={() => setShowStyle(!showStyle)}
-            expandIcon={
-              <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', showStyle && 'rotate-180')} />
-            }
-          />
-          {!showStyle && (
-            <p className="text-center text-[10px] text-muted-foreground">
-              Uses the default style. Click to override for this scenario.
-            </p>
+            </>
           )}
-          {showStyle && (
-            <div>
-              <StyleFields style={style} onChange={setStyle} compact />
-            </div>
-          )}
+
         </div>
 
         <DialogFooter>

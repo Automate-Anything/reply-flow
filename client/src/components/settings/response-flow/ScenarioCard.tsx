@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Pencil, X, AlertTriangle } from 'lucide-react';
+import { Pencil, X, AlertTriangle, PauseCircle } from 'lucide-react';
 import type { Scenario, CommunicationStyle } from '@/hooks/useCompanyAI';
 
 interface Props {
@@ -70,6 +70,12 @@ export default function ScenarioCard({ scenario, defaultStyle, onEdit, onDelete 
               <Badge variant="outline" className="text-[10px] font-normal text-amber-600 border-amber-300">
                 <AlertTriangle className="mr-0.5 h-2.5 w-2.5" />
                 Escalation
+              </Badge>
+            )}
+            {scenario.do_not_respond && (
+              <Badge variant="outline" className="text-[10px] font-normal text-orange-600 border-orange-300">
+                <PauseCircle className="mr-0.5 h-2.5 w-2.5" />
+                No Auto-Reply
               </Badge>
             )}
           </div>

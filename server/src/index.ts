@@ -28,15 +28,40 @@ import conversationStatusesRouter from './routes/conversationStatuses.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import seedRouter from './routes/seed.js';
+import accessRouter from './routes/access.js';
 import { startScheduler } from './services/scheduler.js';
 
 const app = express();
 app.set('trust proxy', 1);
 
+const allowedClientOrigins = new Set(
+  [env.CLIENT_URL, process.env.CLIENT_URL]
+    .filter((value): value is string => Boolean(value))
+);
+
+const isAllowedDevOrigin = (origin: string) => {
+  try {
+    const url = new URL(origin);
+    return ['localhost', '127.0.0.1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? [process.env.CLIENT_URL || ''].filter(Boolean)
-    : true,
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedClientOrigins.has(origin) || isAllowedDevOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   credentials: true,
 }));
 
@@ -80,6 +105,7 @@ app.use('/api/conversation-statuses', conversationStatusesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/seed', seedRouter);
+app.use('/api/access', accessRouter);
 
 app.use(errorHandler);
 

@@ -3,13 +3,51 @@ import type { WhapiIncomingMessage } from '../types/webhook.js';
 import { shouldAIRespond, generateAndSendAIReply, sendOutsideHoursReply } from './ai.js';
 import { checkMessageAllowance, deductOverageBalance, triggerAutoTopup } from './billingService.js';
 import { extractSessionMemories } from './sessionMemory.js';
+import { downloadAndStore } from './mediaStorage.js';
+import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 
 /**
- * Normalizes a WhatsApp chat_id to a phone number.
+ * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
  * e.g. "1234567890@s.whatsapp.net" -> "1234567890"
  */
-function normalizeChatId(chatId: string): string {
+function normalizeChatId(chatId?: string | null): string | null {
+  if (!chatId) return null;
   return chatId.replace(/@.*$/, '');
+}
+
+function pickCounterpartyId(
+  candidates: Array<string | null>,
+  channelPhone: string | null
+): string | null {
+  for (const candidate of candidates) {
+    if (candidate && candidate !== channelPhone) return candidate;
+  }
+  return candidates.find(Boolean) ?? null;
+}
+
+function resolveMessageRouting(
+  msg: WhapiIncomingMessage,
+  channelPhone: string | null
+): { isOutbound: boolean; phoneNumber: string | null; chatId: string | null } {
+  const normalizedFrom = normalizeChatId(msg.from);
+  const normalizedTo = normalizeChatId(msg.to);
+  const normalizedChat = normalizeChatId(msg.chat_id);
+
+  const isOutbound = msg.from_me === true || (
+    channelPhone !== null &&
+    (normalizedFrom === channelPhone || normalizedTo === channelPhone) &&
+    [normalizedFrom, normalizedTo, normalizedChat].some((value) => value && value !== channelPhone)
+  );
+
+  const counterpartyId = isOutbound
+    ? pickCounterpartyId([normalizedTo, normalizedChat, normalizedFrom], channelPhone)
+    : pickCounterpartyId([normalizedFrom, normalizedChat, normalizedTo], channelPhone);
+
+  return {
+    isOutbound,
+    phoneNumber: counterpartyId,
+    chatId: counterpartyId,
+  };
 }
 
 /**
@@ -117,14 +155,28 @@ export async function processIncomingMessage(
   msg: WhapiIncomingMessage,
   companyId: string,
   channelId: number,
-  userId: string
+  userId: string,
+  channelPhoneNumber?: string
 ): Promise<void> {
-  const isOutbound = msg.from_me === true;
+  // If msg.from matches the channel's own number, it's an outbound message even if from_me is missing/false.
+  // This happens with linked WhatsApp devices where Whapi doesn't always set from_me correctly.
+  const channelPhone = normalizeChatId(channelPhoneNumber);
+  const { isOutbound, phoneNumber, chatId } = resolveMessageRouting(msg, channelPhone);
   // For outbound messages, msg.from is our own number — the contact is identified by chat_id
-  const phoneNumber = isOutbound ? normalizeChatId(msg.chat_id) : normalizeChatId(msg.from);
-  const chatId = normalizeChatId(msg.chat_id);
   const messageBody = extractMessageBody(msg);
   const messageTs = new Date(msg.timestamp * 1000).toISOString();
+
+  if (!phoneNumber || !chatId) {
+    console.warn('[webhook] Could not resolve message routing', {
+      id: msg.id,
+      from: msg.from,
+      to: msg.to,
+      chat_id: msg.chat_id,
+      from_me: msg.from_me,
+      channelPhone,
+    });
+    return;
+  }
 
   // 1. Find or create contact
   const { data: existingContact } = await supabaseAdmin
@@ -155,6 +207,7 @@ export async function processIncomingMessage(
         phone_number: phoneNumber,
         whatsapp_name: msg.from_name || null,
         first_name: msg.from_name || null,
+        owner_id: userId,
       })
       .select('id')
       .single();
@@ -178,10 +231,15 @@ export async function processIncomingMessage(
     const shouldEnd = await checkSessionShouldEnd(activeSession, companyId);
 
     if (shouldEnd) {
-      // End the old session
+      // End the old session. If it's ending due to timeout (status is still open/pending),
+      // also archive it so it doesn't linger in the inbox alongside the new session.
+      const endUpdate: Record<string, unknown> = { ended_at: new Date().toISOString() };
+      if (activeSession.status !== 'resolved' && activeSession.status !== 'closed') {
+        endUpdate.is_archived = true;
+      }
       await supabaseAdmin
         .from('chat_sessions')
-        .update({ ended_at: new Date().toISOString() })
+        .update(endUpdate)
         .eq('id', activeSession.id);
 
       // Extract memories from the ended session (async, never blocks)
@@ -198,7 +256,7 @@ export async function processIncomingMessage(
     sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
   }
 
-  // 3. Idempotency check — skip if message already exists
+  // 3. Idempotency check — skip if message already exists (by WhatsApp message ID)
   if (msg.id) {
     const { data: existing } = await supabaseAdmin
       .from('chat_messages')
@@ -208,15 +266,45 @@ export async function processIncomingMessage(
       .maybeSingle();
 
     if (existing) {
-      console.log(`Duplicate message skipped: ${msg.id}`);
+      console.log(`[webhook] Duplicate skipped (id match): ${msg.id}`);
+      return;
+    }
+  }
+
+  // 3b. Secondary dedup: Whapi echoes API-sent messages back through the webhook.
+  // This catches two failure modes:
+  //   (a) Echo arrives with from_me=true but message_id_normalized format doesn't match → primary dedup misses it
+  //   (b) Echo arrives with from_me absent/false → treated as inbound, primary dedup misses it
+  // In both cases, an outbound message with the same body already exists in the session.
+  // We only compare against outbound messages so a contact legitimately sending the same
+  // message twice is never suppressed.
+  if (isOutbound) {
+    const windowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: recentOutbound } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id, metadata')
+      .eq('session_id', sessionId)
+      .eq('company_id', companyId)
+      .eq('direction', 'outbound')
+      .eq('message_body', messageBody)
+      .gte('created_at', windowStart);
+
+    const existingOutbound = (recentOutbound || []).find((message) => {
+      const source = (message.metadata as { source?: string } | null)?.source;
+      return source === 'app_send' || source === 'ai_send';
+    });
+
+    if (existingOutbound) {
+      console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}`);
       return;
     }
   }
 
   // 4. Build metadata (media + reply context)
   const metadata: Record<string, unknown> = {};
-  if (msg.image || msg.document || msg.audio || msg.video) {
-    metadata.media = msg.image || msg.document || msg.audio || msg.video;
+  const mediaPayload = msg.image || msg.document || msg.audio || msg.video;
+  if (mediaPayload) {
+    metadata.media = mediaPayload;
   }
   if (msg.context?.quoted_id) {
     metadata.reply = {
@@ -227,8 +315,13 @@ export async function processIncomingMessage(
     };
   }
 
+  // Extract media info for storage
+  const mediaLink = mediaPayload?.link as string | undefined;
+  const mediaMimeType = mediaPayload?.mime_type as string | undefined;
+  const mediaFilename = (mediaPayload as Record<string, unknown>)?.filename as string | undefined;
+
   // 5. Insert the message
-  const { error: messageError } = await supabaseAdmin
+  const { data: insertedMessage, error: messageError } = await supabaseAdmin
     .from('chat_messages')
     .insert({
       session_id: sessionId,
@@ -245,11 +338,25 @@ export async function processIncomingMessage(
       read: false,
       message_ts: messageTs,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
-    });
+      media_mime_type: mediaMimeType || null,
+      media_filename: mediaFilename || null,
+    })
+    .select('id')
+    .single();
 
   if (messageError) throw messageError;
 
-  // 5. Update session metadata
+  // 5a. Download, store, and extract media content BEFORE AI triggers
+  // This must complete so the AI has access to images, transcripts, and document text
+  if (mediaLink && mediaMimeType && insertedMessage) {
+    try {
+      await processMedia(insertedMessage.id, mediaLink, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
+    } catch (err) {
+      console.error('Media processing error:', err);
+    }
+  }
+
+  // 5b. Update session metadata
   const { data: currentSession } = await supabaseAdmin
     .from('chat_sessions')
     .select('snoozed_until')
@@ -332,4 +439,47 @@ export async function processIncomingMessage(
   } catch (err) {
     console.error('AI check error:', err);
   }
+}
+
+/**
+ * Downloads media from Whapi, stores in Supabase Storage, and extracts
+ * text content (transcripts for audio, text for documents) for AI use.
+ * Returns once storage and extraction are complete.
+ */
+async function processMedia(
+  messageId: string,
+  whapiLink: string,
+  companyId: string,
+  channelId: number,
+  mimeType: string,
+  filename: string | undefined,
+  messageType: string,
+): Promise<void> {
+  // 1. Download from Whapi and upload to Supabase Storage
+  const storagePath = await downloadAndStore(whapiLink, companyId, channelId, messageId, mimeType, filename);
+  if (!storagePath) return;
+
+  const updateFields: Record<string, unknown> = { media_storage_path: storagePath };
+
+  // 2. Extract content for AI based on message type
+  if (messageType === 'audio') {
+    const transcript = await extractAudioTranscript(storagePath, mimeType);
+    if (transcript) {
+      // Store transcript for AI only — don't overwrite message_body
+      // so the frontend shows the audio player, not text
+      updateFields.media_transcript = transcript;
+    }
+  } else if (messageType === 'document') {
+    const extractedText = await extractDocumentText(storagePath, mimeType, filename);
+    if (extractedText) {
+      updateFields.media_extracted_text = extractedText;
+    }
+  }
+  // Images and videos: no server-side extraction needed — Claude Vision handles these directly
+
+  // 3. Update the message record
+  await supabaseAdmin
+    .from('chat_messages')
+    .update(updateFields)
+    .eq('id', messageId);
 }

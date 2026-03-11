@@ -234,10 +234,38 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
       matched_scenario = classification.scenario_label;
       confidence = classification.confidence;
 
+      const matchedScenario = matched_scenario
+        ? resolvedProfileData.response_flow?.scenarios?.find((scenario) => scenario.label === matched_scenario)
+        : null;
+
       // Step 2: Build targeted response prompt
       systemPrompt = await buildScenarioResponsePrompt(
         resolvedProfileData, kbData, matched_scenario, undefined, onSection,
       );
+
+      if (matchedScenario?.do_not_respond) {
+        const result: Record<string, unknown> = {
+          matched_scenario,
+          confidence,
+          response: '',
+          suppressed: true,
+        };
+
+        if (include_debug) {
+          result.debug = {
+            promptSections,
+            systemPrompt,
+            tokens: { input: 0, output: 0 },
+            responseTimeMs: 0,
+            model: 'suppressed',
+            stopReason: 'scenario_do_not_respond',
+            kbEntriesUsed: kbData.length,
+          };
+        }
+
+        res.json(result);
+        return;
+      }
     } else {
       // Legacy path
       systemPrompt = await buildSystemPrompt(resolvedProfileData, kbData, undefined, onSection);
@@ -1196,10 +1224,14 @@ router.get('/channel-settings/:channelId', requirePermission('ai_settings', 'vie
           profile_data: {},
           max_tokens: 500,
           schedule_mode: 'always_on',
+          schedule_configured: false,
           ai_schedule: null,
-          outside_hours_message: null,
-          default_language: 'en',
-          business_hours: null,
+      outside_hours_message: null,
+      default_language: 'en',
+      business_hours: null,
+      response_mode: 'live',
+      test_contact_ids: [],
+      excluded_contact_ids: [],
         },
       });
       return;
@@ -1220,7 +1252,7 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     const {
       is_enabled, custom_instructions,
       profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message,
-      default_language, agent_id,
+      default_language, agent_id, response_mode, test_contact_ids, excluded_contact_ids,
     } = req.body;
 
     const { data: channel } = await supabaseAdmin
@@ -1247,8 +1279,14 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     if (schedule_mode !== undefined) updates.schedule_mode = schedule_mode;
     if (ai_schedule !== undefined) updates.ai_schedule = ai_schedule;
     if (outside_hours_message !== undefined) updates.outside_hours_message = outside_hours_message;
+    if (schedule_mode !== undefined || ai_schedule !== undefined || outside_hours_message !== undefined) {
+      updates.schedule_configured = true;
+    }
     if (default_language !== undefined) updates.default_language = default_language;
     if (agent_id !== undefined) updates.agent_id = agent_id;
+    if (response_mode !== undefined) updates.response_mode = response_mode;
+    if (test_contact_ids !== undefined) updates.test_contact_ids = test_contact_ids;
+    if (excluded_contact_ids !== undefined) updates.excluded_contact_ids = excluded_contact_ids;
 
     const { data, error } = await supabaseAdmin
       .from('channel_agent_settings')

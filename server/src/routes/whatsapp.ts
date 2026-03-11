@@ -8,6 +8,37 @@ import { checkPlanLimit } from './billing.js';
 
 const router = Router();
 
+async function syncConnectedChannelMetadata(
+  companyId: string,
+  channelId: number,
+  channelToken: string,
+  phone: string | null,
+  whapiChannelId?: string
+) {
+  const userProfile = await whapi.getUserProfile(channelToken);
+  const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
+  const profileName = userProfile?.name || null;
+  // Try health phone → user profile phone → manager API phone
+  let resolvedPhone = phone || userProfile?.phone || null;
+  if (!resolvedPhone && whapiChannelId) {
+    resolvedPhone = await whapi.getChannelPhone(whapiChannelId);
+  }
+
+  await supabaseAdmin
+    .from('whatsapp_channels')
+    .update({
+      channel_status: 'connected',
+      phone_number: resolvedPhone,
+      profile_picture_url: profilePictureUrl,
+      profile_name: profileName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', channelId)
+    .eq('company_id', companyId);
+
+  return { profilePictureUrl, profileName };
+}
+
 // All routes require auth
 router.use(requireAuth);
 
@@ -160,7 +191,7 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
   try {
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_token')
+      .select('channel_token, channel_id')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
@@ -186,24 +217,14 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
           phone = health.phone || null;
         } catch { /* best effort */ }
 
-        // Fetch profile picture
-        let profilePictureUrl: string | null = null;
-        if (phone) {
-          const profile = await whapi.getContactProfile(channel.channel_token, phone);
-          profilePictureUrl = profile?.icon_full || profile?.icon || null;
-        }
-
-        // Update DB status to connected
-        await supabaseAdmin
-          .from('whatsapp_channels')
-          .update({
-            channel_status: 'connected',
-            ...(phone ? { phone_number: phone } : {}),
-            profile_picture_url: profilePictureUrl,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', Number(channelId))
-          .eq('company_id', companyId);
+        // Fetch the connected user's own profile (name + picture)
+        await syncConnectedChannelMetadata(
+          companyId,
+          Number(channelId),
+          channel.channel_token,
+          phone,
+          channel.channel_id
+        );
 
         // Register webhook while we're here
         try {
@@ -243,7 +264,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
 
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_token, channel_id, channel_status')
+      .select('channel_token, channel_id, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
@@ -265,21 +286,23 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         const isConnected = statusText === 'AUTH';
         const newStatus = isConnected ? 'connected' : 'awaiting_scan';
 
-        let profilePictureUrl: string | null = null;
-        if (isConnected && health.phone) {
-          const profile = await whapi.getContactProfile(channel.channel_token, health.phone);
-          profilePictureUrl = profile?.icon_full || profile?.icon || null;
+        if (isConnected) {
+          await syncConnectedChannelMetadata(
+            companyId,
+            Number(channelId),
+            channel.channel_token,
+            health.phone || null,
+            channel.channel_id
+          );
+        } else {
+          await supabaseAdmin
+            .from('whatsapp_channels')
+            .update({
+              channel_status: newStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', Number(channelId));
         }
-
-        await supabaseAdmin
-          .from('whatsapp_channels')
-          .update({
-            channel_status: newStatus,
-            ...(isConnected ? { phone_number: health.phone || null } : {}),
-            ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', Number(channelId));
 
         if (isConnected) {
           const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
@@ -308,15 +331,8 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
     try {
       health = await whapi.checkHealth(channel.channel_token);
     } catch {
-      // Provider API failed — if DB says connected, mark as disconnected
-      if (channel.channel_status === 'connected') {
-        await supabaseAdmin
-          .from('whatsapp_channels')
-          .update({ channel_status: 'disconnected', updated_at: new Date().toISOString() })
-          .eq('id', Number(channelId));
-        res.json({ status: 'disconnected', phone: null });
-        return;
-      }
+      // Provider API failed — don't change DB status on transient failures,
+      // just report what we have in the DB
       res.json({ status: channel.channel_status, phone: null });
       return;
     }
@@ -325,29 +341,31 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
     const statusText = health.status?.text?.toUpperCase() || '';
     const isConnected = statusText === 'AUTH';
 
-    if (isConnected && channel.channel_status !== 'connected') {
-      let profilePictureUrl: string | null = null;
-      if (health.phone) {
-        const profile = await whapi.getContactProfile(channel.channel_token, health.phone);
-        profilePictureUrl = profile?.icon_full || profile?.icon || null;
+    const shouldSyncConnectedMetadata =
+      isConnected && (
+        channel.channel_status !== 'connected' ||
+        !channel.phone_number ||
+        !channel.profile_picture_url ||
+        !channel.profile_name
+      );
+
+    if (shouldSyncConnectedMetadata) {
+      await syncConnectedChannelMetadata(
+        companyId,
+        Number(channelId),
+        channel.channel_token,
+        health.phone || null,
+        channel.channel_id
+      );
+
+      if (!channel.webhook_registered) {
+        const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
+        await whapi.registerWebhook(channel.channel_token, webhookUrl);
+        await supabaseAdmin
+          .from('whatsapp_channels')
+          .update({ webhook_registered: true })
+          .eq('id', Number(channelId));
       }
-
-      await supabaseAdmin
-        .from('whatsapp_channels')
-        .update({
-          channel_status: 'connected',
-          phone_number: health.phone || null,
-          ...(profilePictureUrl ? { profile_picture_url: profilePictureUrl } : {}),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', Number(channelId));
-
-      const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
-      await whapi.registerWebhook(channel.channel_token, webhookUrl);
-      await supabaseAdmin
-        .from('whatsapp_channels')
-        .update({ webhook_registered: true })
-        .eq('id', Number(channelId));
     } else if (!isConnected && channel.channel_status === 'connected') {
       await supabaseAdmin
         .from('whatsapp_channels')
@@ -365,20 +383,37 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
   }
 });
 
-// Get all channels for the user
+// Get all channels the user can access (owned + shared)
 router.get('/channels', requirePermission('channels', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
+    const userId = req.userId!;
+
+    // Import dynamically to avoid circular deps at module load
+    const { getAccessibleChannelIds } = await import('../services/accessControl.js');
+    const accessibleIds = await getAccessibleChannelIds(userId, companyId);
+
+    if (accessibleIds.length === 0) {
+      res.json({ channels: [] });
+      return;
+    }
 
     const { data: channels, error } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
+      .in('id', accessibleIds)
       .eq('company_id', companyId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
 
-    res.json({ channels: channels || [] });
+    // Add is_owner flag for the client
+    const enriched = (channels || []).map((ch) => ({
+      ...ch,
+      is_owner: ch.user_id === userId,
+    }));
+
+    res.json({ channels: enriched });
   } catch (err) {
     next(err);
   }
@@ -390,9 +425,11 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
     const companyId = req.companyId!;
     const { channelId } = req.params;
 
+    const userId = req.userId!;
+
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, webhook_registered, created_at')
+      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id, sharing_mode, default_conversation_visibility')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
@@ -402,7 +439,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
       return;
     }
 
-    res.json({ channel });
+    res.json({ channel: { ...channel, is_owner: channel.user_id === userId } });
   } catch (err) {
     next(err);
   }

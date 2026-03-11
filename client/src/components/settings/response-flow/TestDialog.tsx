@@ -36,6 +36,7 @@ interface TestResult {
   matched_scenario: string | null;
   confidence: 'high' | 'medium' | 'low' | null;
   response: string;
+  suppressed?: boolean;
   debug?: TestDebug;
 }
 
@@ -165,8 +166,14 @@ export default function TestDialog({ open, onOpenChange, profileData, channelId,
               )}
 
               <div className="rounded-md border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground mb-1">AI Response:</p>
-                <p className="text-sm whitespace-pre-wrap">{result.response}</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {result.suppressed ? 'Scenario Outcome:' : 'AI Response:'}
+                </p>
+                <p className="text-sm whitespace-pre-wrap">
+                  {result.suppressed
+                    ? 'This scenario is configured to not respond automatically. The conversation will wait for a human.'
+                    : result.response}
+                </p>
               </div>
 
               {/* Debug: Prompt Builder */}

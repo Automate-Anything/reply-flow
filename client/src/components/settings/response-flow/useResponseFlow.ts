@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
-import type { ProfileData, ResponseFlow, Scenario, CommunicationStyle, FallbackMode, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
+import type { ProfileData, ResponseFlow, Scenario, CommunicationStyle, FallbackMode } from '@/hooks/useCompanyAI';
 
 const DEFAULT_STYLE: CommunicationStyle = {
   tone: 'friendly',
-  response_length: 'moderate',
-  emoji_usage: 'minimal',
+  response_length: 'concise',
+  emoji_usage: 'none',
 };
 
 /**
@@ -12,21 +12,12 @@ const DEFAULT_STYLE: CommunicationStyle = {
  * Runs once when user first opens Response Flow on a legacy profile.
  */
 export function migrateFromFlat(profile: ProfileData): ResponseFlow {
-  const escalation = profile.escalation_rules?.trim();
-  const rules = profile.response_rules?.trim();
-  const combinedRules = [rules, escalation ? `Escalation: ${escalation}` : '']
-    .filter(Boolean)
-    .join('\n\n') || undefined;
-
   return {
     default_style: {
       tone: profile.tone as CommunicationStyle['tone'] ?? DEFAULT_STYLE.tone,
       response_length: profile.response_length as CommunicationStyle['response_length'] ?? DEFAULT_STYLE.response_length,
       emoji_usage: profile.emoji_usage as CommunicationStyle['emoji_usage'] ?? DEFAULT_STYLE.emoji_usage,
     },
-    greeting_message: profile.greeting_message?.trim() || undefined,
-    response_rules: combinedRules,
-    topics_to_avoid: profile.topics_to_avoid?.trim() || undefined,
     scenarios: [],
     fallback_mode: 'respond_basics',
   };
@@ -118,8 +109,8 @@ export function useResponseFlow(profileData: ProfileData) {
     updateFlow({ fallback_mode: mode });
   }, [updateFlow]);
 
-  const setFallbackKBAttachments = useCallback((attachments: ScenarioKBAttachment[]) => {
-    updateFlow({ fallback_kb_attachments: attachments.length > 0 ? attachments : undefined });
+  const setFallbackStyle = useCallback((style: CommunicationStyle) => {
+    updateFlow({ fallback_style: style });
   }, [updateFlow]);
 
   // ── Reset to saved state ──
@@ -140,7 +131,7 @@ export function useResponseFlow(profileData: ProfileData) {
     updateScenario,
     removeScenario,
     setFallbackMode,
-    setFallbackKBAttachments,
+    setFallbackStyle,
     reset,
     clearDirty,
   };

@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from '../services/whapi.js';
+import { getSignedUrl } from '../services/mediaStorage.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -80,8 +81,14 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
       : `${session.chat_id}@s.whatsapp.net`;
 
     const result = await whapi.sendTextMessage(channel.channel_token, chatId, body, whapiQuotedId);
+    console.log('[send] whapi result:', JSON.stringify(result));
 
     // Store in DB
+    const outboundMetadata = {
+      ...(replyMetadata || {}),
+      source: 'app_send',
+    };
+
     const now = new Date().toISOString();
     const { data: message, error: msgError } = await supabaseAdmin
       .from('chat_messages')
@@ -99,7 +106,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
         status: 'sent',
         read: true,
         message_ts: now,
-        metadata: replyMetadata,
+        metadata: outboundMetadata,
       })
       .select()
       .single();
@@ -176,6 +183,7 @@ router.post('/schedule', requirePermission('messages', 'create'), async (req, re
         status: 'scheduled',
         scheduled_for: scheduledDate.toISOString(),
         read: true,
+        metadata: { source: 'app_send' },
       })
       .select()
       .single();
@@ -282,6 +290,36 @@ router.delete('/scheduled/:messageId', requirePermission('messages', 'create'), 
     }
 
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Get signed URL for media message ─────────────────────────────────────────
+router.get('/:messageId/media', requirePermission('messages', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { messageId } = req.params;
+
+    const { data: msg } = await supabaseAdmin
+      .from('chat_messages')
+      .select('media_storage_path')
+      .eq('id', messageId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (!msg?.media_storage_path) {
+      res.status(404).json({ error: 'No media found for this message' });
+      return;
+    }
+
+    const signedUrl = await getSignedUrl(msg.media_storage_path);
+    if (!signedUrl) {
+      res.status(500).json({ error: 'Failed to generate media URL' });
+      return;
+    }
+
+    res.json({ url: signedUrl });
   } catch (err) {
     next(err);
   }
@@ -496,7 +534,10 @@ router.post('/:messageId/forward', requirePermission('messages', 'create'), asyn
         status: 'sent',
         read: true,
         message_ts: now,
-        metadata: { forwarded_from: { session_id: originalMsg.session_id, message_id: originalMsg.id } },
+        metadata: {
+          source: 'app_send',
+          forwarded_from: { session_id: originalMsg.session_id, message_id: originalMsg.id },
+        },
       })
       .select()
       .single();

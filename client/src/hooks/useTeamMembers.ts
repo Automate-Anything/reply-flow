@@ -10,11 +10,16 @@ export interface TeamMember {
   role_name: string;
 }
 
-export function useTeamMembers() {
+export function useTeamMembers(enabled = true) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMembers = useCallback(async () => {
+    if (!enabled) {
+      setMembers([]);
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = await api.get('/team/members');
       setMembers(
@@ -36,11 +41,17 @@ export function useTeamMembers() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setMembers([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     fetchMembers();
-  }, [fetchMembers]);
+  }, [enabled, fetchMembers]);
 
   return { members, loading, refetch: fetchMembers };
 }

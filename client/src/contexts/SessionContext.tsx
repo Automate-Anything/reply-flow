@@ -73,6 +73,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const fetchMe = useCallback(async () => {
     try {
       const { data } = await api.get<MeResponse>('/me');
+      setError(null);
       setProfileFullName(data.profile?.full_name ?? null);
       setAvatarUrl(data.profile?.avatar_url ?? null);
       setCompanyId(data.company?.id ?? null);
@@ -81,15 +82,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPermissions(new Set(data.permissions));
       setIsSuperAdmin(data.is_super_admin || false);
     } catch (err) {
-      // User may not have a company yet (invitation flow)
       console.error('[SessionContext] fetchMe failed:', err);
-      setProfileFullName(null);
-      setAvatarUrl(null);
-      setCompanyId(null);
-      setCompanyName(null);
-      setRole(null);
-      setPermissions(new Set());
-      setIsSuperAdmin(false);
+      setError('Failed to refresh profile data');
     }
   }, []);
 
@@ -121,9 +115,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [updateSession, fetchMe]);
 
   useEffect(() => {
+    let isMounted = true;
+
     // Safety timeout if loading gets stuck
     const timeout = setTimeout(() => {
-      if (loading) {
+      if (isMounted && !hasLoadedOnceRef.current) {
         setLoading(false);
         setError('Session loading timed out');
       }
@@ -131,6 +127,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     // Get initial session
     supabase.auth.getSession().then(async ({ data, error: err }) => {
+      if (!isMounted) return;
+
       if (err) {
         setError(err.message);
         updateSession(null);
@@ -138,8 +136,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         updateSession(data.session);
         if (data.session) await fetchMe();
       }
-      setLoading(false);
-      hasLoadedOnceRef.current = true;
+      if (isMounted) {
+        setLoading(false);
+        hasLoadedOnceRef.current = true;
+      }
     });
 
     // Listen for auth changes
@@ -155,10 +155,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     );
 
     return () => {
+      isMounted = false;
       clearTimeout(timeout);
       subscription.unsubscribe();
     };
-  }, [loading, updateSession, fetchMe]);
+  }, [updateSession, fetchMe]);
 
   const user = session?.user ?? null;
 

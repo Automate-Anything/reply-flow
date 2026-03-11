@@ -29,6 +29,7 @@ export interface Scenario {
   id: string;
   label: string;
   detection_criteria: string;
+  do_not_respond?: boolean;
 
   // Instructions
   goal?: string;
@@ -56,15 +57,13 @@ export interface Scenario {
   escalation_rules?: string;
 }
 
-export type FallbackMode = 'respond_basics' | 'human_handle';
+export type FallbackMode = 'respond_basics' | 'respond_custom' | 'human_handle';
 
 export interface ResponseFlow {
   default_style: CommunicationStyle;
-  greeting_message?: string;
-  response_rules?: string;
-  topics_to_avoid?: string;
   scenarios: Scenario[];
   fallback_mode: FallbackMode;
+  fallback_style?: CommunicationStyle;
   human_phone?: string;
   fallback_kb_attachments?: ScenarioKBAttachment[];
 }
@@ -72,8 +71,8 @@ export interface ResponseFlow {
 // ── Profile data ────────────────────────────────────
 
 export interface ProfileData {
-  // Identity
-  use_case?: 'business' | 'personal' | 'organization';
+  // Business Details
+  use_case?: 'business';
   business_name?: string;
   business_type?: string;
   business_description?: string;
@@ -88,10 +87,7 @@ export interface ProfileData {
   tone?: 'professional' | 'friendly' | 'casual' | 'formal';
   response_length?: 'concise' | 'moderate' | 'detailed';
   emoji_usage?: 'none' | 'minimal' | 'moderate';
-  response_rules?: string;
-  greeting_message?: string;
   escalation_rules?: string;
-  topics_to_avoid?: string;
 }
 
 export interface CompanyAIProfile {

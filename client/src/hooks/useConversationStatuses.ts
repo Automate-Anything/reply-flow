@@ -10,11 +10,16 @@ export interface ConversationStatus {
   is_default: boolean;
 }
 
-export function useConversationStatuses() {
+export function useConversationStatuses(enabled = true) {
   const [statuses, setStatuses] = useState<ConversationStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchStatuses = useCallback(async () => {
+    if (!enabled) {
+      setStatuses([]);
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = await api.get('/conversation-statuses');
       setStatuses(data.statuses || []);
@@ -23,11 +28,17 @@ export function useConversationStatuses() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setStatuses([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     fetchStatuses();
-  }, [fetchStatuses]);
+  }, [enabled, fetchStatuses]);
 
   return { statuses, loading, refetch: fetchStatuses };
 }

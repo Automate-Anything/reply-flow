@@ -17,6 +17,7 @@ export interface Scenario {
   id: string;
   label: string;
   detection_criteria: string;
+  do_not_respond?: boolean;
 
   // Instructions
   goal?: string;
@@ -44,15 +45,13 @@ export interface Scenario {
   escalation_rules?: string;
 }
 
-export type FallbackMode = 'respond_basics' | 'human_handle';
+export type FallbackMode = 'respond_basics' | 'respond_custom' | 'human_handle';
 
 export interface ResponseFlow {
   default_style: CommunicationStyle;
-  greeting_message?: string;
-  response_rules?: string;
-  topics_to_avoid?: string;
   scenarios: Scenario[];
   fallback_mode: FallbackMode;
+  fallback_style?: CommunicationStyle;
   human_phone?: string;
   fallback_kb_attachments?: { kb_id: string; instructions?: string }[];
 }
@@ -60,8 +59,8 @@ export interface ResponseFlow {
 // ── Profile & KB types ──────────────────────────────
 
 export interface ProfileData {
-  // Identity
-  use_case?: 'business' | 'personal' | 'organization';
+  // Business Details
+  use_case?: 'business';
   business_name?: string;
   business_type?: string;
   business_description?: string;
@@ -75,10 +74,7 @@ export interface ProfileData {
   tone?: 'professional' | 'friendly' | 'casual' | 'formal';
   response_length?: 'concise' | 'moderate' | 'detailed';
   emoji_usage?: 'none' | 'minimal' | 'moderate';
-  response_rules?: string;
-  greeting_message?: string;
   escalation_rules?: string;
-  topics_to_avoid?: string;
 }
 
 export interface KBEntry {
@@ -112,7 +108,7 @@ const DEFAULT_TONE_DESCRIPTIONS: Record<string, string> = {
 };
 
 const DEFAULT_LENGTH_DESCRIPTIONS: Record<string, string> = {
-  concise: 'Keep responses short and to the point. Aim for 1-3 sentences when possible.',
+  concise: 'Keep responses very short and to the point. Default to 1-2 short sentences. Only go longer when extra detail is necessary to answer correctly.',
   moderate: 'Provide clear, balanced responses. Use enough detail to be helpful without being verbose.',
   detailed: 'Give thorough, comprehensive responses. Include relevant details and explanations.',
 };
@@ -131,10 +127,7 @@ const DEFAULT_CORE_RULES = `## Core Rules
 - If a conversation requires human attention (complaints, complex issues, urgent matters), politely let the customer know that a team member will follow up.`;
 
 const DEFAULT_IDENTITY: Record<string, string> = {
-  business: 'You are an AI assistant for {name}. You help manage WhatsApp conversations on behalf of this business.',
-  organization: 'You are an AI assistant for {name}. You help manage WhatsApp conversations on behalf of this organization.',
-  personal: 'You are a personal AI assistant managing WhatsApp conversations.',
-  default: 'You are a helpful AI assistant managing WhatsApp conversations. Respond professionally and concisely.',
+  business: 'You are the AI-powered WhatsApp assistant for {name}. You represent this business in customer conversations — answering questions, providing information, and ensuring every customer feels heard and helped.',
 };
 
 const DEFAULT_LANGUAGE: Record<string, string> = {
@@ -143,10 +136,6 @@ const DEFAULT_LANGUAGE: Record<string, string> = {
 };
 
 const DEFAULT_KB_CONTEXT = 'The following is the most relevant information retrieved from the knowledge base for this query. Use it to answer questions accurately. If a question isn\'t covered by this information, say so honestly.';
-
-const DEFAULT_GREETING = 'When this is the first message from a new contact, greet them with: "{greeting_message}"';
-
-const DEFAULT_TOPICS_TO_AVOID_PREFIX = 'Never discuss or share information about the following:';
 
 const DEFAULT_SCENARIO: Record<string, string> = {
   header: 'When you receive a message, identify which scenario best matches and apply its specific rules.\nIf multiple scenarios could match, choose the most specific one.',
@@ -180,8 +169,6 @@ export interface PromptTemplateCache {
   identity: Record<string, string>;
   language: Record<string, string>;
   kbContext: string;
-  greeting: string;
-  topicsToAvoidPrefix: string;
   scenario: Record<string, string>;
   classifier: string;
   loadedAt: number;
@@ -199,8 +186,6 @@ function buildDefaultCache(): PromptTemplateCache {
     identity: { ...DEFAULT_IDENTITY },
     language: { ...DEFAULT_LANGUAGE },
     kbContext: DEFAULT_KB_CONTEXT,
-    greeting: DEFAULT_GREETING,
-    topicsToAvoidPrefix: DEFAULT_TOPICS_TO_AVOID_PREFIX,
     scenario: { ...DEFAULT_SCENARIO },
     classifier: DEFAULT_CLASSIFIER,
     loadedAt: Date.now(),
@@ -229,8 +214,6 @@ export async function getPromptTemplates(): Promise<PromptTemplateCache> {
         case 'identity': if (subKey) cache.identity[subKey] = row.content; break;
         case 'language': if (subKey) cache.language[subKey] = row.content; break;
         case 'kb_context': cache.kbContext = row.content; break;
-        case 'greeting': cache.greeting = row.content; break;
-        case 'topics_to_avoid': cache.topicsToAvoidPrefix = row.content; break;
         case 'scenario': if (subKey) cache.scenario[subKey] = row.content; break;
         case 'classifier': cache.classifier = row.content; break;
       }
@@ -266,28 +249,14 @@ function buildAudienceSection(profile: ProfileData): string | null {
 function buildIdentitySection(profile: ProfileData, t: PromptTemplateCache): string {
   const sections: string[] = [];
 
-  switch (profile.use_case) {
-    case 'business': {
-      const name = profile.business_name || 'the business';
-      sections.push(t.identity.business.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Business\n${profile.business_description}`);
-      if (profile.business_type) sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
-      break;
-    }
-    case 'organization': {
-      const name = profile.business_name || 'the organization';
-      sections.push(t.identity.organization.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Organization\n${profile.business_description}`);
-      break;
-    }
-    case 'personal':
-      sections.push(t.identity.personal);
-      if (profile.business_description) sections.push(`## Context\n${profile.business_description}`);
-      break;
-    default:
-      sections.push(t.identity.default);
-      break;
-  }
+  const name = profile.business_name || 'the business';
+  sections.push(t.identity.business.replace('{name}', name));
+
+  // Combine type and description into a single "About" block
+  const aboutParts: string[] = [];
+  if (profile.business_type) aboutParts.push(`${name} is a ${profile.business_type} business.`);
+  if (profile.business_description) aboutParts.push(profile.business_description);
+  if (aboutParts.length) sections.push(`## About ${name}\n${aboutParts.join(' ')}`);
 
   return sections.join('\n\n');
 }
@@ -335,7 +304,7 @@ function resolveScenarioStyle(scenario: Scenario, defaults: CommunicationStyle):
 }
 
 function buildFallbackText(flow: ResponseFlow, t: PromptTemplateCache): string {
-  if (flow.fallback_mode === 'respond_basics') {
+  if (flow.fallback_mode === 'respond_basics' || flow.fallback_mode === 'respond_custom') {
     return t.scenario.fallback_respond;
   }
   if (flow.human_phone) {
@@ -354,6 +323,7 @@ function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = [], t:
     const lines: string[] = [];
     lines.push(`### ${sc.label}`);
     lines.push(`**Detect**: ${sc.detection_criteria}`);
+    if (sc.do_not_respond) lines.push('**Automation**: Do not respond automatically. Hand this conversation to a human.');
     if (sc.goal) lines.push(`**Goal**: ${sc.goal}`);
     lines.push(`**Style**: ${formatStyleBrief(resolved)}`);
     if (sc.instructions) lines.push(`**Instructions**:\n${sc.instructions}`);
@@ -415,21 +385,6 @@ function buildResponseFlowPrompt(
   const styleDesc = formatStyleDescription(flow.default_style, t);
   if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
-  // Greeting
-  if (flow.greeting_message) {
-    track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
-  }
-
-  // General response rules
-  if (flow.response_rules) {
-    track('ResponseGuidelines', `## Response Guidelines\n${flow.response_rules}`);
-  }
-
-  // Topics to avoid
-  if (flow.topics_to_avoid) {
-    track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
-  }
-
   // Scenarios (pass KB entries so per-scenario attachments are inlined)
   const scenarios = buildScenariosSection(flow, kbEntries, t);
   if (scenarios) track('Scenarios', scenarios);
@@ -461,28 +416,13 @@ function buildResponseFlowPrompt(
 function buildLegacyIdentitySection(profile: ProfileData, t: PromptTemplateCache): string {
   const sections: string[] = [];
 
-  switch (profile.use_case) {
-    case 'business': {
-      const name = profile.business_name || 'the business';
-      sections.push(t.identity.business.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Business\n${profile.business_description}`);
-      if (profile.business_type) sections.push(`## Industry\nThis is a ${profile.business_type} business.`);
-      break;
-    }
-    case 'organization': {
-      const name = profile.business_name || 'the organization';
-      sections.push(t.identity.organization.replace('{name}', name));
-      if (profile.business_description) sections.push(`## About the Organization\n${profile.business_description}`);
-      break;
-    }
-    case 'personal':
-      sections.push(t.identity.personal);
-      if (profile.business_description) sections.push(`## Context\n${profile.business_description}`);
-      break;
-    default:
-      sections.push(t.identity.default);
-      break;
-  }
+  const name = profile.business_name || 'the business';
+  sections.push(t.identity.business.replace('{name}', name));
+
+  const aboutParts: string[] = [];
+  if (profile.business_type) aboutParts.push(`${name} is a ${profile.business_type} business.`);
+  if (profile.business_description) aboutParts.push(profile.business_description);
+  if (aboutParts.length) sections.push(`## About ${name}\n${aboutParts.join(' ')}`);
 
   const audience = buildAudienceSection(profile);
   if (audience) sections.push(audience);
@@ -520,10 +460,7 @@ function buildLegacyPrompt(
   }
   if (styleRules.length > 0) track('CommunicationStyle', `## Communication Style\n${styleRules.join('\n')}`);
 
-  if (profile.response_rules) track('ResponseGuidelines', `## Response Guidelines\n${profile.response_rules}`);
-  if (profile.topics_to_avoid) track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${profile.topics_to_avoid}`);
   if (profile.escalation_rules) track('EscalationGuidelines', `## Escalation Guidelines\n${profile.escalation_rules}`);
-  if (profile.greeting_message) track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', profile.greeting_message)}`);
 
   const kb = buildKBSection(kbEntries, t);
   if (kb) track('KBContext', kb);
@@ -596,27 +533,16 @@ export async function buildScenarioResponsePrompt(
   const lang = buildLanguageSection(profile, t);
   if (lang) track('Language', lang);
 
-  // Greeting
-  if (flow.greeting_message) {
-    track('FirstContactGreeting', `## First Contact Greeting\n${t.greeting.replace('{greeting_message}', flow.greeting_message)}`);
-  }
-
-  // General response rules
-  if (flow.response_rules) {
-    track('ResponseGuidelines', `## Response Guidelines\n${flow.response_rules}`);
-  }
-
-  // Topics to avoid
-  if (flow.topics_to_avoid) {
-    track('TopicsToAvoid', `## Topics to Avoid\n${t.topicsToAvoidPrefix}\n${flow.topics_to_avoid}`);
-  }
-
   // Find matched scenario
   const matchedScenario = matchedScenarioLabel
     ? flow.scenarios.find((sc) => sc.label === matchedScenarioLabel)
     : null;
 
   if (matchedScenario) {
+    if (matchedScenario.do_not_respond) {
+      track('Automation', '## Automation\nDo not send an automatic reply for this scenario. Hand the conversation to a human team member.');
+    }
+
     // Resolved style (scenario overrides + defaults)
     const resolved = resolveScenarioStyle(matchedScenario, flow.default_style);
     const styleDesc = formatStyleDescription(resolved, t);
@@ -660,8 +586,11 @@ export async function buildScenarioResponsePrompt(
 
     track('ActiveScenario', scenarioLines.join('\n'));
   } else {
-    // No scenario matched — use default style + fallback behavior
-    const styleDesc = formatStyleDescription(flow.default_style, t);
+    // No scenario matched — use fallback style (custom or default)
+    const fallbackStyle = flow.fallback_mode === 'respond_custom' && flow.fallback_style
+      ? flow.fallback_style
+      : flow.default_style;
+    const styleDesc = formatStyleDescription(fallbackStyle, t);
     if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
     if (flow.fallback_mode === 'human_handle') {
