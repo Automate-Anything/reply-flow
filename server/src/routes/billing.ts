@@ -89,7 +89,7 @@ async function resolveCouponCode(code: string): Promise<{ stripe_coupon_id: stri
 // ────────────────────────────────────────────────
 router.get('/validate-coupon/:code', requirePermission('billing', 'view'), async (req, res, next) => {
   try {
-    const coupon = await resolveCouponCode(req.params.code);
+    const coupon = await resolveCouponCode(String(req.params.code));
     if (!coupon) {
       res.json({ valid: false });
       return;
@@ -922,7 +922,7 @@ router.post('/addons/purchase', async (req, res, next) => {
     if (coupon_code) {
       const coupon = await resolveCouponCode(coupon_code);
       if (coupon) {
-        await stripe.subscriptions.update(sub.stripe_subscription_id, { coupon: coupon.stripe_coupon_id });
+        await stripe.subscriptions.update(sub.stripe_subscription_id, { discounts: [{ coupon: coupon.stripe_coupon_id }] });
       }
     }
 
