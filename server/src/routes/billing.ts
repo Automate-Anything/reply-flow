@@ -70,6 +70,37 @@ export async function checkPlanLimit(
 }
 
 // ────────────────────────────────────────────────
+// Helper: resolve a coupon code string to a Stripe coupon ID.
+// Returns the stripe_coupon_id if the code exists and is active, otherwise null.
+// ────────────────────────────────────────────────
+async function resolveCouponCode(code: string): Promise<{ stripe_coupon_id: string; description: string | null } | null> {
+  const { data } = await supabaseAdmin
+    .from('coupon_codes')
+    .select('stripe_coupon_id, description')
+    .ilike('code', code.trim())
+    .eq('is_active', true)
+    .maybeSingle();
+  return data ?? null;
+}
+
+// ────────────────────────────────────────────────
+// GET /api/billing/validate-coupon/:code
+// Validates a coupon code and returns whether it's valid + description.
+// ────────────────────────────────────────────────
+router.get('/validate-coupon/:code', requirePermission('billing', 'view'), async (req, res, next) => {
+  try {
+    const coupon = await resolveCouponCode(String(req.params.code));
+    if (!coupon) {
+      res.json({ valid: false });
+      return;
+    }
+    res.json({ valid: true, description: coupon.description });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
 // GET /api/billing/subscription
 // Returns the company's current subscription + plan.
 // ────────────────────────────────────────────────
@@ -115,7 +146,7 @@ router.post('/create-checkout-session', requirePermission('billing', 'manage'), 
       return;
     }
 
-    const { plan_id, with_trial } = req.body;
+    const { plan_id, with_trial, coupon_code } = req.body;
     if (!plan_id) {
       res.status(400).json({ error: 'plan_id is required' });
       return;
@@ -174,6 +205,13 @@ router.post('/create-checkout-session', requirePermission('billing', 'manage'), 
 
     if (existingSub?.stripe_customer_id) {
       sessionParams.customer = existingSub.stripe_customer_id;
+    }
+
+    if (coupon_code) {
+      const coupon = await resolveCouponCode(coupon_code);
+      if (coupon) {
+        sessionParams.discounts = [{ coupon: coupon.stripe_coupon_id }];
+      }
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
@@ -348,7 +386,7 @@ router.post('/change-plan', requirePermission('billing', 'manage'), async (req, 
       return;
     }
 
-    const { plan_id } = req.body;
+    const { plan_id, coupon_code } = req.body;
     if (!plan_id) {
       res.status(400).json({ error: 'plan_id is required' });
       return;
@@ -392,11 +430,20 @@ router.post('/change-plan', requirePermission('billing', 'manage'), async (req, 
       return;
     }
 
-    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+    const updateParams: Stripe.SubscriptionUpdateParams = {
       items: [{ id: itemId, price: plan.stripe_price_id }],
       proration_behavior: 'create_prorations',
-      cancel_at_period_end: false, // Clear any pending cancellation on plan change
-    });
+      cancel_at_period_end: false,
+    };
+
+    if (coupon_code) {
+      const coupon = await resolveCouponCode(coupon_code);
+      if (coupon) {
+        updateParams.discounts = [{ coupon: coupon.stripe_coupon_id }];
+      }
+    }
+
+    await stripe.subscriptions.update(sub.stripe_subscription_id, updateParams);
 
     // Optimistically update plan_id and clear cancel_at_period_end in DB now.
     // The webhook (customer.subscription.updated) will also sync shortly.
@@ -839,7 +886,7 @@ router.post('/addons/purchase', async (req, res, next) => {
       return;
     }
 
-    const { addon_id } = req.body;
+    const { addon_id, coupon_code } = req.body;
     if (!addon_id) {
       res.status(400).json({ error: 'addon_id is required' });
       return;
@@ -878,6 +925,14 @@ router.post('/addons/purchase', async (req, res, next) => {
     if (sub.status !== 'active') {
       res.status(400).json({ error: 'Add-ons can only be purchased on an active (non-trial) subscription.' });
       return;
+    }
+
+    // Apply coupon to the subscription if provided
+    if (coupon_code) {
+      const coupon = await resolveCouponCode(coupon_code);
+      if (coupon) {
+        await stripe.subscriptions.update(sub.stripe_subscription_id, { discounts: [{ coupon: coupon.stripe_coupon_id }] });
+      }
     }
 
     // Check if this add-on price already exists as a subscription item
