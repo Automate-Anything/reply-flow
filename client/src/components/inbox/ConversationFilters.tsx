@@ -28,8 +28,8 @@ function toggleMultiValue(values: string[] | undefined, value: string): string[]
   return next.length > 0 ? next : undefined;
 }
 
-function getSummary(values: string[] | undefined, fallback: string, labels: Record<string, string>) {
-  if (!values || values.length === 0) return fallback;
+function getSummary(values: string[] | undefined, labels: Record<string, string>) {
+  if (!values || values.length === 0) return '';
   if (values.length === 1) return labels[values[0]] || values[0];
   return `${values.length} selected`;
 }
@@ -132,7 +132,7 @@ export default function ConversationFilters({
               icon={<CircleDot className="h-3.5 w-3.5" />}
               label="Status"
               active={isStatusActive}
-              summary={getSummary(statusValues, 'All', statusLabels)}
+              summary={getSummary(statusValues, statusLabels)}
             >
               {statusOptions.map((status) => (
                 <MultiSelectRow
@@ -148,7 +148,7 @@ export default function ConversationFilters({
               icon={<User className="h-3.5 w-3.5" />}
               label="Assignee"
               active={isAssigneeActive}
-              summary={getSummary(assigneeValues, 'All', assigneeLabels)}
+              summary={getSummary(assigneeValues, assigneeLabels)}
             >
               <MultiSelectRow
                 label="Mine"
@@ -171,7 +171,7 @@ export default function ConversationFilters({
               icon={<Flag className="h-3.5 w-3.5" />}
               label="Priority"
               active={isPriorityActive}
-              summary={getSummary(priorityValues, 'All', priorityLabels)}
+              summary={getSummary(priorityValues, priorityLabels)}
             >
               {priorityOptions.map((priority) => (
                 <MultiSelectRow

@@ -144,11 +144,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
+      async (_event, newSession) => {
         // Avoid unnecessary updates on tab focus after first load
         if (hasLoadedOnceRef.current) {
           updateSession(newSession);
-          if (newSession) fetchMe();
+          if (newSession) await fetchMe();
           setLoading(false);
         }
       }
