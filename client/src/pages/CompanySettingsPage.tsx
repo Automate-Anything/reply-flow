@@ -269,28 +269,30 @@ export default function CompanySettingsPage() {
           </div>
           {canEdit && (
             <div className="flex justify-end border-t pt-4">
-              <Button
-                onClick={async () => {
-                  if (sessionTimeout < 1 || sessionTimeout > 720) {
-                    toast.error('Session timeout must be between 1 and 720 hours');
-                    return;
-                  }
-                  setSavingTimeout(true);
-                  try {
-                    const { data } = await api.put('/company', { session_timeout_hours: sessionTimeout });
-                    setCompany(data.company);
-                    toast.success('Session timeout updated');
-                  } catch {
-                    toast.error('Failed to update session timeout');
-                  } finally {
-                    setSavingTimeout(false);
-                  }
-                }}
-                disabled={savingTimeout || sessionTimeout === (company?.session_timeout_hours ?? 24)}
-              >
-                {savingTimeout && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save
-              </Button>
+              <PlanGate>
+                <Button
+                  onClick={async () => {
+                    if (sessionTimeout < 1 || sessionTimeout > 720) {
+                      toast.error('Session timeout must be between 1 and 720 hours');
+                      return;
+                    }
+                    setSavingTimeout(true);
+                    try {
+                      const { data } = await api.put('/company', { session_timeout_hours: sessionTimeout });
+                      setCompany(data.company);
+                      toast.success('Session timeout updated');
+                    } catch {
+                      toast.error('Failed to update session timeout');
+                    } finally {
+                      setSavingTimeout(false);
+                    }
+                  }}
+                  disabled={savingTimeout || sessionTimeout === (company?.session_timeout_hours ?? 24)}
+                >
+                  {savingTimeout && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save
+                </Button>
+              </PlanGate>
             </div>
           )}
         </CardContent>
