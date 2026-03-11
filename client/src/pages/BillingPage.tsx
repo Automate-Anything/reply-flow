@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { CreditCard, Check, Zap, ExternalLink, Wallet, Lock } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CreditCard, Check, Zap, ExternalLink, Wallet, Lock, Tag, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -109,6 +109,13 @@ export default function BillingPage() {
   const { hasPermission } = useSession();
   const canManage = hasPermission('billing', 'manage');
 
+  // Coupon code state
+  const [couponInput, setCouponInput] = useState('');
+  const [couponState, setCouponState] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [couponDescription, setCouponDescription] = useState<string | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const couponDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Balance & auto top-up state
   const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
   const [topupPreset, setTopupPreset] = useState<number>(2500);
@@ -154,11 +161,50 @@ export default function BillingPage() {
       .catch(() => {});
   }, []);
 
+  const handleCouponChange = (value: string) => {
+    setCouponInput(value);
+    setAppliedCoupon(null);
+    setCouponDescription(null);
+
+    if (couponDebounceRef.current) clearTimeout(couponDebounceRef.current);
+
+    if (!value.trim()) {
+      setCouponState('idle');
+      return;
+    }
+
+    setCouponState('checking');
+    couponDebounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/billing/validate-coupon/${encodeURIComponent(value.trim().toUpperCase())}`);
+        if (data.valid) {
+          setCouponState('valid');
+          setCouponDescription(data.description ?? null);
+          setAppliedCoupon(value.trim().toUpperCase());
+        } else {
+          setCouponState('invalid');
+        }
+      } catch {
+        setCouponState('invalid');
+      }
+    }, 500);
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponInput('');
+    setCouponState('idle');
+    setCouponDescription(null);
+    setAppliedCoupon(null);
+  };
+
   const handleCheckout = async () => {
     if (!selected) return;
     setRedirecting(true);
     try {
-      const { data } = await api.post('/billing/create-checkout-session', { plan_id: selected });
+      const { data } = await api.post('/billing/create-checkout-session', {
+        plan_id: selected,
+        ...(appliedCoupon ? { coupon_code: appliedCoupon } : {}),
+      });
       window.location.href = data.url;
     } catch {
       toast.error('Failed to start checkout. Please try again.');
@@ -370,17 +416,51 @@ export default function BillingPage() {
 
       {/* Checkout CTA */}
       {selected && !hasStripeSubscription && canManage && (
-        <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-          <p className="text-sm font-medium">
-            Subscribe to{' '}
-            <span className="font-semibold">
-              {pendingPlan?.name}
-            </span>{' '}
-            — ${pendingPlan?.price}/month
-          </p>
-          <Button size="sm" onClick={handleCheckout} disabled={redirecting}>
-            {redirecting ? 'Redirecting…' : 'Confirm & Subscribe'}
-          </Button>
+        <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">
+              Subscribe to{' '}
+              <span className="font-semibold">{pendingPlan?.name}</span>{' '}
+              — ${pendingPlan?.price}/month
+            </p>
+            <Button size="sm" onClick={handleCheckout} disabled={redirecting || couponState === 'checking'}>
+              {redirecting ? 'Redirecting…' : 'Confirm & Subscribe'}
+            </Button>
+          </div>
+
+          {/* Coupon code input */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 max-w-xs">
+              <Tag className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-8 pl-7 pr-8 text-xs uppercase placeholder:normal-case placeholder:text-muted-foreground"
+                placeholder="Coupon code (optional)"
+                value={couponInput}
+                onChange={(e) => handleCouponChange(e.target.value)}
+                disabled={redirecting}
+              />
+              {couponInput && (
+                <button
+                  onClick={handleRemoveCoupon}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {couponState === 'checking' && (
+              <span className="text-xs text-muted-foreground">Checking…</span>
+            )}
+            {couponState === 'valid' && (
+              <span className="text-xs font-medium text-green-600">
+                <Check className="mr-1 inline h-3.5 w-3.5" />
+                {couponDescription ?? 'Discount applied'}
+              </span>
+            )}
+            {couponState === 'invalid' && (
+              <span className="text-xs text-destructive">Invalid code</span>
+            )}
+          </div>
         </div>
       )}
 

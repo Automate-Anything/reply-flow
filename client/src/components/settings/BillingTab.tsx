@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle, Clock, Plus, Minus, Wallet } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, Zap, ExternalLink, ArrowUp, ArrowDown, AlertTriangle, Clock, Plus, Minus, Wallet, Tag, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -163,6 +163,18 @@ export default function BillingTab() {
   const [purchasedAddons, setPurchasedAddons] = useState<PurchasedAddon[]>([]);
   const [addonLoading, setAddonLoading] = useState<Partial<Record<AddonId, 'adding' | 'removing'>>>({});
   const [pendingQty, setPendingQty] = useState<Partial<Record<AddonId, number>>>({});
+  // Coupon state — plan checkout
+  const [couponInput, setCouponInput] = useState('');
+  const [couponState, setCouponState] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [couponDescription, setCouponDescription] = useState<string | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const couponDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Coupon state — addons
+  const [addonCouponInput, setAddonCouponInput] = useState('');
+  const [addonCouponState, setAddonCouponState] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [addonCouponDescription, setAddonCouponDescription] = useState<string | null>(null);
+  const [appliedAddonCoupon, setAppliedAddonCoupon] = useState<string | null>(null);
+  const addonCouponDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
   const [topupPreset, setTopupPreset] = useState<number>(2500);
   const [topupLoading, setTopupLoading] = useState(false);
@@ -233,10 +245,51 @@ export default function BillingTab() {
     setPendingQty(map);
   }, [purchasedAddons]);
 
+  const makeCouponHandler = (
+    setInput: (v: string) => void,
+    setState: (s: 'idle' | 'checking' | 'valid' | 'invalid') => void,
+    setDesc: (d: string | null) => void,
+    setApplied: (v: string | null) => void,
+    debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
+  ) => (value: string) => {
+    setInput(value);
+    setApplied(null);
+    setDesc(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!value.trim()) { setState('idle'); return; }
+    setState('checking');
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/billing/validate-coupon/${encodeURIComponent(value.trim().toUpperCase())}`);
+        if (data.valid) {
+          setState('valid');
+          setDesc(data.description ?? null);
+          setApplied(value.trim().toUpperCase());
+        } else {
+          setState('invalid');
+        }
+      } catch {
+        setState('invalid');
+      }
+    }, 500);
+  };
+
+  const handleCouponChange = makeCouponHandler(
+    setCouponInput, setCouponState, setCouponDescription, setAppliedCoupon, couponDebounceRef
+  );
+
+  const handleAddonCouponChange = makeCouponHandler(
+    setAddonCouponInput, setAddonCouponState, setAddonCouponDescription, setAppliedAddonCoupon, addonCouponDebounceRef
+  );
+
   const handleAddonUpdate = async (addonId: AddonId, quantity: number) => {
     setAddonLoading((prev) => ({ ...prev, [addonId]: 'adding' }));
     try {
-      await api.post('/billing/addons/update', { addon_id: addonId, quantity });
+      await api.post('/billing/addons/update', {
+        addon_id: addonId,
+        quantity,
+        ...(appliedAddonCoupon ? { coupon_code: appliedAddonCoupon } : {}),
+      });
       await fetchAddons();
       toast.success('Add-on updated.');
     } catch (err: any) {
@@ -280,6 +333,7 @@ export default function BillingTab() {
       const { data } = await api.post('/billing/create-checkout-session', {
         plan_id: planId,
         with_trial: withTrial,
+        ...(appliedCoupon ? { coupon_code: appliedCoupon } : {}),
       });
       window.location.href = data.url;
     } catch (err: any) {
@@ -741,6 +795,34 @@ export default function BillingTab() {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Addon coupon code */}
+            <div className="flex items-center gap-2">
+              <div className="relative max-w-xs flex-1">
+                <Tag className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="h-8 pl-7 pr-8 text-xs uppercase placeholder:normal-case placeholder:text-muted-foreground"
+                  placeholder="Coupon code (optional)"
+                  value={addonCouponInput}
+                  onChange={(e) => handleAddonCouponChange(e.target.value)}
+                />
+                {addonCouponInput && (
+                  <button
+                    onClick={() => { setAddonCouponInput(''); setAddonCouponState('idle'); setAddonCouponDescription(null); setAppliedAddonCoupon(null); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {addonCouponState === 'checking' && <span className="text-xs text-muted-foreground">Checking…</span>}
+              {addonCouponState === 'valid' && (
+                <span className="text-xs font-medium text-green-600">
+                  <Check className="mr-1 inline h-3.5 w-3.5" />
+                  {addonCouponDescription ?? 'Discount applied'}
+                </span>
+              )}
+              {addonCouponState === 'invalid' && <span className="text-xs text-destructive">Invalid code</span>}
+            </div>
             {addonProducts.map((product) => {
               const purchased = purchasedAddons.find((p) => p.addon_id === product.id);
               const currentQty = purchased?.quantity ?? 0;
@@ -804,12 +886,43 @@ export default function BillingTab() {
           <p className="text-sm font-medium">
             <span className="font-semibold">{pendingPlan?.name}</span> — ${pendingPlan?.price}/month
           </p>
+
+          {/* Coupon code */}
+          <div className="flex items-center gap-2">
+            <div className="relative max-w-xs flex-1">
+              <Tag className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-8 pl-7 pr-8 text-xs uppercase placeholder:normal-case placeholder:text-muted-foreground"
+                placeholder="Coupon code (optional)"
+                value={couponInput}
+                onChange={(e) => handleCouponChange(e.target.value)}
+                disabled={redirecting}
+              />
+              {couponInput && (
+                <button
+                  onClick={() => { setCouponInput(''); setCouponState('idle'); setCouponDescription(null); setAppliedCoupon(null); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {couponState === 'checking' && <span className="text-xs text-muted-foreground">Checking…</span>}
+            {couponState === 'valid' && (
+              <span className="text-xs font-medium text-green-600">
+                <Check className="mr-1 inline h-3.5 w-3.5" />
+                {couponDescription ?? 'Discount applied'}
+              </span>
+            )}
+            {couponState === 'invalid' && <span className="text-xs text-destructive">Invalid code</span>}
+          </div>
+
           <div className="flex flex-col gap-2 sm:flex-row">
             {hasNoSubscription && (
               <Button
                 className="flex-1"
                 onClick={() => handleCheckout(selected, true)}
-                disabled={redirecting}
+                disabled={redirecting || couponState === 'checking'}
               >
                 {redirecting ? 'Redirecting…' : 'Start 7-Day Free Trial'}
               </Button>
@@ -818,7 +931,7 @@ export default function BillingTab() {
               variant={hasNoSubscription ? 'outline' : 'default'}
               className="flex-1"
               onClick={() => handleCheckout(selected, false)}
-              disabled={redirecting}
+              disabled={redirecting || couponState === 'checking'}
             >
               {redirecting ? 'Redirecting…' : hasHadSubscription ? 'Subscribe Now' : 'Subscribe Without Trial'}
             </Button>
