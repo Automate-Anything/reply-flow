@@ -18,6 +18,8 @@ import { Switch } from '@/components/ui/switch';
 import StyleFields from './StyleFields';
 import { getPlaceholders } from './scenarioPlaceholders';
 import KBPicker from '../KBPicker';
+import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 interface Props {
   open: boolean;
@@ -60,30 +62,81 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
   const [doNotRespond, setDoNotRespond] = useState(false);
   const [style, setStyle] = useState<CommunicationStyle>({});
   const [showStyle, setShowStyle] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState('');
 
   const ph = useMemo(() => getPlaceholders(label), [label]);
+
+  const buildSnapshot = (
+    nextLabel: string,
+    nextCriteria: string,
+    nextGoal: string,
+    nextInstructions: string,
+    nextKbAttachments: ScenarioKBAttachment[],
+    nextRules: string,
+    nextExampleResponse: string,
+    nextEscalationTrigger: string,
+    nextDoNotRespond: boolean,
+    nextStyle: CommunicationStyle,
+    nextShowStyle: boolean,
+  ) => JSON.stringify({
+    label: nextLabel.trim(),
+    criteria: nextCriteria.trim(),
+    goal: nextGoal.trim(),
+    instructions: nextInstructions.trim(),
+    kbAttachments: nextKbAttachments,
+    rules: nextRules.trim(),
+    exampleResponse: nextExampleResponse.trim(),
+    escalationTrigger: nextEscalationTrigger.trim(),
+    doNotRespond: nextDoNotRespond,
+    style: nextStyle,
+    showStyle: nextShowStyle,
+  });
 
   useEffect(() => {
     if (open) {
       if (scenario) {
-        setLabel(scenario.label);
-        setCriteria(scenario.detection_criteria);
-        setGoal(scenario.goal || '');
-        setInstructions(scenario.instructions || '');
-        setKbAttachments(scenario.kb_attachments ?? []);
-        setRules(scenario.rules || '');
-        setExampleResponse(scenario.example_response || '');
-        setEscalationTrigger(scenario.escalation_trigger || '');
-        setDoNotRespond(!!scenario.do_not_respond);
-        setStyle({
+        const nextLabel = scenario.label;
+        const nextCriteria = scenario.detection_criteria;
+        const nextGoal = scenario.goal || '';
+        const nextInstructions = scenario.instructions || '';
+        const nextKbAttachments = scenario.kb_attachments ?? [];
+        const nextRules = scenario.rules || '';
+        const nextExampleResponse = scenario.example_response || '';
+        const nextEscalationTrigger = scenario.escalation_trigger || '';
+        const nextDoNotRespond = !!scenario.do_not_respond;
+        const nextStyle = {
           tone: scenario.tone ?? defaultStyle.tone,
           response_length: scenario.response_length ?? defaultStyle.response_length,
           emoji_usage: scenario.emoji_usage ?? defaultStyle.emoji_usage,
-        });
-        setShowStyle(
-          !!(scenario.tone || scenario.response_length || scenario.emoji_usage)
-        );
+        };
+        const nextShowStyle = !!(scenario.tone || scenario.response_length || scenario.emoji_usage);
+
+        setLabel(nextLabel);
+        setCriteria(nextCriteria);
+        setGoal(nextGoal);
+        setInstructions(nextInstructions);
+        setKbAttachments(nextKbAttachments);
+        setRules(nextRules);
+        setExampleResponse(nextExampleResponse);
+        setEscalationTrigger(nextEscalationTrigger);
+        setDoNotRespond(nextDoNotRespond);
+        setStyle(nextStyle);
+        setShowStyle(nextShowStyle);
+        setInitialSnapshot(buildSnapshot(
+          nextLabel,
+          nextCriteria,
+          nextGoal,
+          nextInstructions,
+          nextKbAttachments,
+          nextRules,
+          nextExampleResponse,
+          nextEscalationTrigger,
+          nextDoNotRespond,
+          nextStyle,
+          nextShowStyle,
+        ));
       } else {
+        const nextStyle = { ...defaultStyle };
         setLabel('');
         setCriteria('');
         setGoal('');
@@ -93,11 +146,32 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         setExampleResponse('');
         setEscalationTrigger('');
         setDoNotRespond(false);
-        setStyle({ ...defaultStyle });
+        setStyle(nextStyle);
         setShowStyle(false);
+        setInitialSnapshot(buildSnapshot('', '', '', '', [], '', '', '', false, nextStyle, false));
       }
     }
   }, [open, scenario, defaultStyle]);
+
+  const currentSnapshot = buildSnapshot(
+    label,
+    criteria,
+    goal,
+    instructions,
+    kbAttachments,
+    rules,
+    exampleResponse,
+    escalationTrigger,
+    doNotRespond,
+    style,
+    showStyle,
+  );
+  const { showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(
+    currentSnapshot,
+    open ? initialSnapshot : null,
+  );
+
+  const requestClose = () => guardedClose(() => onOpenChange(false));
 
   const handleSave = () => {
     const tone = style.tone !== defaultStyle.tone ? style.tone : undefined;
@@ -121,11 +195,22 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
     onOpenChange(false);
   };
 
-  const isValid = label.trim().length > 0 && criteria.trim().length > 0;
+  const requiresResponseFields = !doNotRespond;
+  const isValid =
+    label.trim().length > 0 &&
+    criteria.trim().length > 0 &&
+    (!requiresResponseFields || (goal.trim().length > 0 && instructions.trim().length > 0));
   const isEditing = !!scenario;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen) {
+        requestClose();
+        return;
+      }
+      onOpenChange(true);
+    }}>
       <DialogContent className="sm:max-w-[960px] max-h-[85vh] overflow-y-auto sm:left-[58.5%]">
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Edit Scenario' : 'Add Scenario'}</DialogTitle>
@@ -191,7 +276,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
               <SectionHeader label="How to Respond" />
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Goal</Label>
+            <Label className="text-xs">Goal{requiresResponseFields ? ' *' : ''}</Label>
             <Input
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
@@ -204,7 +289,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Step-by-Step Instructions</Label>
+            <Label className="text-xs">Step-by-Step Instructions{requiresResponseFields ? ' *' : ''}</Label>
             <textarea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
@@ -302,7 +387,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={requestClose}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!isValid}>
@@ -311,5 +396,12 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showDialog}
+      onKeepEditing={handleKeepEditing}
+      onDiscard={handleDiscard}
+      onSave={handleSave}
+    />
+    </>
   );
 }

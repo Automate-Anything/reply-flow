@@ -25,6 +25,7 @@ import contactListsRouter from './routes/contactLists.js';
 import customFieldsRouter from './routes/customFields.js';
 import conversationNotesRouter from './routes/conversationNotes.js';
 import conversationStatusesRouter from './routes/conversationStatuses.js';
+import conversationPrioritiesRouter from './routes/conversationPriorities.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import seedRouter from './routes/seed.js';
@@ -102,6 +103,7 @@ app.use('/api/super-admin', superAdminRouter);
 
 app.use('/api/conversation-notes', conversationNotesRouter);
 app.use('/api/conversation-statuses', conversationStatusesRouter);
+app.use('/api/conversation-priorities', conversationPrioritiesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/seed', seedRouter);

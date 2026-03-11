@@ -149,31 +149,30 @@ export async function getAccessibleChannelIds(
   userId: string,
   companyId: string
 ): Promise<number[]> {
-  // 1. Channels the user owns
-  const { data: ownedChannels } = await supabaseAdmin
-    .from('whatsapp_channels')
-    .select('id')
-    .eq('company_id', companyId)
-    .eq('user_id', userId);
+  const [
+    { data: ownedChannels },
+    { data: allMemberChannels },
+    { data: specificAccess },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('user_id', userId),
+    supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('sharing_mode', 'all_members')
+      .neq('user_id', userId),
+    supabaseAdmin
+      .from('channel_access')
+      .select('channel_id')
+      .eq('user_id', userId),
+  ]);
 
   const ownedIds = (ownedChannels || []).map((c) => c.id);
-
-  // 2. Channels shared with all_members
-  const { data: allMemberChannels } = await supabaseAdmin
-    .from('whatsapp_channels')
-    .select('id')
-    .eq('company_id', companyId)
-    .eq('sharing_mode', 'all_members')
-    .neq('user_id', userId);
-
   const allMemberIds = (allMemberChannels || []).map((c) => c.id);
-
-  // 3. Channels shared with specific users (where this user has access)
-  const { data: specificAccess } = await supabaseAdmin
-    .from('channel_access')
-    .select('channel_id')
-    .eq('user_id', userId);
-
   const specificIds = (specificAccess || []).map((a) => a.channel_id);
 
   // Combine and deduplicate
@@ -201,12 +200,21 @@ export async function getAccessibleSessionFilter(
 
   // Check which of these channels have owner_only conversation visibility
   // and the user is NOT the owner
-  const { data: ownerOnlyChannels } = await supabaseAdmin
-    .from('whatsapp_channels')
-    .select('id')
-    .in('id', accessibleChannelIds)
-    .eq('default_conversation_visibility', 'owner_only')
-    .neq('user_id', userId);
+  const [
+    { data: ownerOnlyChannels },
+    { count: companyChannelCount },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id')
+      .in('id', accessibleChannelIds)
+      .eq('default_conversation_visibility', 'owner_only')
+      .neq('user_id', userId),
+    supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId),
+  ]);
 
   const ownerOnlyIds = (ownerOnlyChannels || []).map((c) => c.id);
 
@@ -218,12 +226,7 @@ export async function getAccessibleSessionFilter(
   if (ownerOnlyIds.length === 0) {
     // User sees all conversations in all their accessible channels
     // Check if this is ALL company channels
-    const { count } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', companyId);
-
-    if (count === accessibleChannelIds.length) {
+    if (companyChannelCount === accessibleChannelIds.length) {
       return { mode: 'all' };
     }
 

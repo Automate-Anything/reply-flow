@@ -4,22 +4,17 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Clock, Pin, RotateCcw, Star } from 'lucide-react';
 import type { Conversation } from '@/hooks/useConversations';
+import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 
 interface ConversationItemProps {
   conversation: Conversation;
+  priorities?: ConversationPriority[];
   isActive: boolean;
   onClick: () => void;
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
 }
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: 'bg-red-500',
-  high: 'bg-orange-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-blue-500',
-};
 
 // Show badge for any status except the default "open"
 function getStatusLabel(status: string): string | null {
@@ -56,6 +51,7 @@ function formatTime(dateStr: string | null): string {
 
 export default function ConversationItem({
   conversation,
+  priorities = [],
   isActive,
   onClick,
   selectable,
@@ -65,7 +61,7 @@ export default function ConversationItem({
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const name = conversation.contact_name || conversation.phone_number;
   const initial = (name[0] || '?').toUpperCase();
-  const priorityColor = PRIORITY_COLORS[conversation.priority];
+  const priorityColor = priorities.find((priority) => priority.name === conversation.priority)?.color;
   const statusLabel = getStatusLabel(conversation.status);
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
@@ -92,10 +88,8 @@ export default function ConversationItem({
       <div className="relative shrink-0">
         {priorityColor && (
           <span
-            className={cn(
-              'absolute -left-1 -top-1 z-10 h-2.5 w-2.5 rounded-full border-2 border-background',
-              priorityColor
-            )}
+            className="absolute -left-1 -top-1 z-10 h-2.5 w-2.5 rounded-full border-2 border-background"
+            style={{ backgroundColor: priorityColor }}
           />
         )}
         <Avatar className="h-10 w-10">

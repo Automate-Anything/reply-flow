@@ -25,7 +25,7 @@ export interface Conversation {
   last_message_direction: string | null;
   last_message_sender: string | null;
   status: string;
-  priority: 'none' | 'low' | 'medium' | 'high' | 'urgent';
+  priority: string;
   is_archived: boolean;
   is_starred: boolean;
   snoozed_until: string | null;
@@ -42,9 +42,9 @@ export interface Conversation {
 }
 
 export interface ConversationFilters {
-  status?: string;
-  assignee?: string;
-  priority?: string;
+  status?: string[];
+  assignee?: string[];
+  priority?: string[];
   starred?: boolean;
   snoozed?: boolean;
   unread?: boolean;
@@ -63,15 +63,19 @@ export function useConversations(
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      if (filters?.status && filters.status !== 'all') {
-        if (filters.status === 'snoozed') {
+      if (filters?.status && filters.status.length > 0 && !filters.status.includes('all')) {
+        if (filters.status.includes('snoozed')) {
           params.set('snoozed', 'true');
         } else {
-          params.set('status', filters.status);
+          params.set('status', filters.status.join(','));
         }
       }
-      if (filters?.assignee && filters.assignee !== 'all') params.set('assignee', filters.assignee);
-      if (filters?.priority && filters.priority !== 'all') params.set('priority', filters.priority);
+      if (filters?.assignee && filters.assignee.length > 0 && !filters.assignee.includes('all')) {
+        params.set('assignee', filters.assignee.join(','));
+      }
+      if (filters?.priority && filters.priority.length > 0 && !filters.priority.includes('all')) {
+        params.set('priority', filters.priority.join(','));
+      }
       if (filters?.starred) params.set('starred', 'true');
       if (filters?.snoozed) params.set('snoozed', 'true');
       if (filters?.unread) params.set('unread', 'true');

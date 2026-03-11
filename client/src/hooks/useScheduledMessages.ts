@@ -11,6 +11,9 @@ export interface ScheduledMessage {
   session: {
     contact_name: string | null;
     phone_number: string;
+    assigned_to: string | null;
+    status: string;
+    priority: string;
   } | null;
 }
 

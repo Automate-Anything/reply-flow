@@ -26,6 +26,19 @@ function OptionButton({ selected, onClick, children }: {
   );
 }
 
+function findScrollParent(node: HTMLElement | null): HTMLElement | null {
+  let current = node?.parentElement ?? null;
+
+  while (current) {
+    const { overflowY } = window.getComputedStyle(current);
+    const canScroll = (overflowY === 'auto' || overflowY === 'scroll') && current.scrollHeight > current.clientHeight;
+    if (canScroll) return current;
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
 interface Props {
   scheduleMode: ScheduleMode;
   scheduleConfigured: boolean;
@@ -66,14 +79,22 @@ export default function ScheduleSection({
     if (!isExpanded) return;
 
     const timeout = window.setTimeout(() => {
-      const sectionBottom = sectionRef.current
-        ? sectionRef.current.getBoundingClientRect().bottom + window.scrollY
-        : document.documentElement.scrollHeight;
-      const targetScrollTop = Math.max(
-        document.documentElement.scrollHeight - window.innerHeight,
-        sectionBottom - window.innerHeight
-      );
-      window.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+      const sectionNode = sectionRef.current;
+      if (!sectionNode) return;
+
+      const scrollParent = findScrollParent(sectionNode);
+      if (scrollParent) {
+        scrollParent.scrollTo({
+          top: scrollParent.scrollHeight,
+          behavior: 'smooth',
+        });
+        return;
+      }
+
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: 'smooth',
+      });
     }, 80);
 
     return () => window.clearTimeout(timeout);

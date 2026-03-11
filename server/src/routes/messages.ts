@@ -203,7 +203,7 @@ router.get('/scheduled', requirePermission('messages', 'create'), async (req, re
 
     const { data: messages, error } = await supabaseAdmin
       .from('chat_messages')
-      .select('*, session:session_id(contact_name, phone_number)')
+      .select('*, session:session_id(contact_name, phone_number, assigned_to, status, priority)')
       .eq('company_id', companyId)
       .eq('status', 'scheduled')
       .not('scheduled_for', 'is', null)
@@ -258,7 +258,7 @@ router.patch('/scheduled/:messageId', requirePermission('messages', 'create'), a
       .from('chat_messages')
       .update(updates)
       .eq('id', messageId)
-      .select('*, session:session_id(contact_name, phone_number)')
+      .select('*, session:session_id(contact_name, phone_number, assigned_to, status, priority)')
       .single();
 
     if (error) throw error;

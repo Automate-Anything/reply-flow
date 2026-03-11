@@ -54,6 +54,10 @@ async function processScheduledMessages() {
           : `${session.chat_id}@s.whatsapp.net`;
 
         const result = await whapi.sendTextMessage(channel.channel_token, chatId, msg.message_body);
+        const resultRecord = result as Record<string, unknown> & {
+          message?: { id?: string };
+          message_id?: string;
+        };
 
         // Update message status
         const now = new Date().toISOString();
@@ -62,7 +66,7 @@ async function processScheduledMessages() {
           .update({
             status: 'sent',
             message_ts: now,
-            message_id_normalized: (result as Record<string, string>)?.message_id || null,
+            message_id_normalized: resultRecord.message?.id || resultRecord.message_id || null,
             scheduled_for: null,
           })
           .eq('id', msg.id);
@@ -93,5 +97,6 @@ async function processScheduledMessages() {
 
 export function startScheduler() {
   console.log('Message scheduler started (polling every 30s)');
+  processScheduledMessages().catch((err) => console.error('Initial scheduler run failed:', err));
   setInterval(processScheduledMessages, POLL_INTERVAL_MS);
 }

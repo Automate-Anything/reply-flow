@@ -31,6 +31,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
+import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 
 interface LabelOption {
   id: string;
@@ -43,6 +44,7 @@ interface ConversationContextMenuProps {
   teamMembers: TeamMember[];
   labels: LabelOption[];
   statuses?: ConversationStatus[];
+  priorities?: ConversationPriority[];
   onUpdate: () => void;
   children: React.ReactNode;
 }
@@ -52,14 +54,6 @@ const FALLBACK_STATUSES = [
   { value: 'pending', label: 'Pending', color: '#EAB308' },
   { value: 'resolved', label: 'Resolved', color: '#3B82F6' },
   { value: 'closed', label: 'Closed', color: '#6B7280' },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: 'urgent', label: 'Urgent', dotColor: 'bg-red-500' },
-  { value: 'high', label: 'High', dotColor: 'bg-orange-500' },
-  { value: 'medium', label: 'Medium', dotColor: 'bg-yellow-500' },
-  { value: 'low', label: 'Low', dotColor: 'bg-blue-500' },
-  { value: 'none', label: 'None', dotColor: 'bg-gray-300' },
 ];
 
 const SNOOZE_OPTIONS = [
@@ -93,6 +87,7 @@ export default function ConversationContextMenu({
   teamMembers,
   labels,
   statuses = [],
+  priorities = [],
   onUpdate,
   children,
 }: ConversationContextMenuProps) {
@@ -102,6 +97,15 @@ export default function ConversationContextMenu({
   const statusOptions = statuses.length > 0
     ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
     : FALLBACK_STATUSES;
+  const priorityOptions = priorities.length > 0
+    ? priorities
+    : [
+        { id: 'urgent', name: 'Urgent', color: '#EF4444', sort_order: 0, is_default: false },
+        { id: 'high', name: 'High', color: '#F97316', sort_order: 1, is_default: false },
+        { id: 'medium', name: 'Medium', color: '#EAB308', sort_order: 2, is_default: false },
+        { id: 'low', name: 'Low', color: '#3B82F6', sort_order: 3, is_default: false },
+        { id: 'none', name: 'None', color: '#9CA3AF', sort_order: 4, is_default: true },
+      ];
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
@@ -280,11 +284,11 @@ export default function ConversationContextMenu({
             Priority
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            {PRIORITY_OPTIONS.map((p) => (
-              <ContextMenuItem key={p.value} onClick={() => patch({ priority: p.value })}>
-                <span className={cn('mr-2 h-2 w-2 rounded-full', p.dotColor)} />
-                {p.label}
-                {conversation.priority === p.value && (
+            {priorityOptions.map((p) => (
+              <ContextMenuItem key={p.id} onClick={() => patch({ priority: p.name })}>
+                <span className="mr-2 h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+                {p.name}
+                {conversation.priority === p.name && (
                   <Check className="ml-auto h-3 w-3" />
                 )}
               </ContextMenuItem>
