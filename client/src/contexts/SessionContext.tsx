@@ -147,6 +147,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       async (_event, newSession) => {
         // Avoid unnecessary updates on tab focus after first load
         if (hasLoadedOnceRef.current) {
+          if (newSession) setLoading(true);
           updateSession(newSession);
           if (newSession) await fetchMe();
           setLoading(false);
