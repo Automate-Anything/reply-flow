@@ -147,6 +147,7 @@ export default function ConversationList({
                 key={conv.id}
                 conversation={conv}
                 teamMembers={teamMembers}
+                labels={labels}
                 statuses={statuses}
                 onUpdate={onRefresh}
               >

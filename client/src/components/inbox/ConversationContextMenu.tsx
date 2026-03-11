@@ -14,10 +14,12 @@ import {
   CircleDot,
   Clock,
   Flag,
+  Loader2,
   Mail,
   MailOpen,
   Pin,
   Star,
+  Tag,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -30,9 +32,16 @@ import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 
+interface LabelOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface ConversationContextMenuProps {
   conversation: Conversation;
   teamMembers: TeamMember[];
+  labels: LabelOption[];
   statuses?: ConversationStatus[];
   onUpdate: () => void;
   children: React.ReactNode;
@@ -82,11 +91,13 @@ function getSnoozeUntil(option: (typeof SNOOZE_OPTIONS)[number]): string {
 export default function ConversationContextMenu({
   conversation,
   teamMembers,
+  labels,
   statuses = [],
   onUpdate,
   children,
 }: ConversationContextMenuProps) {
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
+  const [labelLoading, setLabelLoading] = useState<string | null>(null);
 
   const statusOptions = statuses.length > 0
     ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
@@ -94,6 +105,7 @@ export default function ConversationContextMenu({
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();
+  const assignedIds = new Set(conversation.labels.map((label) => label.id));
 
   const patch = async (updates: Record<string, unknown>) => {
     try {
@@ -101,6 +113,25 @@ export default function ConversationContextMenu({
       onUpdate();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to update conversation');
+    }
+  };
+
+  const handleToggleLabel = async (label: LabelOption) => {
+    setLabelLoading(label.id);
+    try {
+      if (assignedIds.has(label.id)) {
+        await api.delete(`/labels/assign/${conversation.id}/${label.id}`);
+      } else {
+        await api.post('/labels/assign', {
+          sessionId: conversation.id,
+          labelId: label.id,
+        });
+      }
+      onUpdate();
+    } catch {
+      toast.error('Failed to update label');
+    } finally {
+      setLabelLoading(null);
     }
   };
 
@@ -208,6 +239,37 @@ export default function ConversationContextMenu({
                 )}
               </ContextMenuItem>
             ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        {/* Labels */}
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Tag className="mr-2 h-3.5 w-3.5" />
+            Labels
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            {labels.map((label) => (
+              <ContextMenuItem
+                key={label.id}
+                onClick={() => handleToggleLabel(label)}
+                disabled={labelLoading === label.id}
+              >
+                {labelLoading === label.id ? (
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                ) : (
+                  <span
+                    className="mr-2 h-2 w-2 rounded-full"
+                    style={{ backgroundColor: label.color }}
+                  />
+                )}
+                {label.name}
+                {assignedIds.has(label.id) && <Check className="ml-auto h-3 w-3" />}
+              </ContextMenuItem>
+            ))}
+            {labels.length === 0 && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">No labels</div>
+            )}
           </ContextMenuSubContent>
         </ContextMenuSub>
 
