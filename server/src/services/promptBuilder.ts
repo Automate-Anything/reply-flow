@@ -108,7 +108,7 @@ const DEFAULT_TONE_DESCRIPTIONS: Record<string, string> = {
 };
 
 const DEFAULT_LENGTH_DESCRIPTIONS: Record<string, string> = {
-  concise: 'Keep responses short and to the point. Aim for 1-3 sentences when possible.',
+  concise: 'Keep responses very short and to the point. Default to 1-2 short sentences. Only go longer when extra detail is necessary to answer correctly.',
   moderate: 'Provide clear, balanced responses. Use enough detail to be helpful without being verbose.',
   detailed: 'Give thorough, comprehensive responses. Include relevant details and explanations.',
 };

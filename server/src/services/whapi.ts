@@ -51,6 +51,17 @@ export async function createChannel(name: string): Promise<WhapiChannel> {
   }
 }
 
+export async function getChannelPhone(channelId: string): Promise<string | null> {
+  try {
+    const { data } = await managerApi.get(`/channels/${channelId}`);
+    if (!data.phone) return null;
+    // Ensure E.164 format with + prefix
+    return data.phone.startsWith('+') ? data.phone : `+${data.phone}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function extendChannel(channelId: string, days: number): Promise<void> {
   try {
     await managerApi.post(`/channels/${channelId}/extend`, {
@@ -189,6 +200,7 @@ export async function getUserProfile(
       icon: data.icon || '',
       icon_full: data.icon_full || '',
       about: data.about || '',
+      phone: data.phone || '',
     };
   } catch {
     return null;

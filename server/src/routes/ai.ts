@@ -1225,9 +1225,12 @@ router.get('/channel-settings/:channelId', requirePermission('ai_settings', 'vie
           max_tokens: 500,
           schedule_mode: 'always_on',
           ai_schedule: null,
-          outside_hours_message: null,
-          default_language: 'en',
-          business_hours: null,
+      outside_hours_message: null,
+      default_language: 'en',
+      business_hours: null,
+      response_mode: 'live',
+      test_contact_ids: [],
+      excluded_contact_ids: [],
         },
       });
       return;
@@ -1248,7 +1251,7 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     const {
       is_enabled, custom_instructions,
       profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message,
-      default_language, agent_id,
+      default_language, agent_id, response_mode, test_contact_ids, excluded_contact_ids,
     } = req.body;
 
     const { data: channel } = await supabaseAdmin
@@ -1277,6 +1280,9 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     if (outside_hours_message !== undefined) updates.outside_hours_message = outside_hours_message;
     if (default_language !== undefined) updates.default_language = default_language;
     if (agent_id !== undefined) updates.agent_id = agent_id;
+    if (response_mode !== undefined) updates.response_mode = response_mode;
+    if (test_contact_ids !== undefined) updates.test_contact_ids = test_contact_ids;
+    if (excluded_contact_ids !== undefined) updates.excluded_contact_ids = excluded_contact_ids;
 
     const { data, error } = await supabaseAdmin
       .from('channel_agent_settings')

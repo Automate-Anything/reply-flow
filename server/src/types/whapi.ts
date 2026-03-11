@@ -30,6 +30,7 @@ export interface WhapiUserProfile {
   icon: string;
   icon_full: string;
   about?: string;
+  phone?: string;
 }
 
 export interface WhapiWebhookSettings {

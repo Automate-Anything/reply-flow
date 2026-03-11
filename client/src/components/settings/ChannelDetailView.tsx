@@ -4,8 +4,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Select,
@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
-  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, Users, Eye, Pencil,
+  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, Users, Eye, Pencil, ChevronDown,
   Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,9 +26,10 @@ import { useAgents } from '@/hooks/useAgents';
 import { useChannelAccess } from '@/hooks/useAccessControl';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ScheduleSection from './sections/ScheduleSection';
+import ChannelAgentContactList from './ChannelAgentContactList';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
 import type { ChannelInfo } from './channelHelpers';
-import { formatChannelName, getStatusConfig, timeAgo } from './channelHelpers';
+import { formatChannelName, formatPhoneDisplay, getStatusConfig, timeAgo } from './channelHelpers';
 
 function getStatusIcon(status: string) {
   switch (status) {
@@ -85,6 +86,9 @@ export default function ChannelDetailPage() {
 
   // AI toggle state
   const [toggling, setToggling] = useState(false);
+  const [savingMode, setSavingMode] = useState(false);
+  const [savingContactList, setSavingContactList] = useState<'test' | 'excluded' | null>(null);
+  const [modeListOpen, setModeListOpen] = useState(false);
 
   // Fetch channel data
   const fetchChannel = useCallback(async (skipStatusUpdate = false) => {
@@ -119,16 +123,19 @@ export default function ChannelDetailPage() {
   }, [fetchChannel]);
 
   // Verify status with provider when channel appears connected
+  // Also re-fetches channel data so server-synced metadata (phone number, profile) is picked up
   useEffect(() => {
     if (effectiveStatus !== 'connected') return;
     let cancelled = false;
     (async () => {
       try {
         const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
-        if (!cancelled && data.status !== 'connected') {
+        if (cancelled) return;
+        if (data.status !== 'connected') {
           setEffectiveStatus(data.status);
-          fetchChannel();
         }
+        // Always re-fetch — the health check may have synced missing metadata
+        fetchChannel(true);
       } catch {
         // ignore — keep showing DB status
       }
@@ -311,6 +318,45 @@ export default function ChannelDetailPage() {
   // Schedule section toggle
   const [scheduleExpanded, setScheduleExpanded] = useState(false);
 
+  const handleResponseModeChange = async (mode: ChannelAgentSettings['response_mode']) => {
+    setSavingMode(true);
+    try {
+      await updateSettings({ response_mode: mode });
+      setModeListOpen(true);
+      toast.success(mode === 'test' ? 'AI set to test mode' : 'AI set to live mode');
+    } catch {
+      toast.error('Failed to update AI mode');
+    } finally {
+      setSavingMode(false);
+    }
+  };
+
+  const handleTestContactsChange = async (ids: string[]) => {
+    setSavingContactList('test');
+    try {
+      await updateSettings({ test_contact_ids: ids });
+      toast.success('Test contacts updated');
+    } catch {
+      toast.error('Failed to update test contacts');
+      throw new Error('Failed to update test contacts');
+    } finally {
+      setSavingContactList(null);
+    }
+  };
+
+  const handleExcludedContactsChange = async (ids: string[]) => {
+    setSavingContactList('excluded');
+    try {
+      await updateSettings({ excluded_contact_ids: ids });
+      toast.success('Excluded contacts updated');
+    } catch {
+      toast.error('Failed to update excluded contacts');
+      throw new Error('Failed to update excluded contacts');
+    } finally {
+      setSavingContactList(null);
+    }
+  };
+
   if (loadingChannel) {
     return (
       <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -330,6 +376,27 @@ export default function ChannelDetailPage() {
   const statusConfig = getStatusConfig(effectiveStatus);
   const displayName = formatChannelName(channel);
   const assignedAgent = agents.find((a) => a.id === settings.agent_id);
+  const isTestMode = settings.response_mode === 'test';
+  const modeConfig = isTestMode
+    ? {
+        label: 'Test Mode',
+        summary: 'AI only responds to contacts on your test list.',
+        detail: 'Use this to validate behavior safely before going fully live.',
+        icon: AlertCircle,
+        badgeClass: 'border-amber-300 bg-amber-50 text-amber-700',
+        panelClass: 'border-amber-200/80 bg-linear-to-br from-amber-50 to-background',
+        activeButtonClass: 'bg-amber-100 text-amber-800 shadow-sm',
+      }
+    : {
+        label: 'Live Mode',
+        summary: 'AI responds normally, except contacts on the exclude list.',
+        detail: 'Use the exclude list for people who should always stay with a human.',
+        icon: Globe,
+        badgeClass: 'border-emerald-300 bg-emerald-50 text-emerald-700',
+        panelClass: 'border-emerald-200/80 bg-linear-to-br from-emerald-50 to-background',
+        activeButtonClass: 'bg-emerald-100 text-emerald-800 shadow-sm',
+      };
+  const ModeIcon = modeConfig.icon;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -350,7 +417,9 @@ export default function ChannelDetailPage() {
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            {channel.phone_number && <>{channel.phone_number} · </>}
+            {channel.phone_number && (
+              <>{formatPhoneDisplay(channel.phone_number)} · </>
+            )}
             Created {timeAgo(channel.created_at)}
           </p>
         </div>
@@ -489,105 +558,157 @@ export default function ChannelDetailPage() {
           <div className="flex items-center gap-3">
             <Bot className="h-5 w-5 text-primary" />
             <div className="flex-1">
-              <p className="text-sm font-medium">AI Agent</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">AI Agent</p>
+                {settings.is_enabled && (
+                  <Badge
+                    variant="outline"
+                    className={modeConfig.badgeClass}
+                  >
+                    {modeConfig.label}
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
                 {settings.is_enabled ? 'AI is responding on this channel' : 'AI is disabled for this channel'}
               </p>
             </div>
             <PlanGate>
-            <button
-              onClick={handleToggleAI}
-              disabled={toggling || loadingSettings}
-              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                toggling || loadingSettings ? 'cursor-wait opacity-60' : 'cursor-pointer'
-              } ${settings.is_enabled ? 'bg-primary' : 'bg-muted'}`}
-            >
-              <span
-                className={`pointer-events-none inline-flex h-5 w-5 items-center justify-center rounded-full bg-background shadow-lg ring-0 transition-transform ${
-                  settings.is_enabled ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              >
-                {toggling && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-              </span>
-            </button>
+              <Switch
+                checked={settings.is_enabled}
+                onCheckedChange={handleToggleAI}
+                disabled={toggling || loadingSettings}
+              />
             </PlanGate>
           </div>
 
           {settings.is_enabled && (
-            <div className="space-y-5">
+            <div className="flex flex-col gap-4">
+              {/* Response Mode */}
+              <div className="rounded-lg border p-4 space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <ModeIcon className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">{modeConfig.label}</p>
+                      <p className="text-xs text-muted-foreground">{modeConfig.summary}</p>
+                    </div>
+                  </div>
+                  <div className="inline-flex rounded-lg border bg-muted/40 p-0.5">
+                    {([
+                      { value: 'live', label: 'Live' },
+                      { value: 'test', label: 'Test' },
+                    ] as const).map((mode) => {
+                      const active = settings.response_mode === mode.value;
+                      return (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          disabled={savingMode}
+                          onClick={() => handleResponseModeChange(mode.value)}
+                          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                            active
+                              ? mode.value === 'test'
+                                ? 'bg-amber-100 text-amber-800 shadow-sm'
+                                : 'bg-emerald-100 text-emerald-800 shadow-sm'
+                              : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                          } ${savingMode ? 'opacity-60' : ''}`}
+                        >
+                          {mode.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Contact list (inline, no extra card) */}
+                <div className="border-t pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setModeListOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between text-left"
+                  >
+                    <div>
+                      <p className="text-xs font-medium">
+                        {isTestMode ? 'Test Contacts' : 'Exclude List'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {isTestMode
+                          ? `${settings.test_contact_ids.length} contact${settings.test_contact_ids.length === 1 ? '' : 's'} allowed`
+                          : `${settings.excluded_contact_ids.length} contact${settings.excluded_contact_ids.length === 1 ? '' : 's'} excluded`}
+                      </p>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 text-muted-foreground transition-transform ${modeListOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  {modeListOpen && (
+                    isTestMode ? (
+                      <div className={`mt-3 ${savingContactList === 'test' ? 'opacity-70' : ''}`}>
+                        <ChannelAgentContactList
+                          title="Test Contacts"
+                          description="Only these contacts will receive AI replies in test mode."
+                          selectedIds={settings.test_contact_ids}
+                          emptyLabel="No test contacts selected yet."
+                          onChange={handleTestContactsChange}
+                        />
+                      </div>
+                    ) : (
+                      <div className={`mt-3 ${savingContactList === 'excluded' ? 'opacity-70' : ''}`}>
+                        <ChannelAgentContactList
+                          title="Exclude List"
+                          description="AI will stay silent for these contacts."
+                          selectedIds={settings.excluded_contact_ids}
+                          emptyLabel="No excluded contacts."
+                          onChange={handleExcludedContactsChange}
+                        />
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
               {/* Agent Assignment */}
-              <div className="space-y-2">
-                <Label className="text-xs">Assigned Agent</Label>
+              <div className="rounded-lg border p-4">
                 {loadingAgents ? (
-                  <Skeleton className="h-20 w-full rounded-lg" />
+                  <Skeleton className="h-10 w-full" />
                 ) : agents.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-center">
-                    <Bot className="mx-auto h-6 w-6 text-muted-foreground/40" />
-                    <p className="mt-1 text-xs text-muted-foreground">No agents created yet.</p>
-                    <Button size="sm" variant="outline" className="mt-2" asChild>
+                  <div className="flex items-center gap-3">
+                    <Bot className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Assigned Agent</p>
+                      <p className="text-xs text-muted-foreground">No agents created yet.</p>
+                    </div>
+                    <Button size="sm" variant="outline" asChild>
                       <Link to="/ai-agents">
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
-                        Create an Agent
+                        Create Agent
                       </Link>
                     </Button>
                   </div>
                 ) : assignedAgent ? (
-                  /* Assigned agent card */
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <Bot className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">
-                          {assignedAgent.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Handles all AI replies on this channel</p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button size="sm" variant="ghost" className="h-8 text-xs" asChild>
-                          <Link to={`/ai-agents/${assignedAgent.id}?from=channel&channelId=${numericChannelId}`}>Edit</Link>
-                        </Button>
-                        <Select
-                          value={assignedAgent.id}
-                          onValueChange={handleAgentChange}
-                        >
-                          <SelectTrigger className="h-8 w-auto gap-1 border-0 bg-transparent px-2 text-xs text-muted-foreground hover:text-foreground">
-                            <SelectValue>Change</SelectValue>
-                          </SelectTrigger>
-                          <SelectContent position="popper" side="bottom" sideOffset={4}>
-                            <SelectItem value="__none__">
-                              <span className="text-muted-foreground">No agent</span>
-                            </SelectItem>
-                            {agents.map((agent) => (
-                              <SelectItem key={agent.id} value={agent.id}>
-                                {agent.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                  <div className="flex items-center gap-3">
+                    <Bot className="h-4 w-4 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{assignedAgent.name}</p>
+                      <p className="text-xs text-muted-foreground">Handles AI replies on this channel</p>
                     </div>
-                  </div>
-                ) : (
-                  /* No agent assigned — prompt to pick one */
-                  <div className="rounded-lg border border-dashed p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        <Bot className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-muted-foreground">No agent assigned</p>
-                        <p className="text-xs text-muted-foreground">AI is enabled but has no personality configured</p>
-                      </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" className="h-8 text-xs" asChild>
+                        <Link to={`/ai-agents/${assignedAgent.id}?from=channel&channelId=${numericChannelId}`}>Edit</Link>
+                      </Button>
                       <Select
-                        value="__none__"
+                        value={assignedAgent.id}
                         onValueChange={handleAgentChange}
                       >
-                        <SelectTrigger size="sm" className="h-8 w-auto shrink-0">
-                          <SelectValue>Assign Agent</SelectValue>
+                        <SelectTrigger className="h-8 w-auto gap-1 border-0 bg-transparent px-2 text-xs text-muted-foreground hover:text-foreground">
+                          <SelectValue>Change</SelectValue>
                         </SelectTrigger>
                         <SelectContent position="popper" side="bottom" sideOffset={4}>
+                          <SelectItem value="__none__">
+                            <span className="text-muted-foreground">No agent</span>
+                          </SelectItem>
                           {agents.map((agent) => (
                             <SelectItem key={agent.id} value={agent.id}>
                               {agent.name}
@@ -596,6 +717,29 @@ export default function ChannelDetailPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <Bot className="h-4 w-4 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-muted-foreground">No agent assigned</p>
+                      <p className="text-xs text-muted-foreground">AI is enabled but has no personality configured</p>
+                    </div>
+                    <Select
+                      value="__none__"
+                      onValueChange={handleAgentChange}
+                    >
+                      <SelectTrigger size="sm" className="h-8 w-auto shrink-0">
+                        <SelectValue>Assign Agent</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent position="popper" side="bottom" sideOffset={4}>
+                        {agents.map((agent) => (
+                          <SelectItem key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
               </div>

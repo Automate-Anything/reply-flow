@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Pencil, Check, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -53,9 +52,9 @@ export default function SectionCard({
 }: SectionCardProps) {
   if (!isExpanded) {
     return (
-      <Card className="transition-colors hover:border-primary/30">
-        <CardContent className="flex items-start gap-3 py-4">
-          <div className="mt-0.5 text-muted-foreground">{icon}</div>
+      <div className="rounded-lg border p-4">
+        <div className="flex items-center gap-3">
+          <div className="text-muted-foreground">{icon}</div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">{title}</p>
@@ -76,16 +75,16 @@ export default function SectionCard({
             <Pencil className="h-3 w-3" />
             {isConfigured ? 'Edit' : 'Set Up'}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   const isLastStep = step >= totalSteps - 1;
 
   return (
-    <Card className="border-primary/50 ring-1 ring-primary/20">
-      <CardContent className="space-y-4 pt-5">
+    <div className="rounded-lg border border-primary/50 ring-1 ring-primary/20 p-4">
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center gap-2">
           <div className="text-primary">{icon}</div>
@@ -151,7 +150,7 @@ export default function SectionCard({
             )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

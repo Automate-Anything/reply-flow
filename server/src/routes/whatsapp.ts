@@ -12,17 +12,23 @@ async function syncConnectedChannelMetadata(
   companyId: string,
   channelId: number,
   channelToken: string,
-  phone: string | null
+  phone: string | null,
+  whapiChannelId?: string
 ) {
   const userProfile = await whapi.getUserProfile(channelToken);
   const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
   const profileName = userProfile?.name || null;
+  // Try health phone → user profile phone → manager API phone
+  let resolvedPhone = phone || userProfile?.phone || null;
+  if (!resolvedPhone && whapiChannelId) {
+    resolvedPhone = await whapi.getChannelPhone(whapiChannelId);
+  }
 
   await supabaseAdmin
     .from('whatsapp_channels')
     .update({
       channel_status: 'connected',
-      phone_number: phone,
+      phone_number: resolvedPhone,
       profile_picture_url: profilePictureUrl,
       profile_name: profileName,
       updated_at: new Date().toISOString(),
@@ -185,7 +191,7 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
   try {
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('channel_token')
+      .select('channel_token, channel_id')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
@@ -216,7 +222,8 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
           companyId,
           Number(channelId),
           channel.channel_token,
-          phone
+          phone,
+          channel.channel_id
         );
 
         // Register webhook while we're here
@@ -284,7 +291,8 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
             companyId,
             Number(channelId),
             channel.channel_token,
-            health.phone || null
+            health.phone || null,
+            channel.channel_id
           );
         } else {
           await supabaseAdmin
@@ -323,15 +331,8 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
     try {
       health = await whapi.checkHealth(channel.channel_token);
     } catch {
-      // Provider API failed — if DB says connected, mark as disconnected
-      if (channel.channel_status === 'connected') {
-        await supabaseAdmin
-          .from('whatsapp_channels')
-          .update({ channel_status: 'disconnected', updated_at: new Date().toISOString() })
-          .eq('id', Number(channelId));
-        res.json({ status: 'disconnected', phone: null });
-        return;
-      }
+      // Provider API failed — don't change DB status on transient failures,
+      // just report what we have in the DB
       res.json({ status: channel.channel_status, phone: null });
       return;
     }
@@ -353,7 +354,8 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         companyId,
         Number(channelId),
         channel.channel_token,
-        health.phone || null
+        health.phone || null,
+        channel.channel_id
       );
 
       if (!channel.webhook_registered) {

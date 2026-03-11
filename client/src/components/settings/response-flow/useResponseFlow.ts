@@ -3,8 +3,8 @@ import type { ProfileData, ResponseFlow, Scenario, CommunicationStyle, FallbackM
 
 const DEFAULT_STYLE: CommunicationStyle = {
   tone: 'friendly',
-  response_length: 'moderate',
-  emoji_usage: 'minimal',
+  response_length: 'concise',
+  emoji_usage: 'none',
 };
 
 /**

@@ -77,6 +77,8 @@ export type ShouldAIRespondResult =
   | { action: 'outside_hours'; outsideHoursMessage: string; channelId: number }
   | { action: 'skip' };
 
+type ChannelResponseMode = 'live' | 'test';
+
 // ── Schedule helper ────────────────────────────────
 
 /**
@@ -291,7 +293,7 @@ export async function shouldAIRespond(
   // 1. Get session + channel_id
   const { data: session } = await supabaseAdmin
     .from('chat_sessions')
-    .select('channel_id, human_takeover, auto_resume_at, contact_id')
+    .select('channel_id, human_takeover, auto_resume_at, contact_id, phone_number')
     .eq('id', sessionId)
     .single();
 
@@ -300,11 +302,24 @@ export async function shouldAIRespond(
   // 2. Check per-channel AI settings
   const { data: channelSettings } = await supabaseAdmin
     .from('channel_agent_settings')
-    .select('is_enabled, custom_instructions, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message, default_language, agent_id')
+    .select('is_enabled, custom_instructions, profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message, default_language, agent_id, response_mode, test_contact_ids, excluded_contact_ids')
     .eq('channel_id', session.channel_id)
     .single();
 
   if (!channelSettings?.is_enabled) return { action: 'skip' };
+
+  const resolvedContactId = await resolveSessionContactId(companyId, session.contact_id, session.phone_number);
+  const responseMode = (channelSettings.response_mode || 'live') as ChannelResponseMode;
+  const testContactIds = Array.isArray(channelSettings.test_contact_ids) ? channelSettings.test_contact_ids : [];
+  const excludedContactIds = Array.isArray(channelSettings.excluded_contact_ids) ? channelSettings.excluded_contact_ids : [];
+
+  if (responseMode === 'test') {
+    if (!resolvedContactId || !testContactIds.includes(resolvedContactId)) {
+      return { action: 'skip' };
+    }
+  } else if (resolvedContactId && excludedContactIds.includes(resolvedContactId)) {
+    return { action: 'skip' };
+  }
 
   // 4. Check per-conversation human_takeover
   if (session.human_takeover) {
@@ -473,6 +488,25 @@ export async function shouldAIRespond(
     action: 'respond',
     context: { profileData, kbEntries: kbData, kbLowConfidence, channelOverrides, maxTokens, messages, textMessages, contactMemories, debugContext },
   };
+}
+
+async function resolveSessionContactId(
+  companyId: string,
+  contactId: string | null | undefined,
+  phoneNumber: string | null | undefined,
+): Promise<string | null> {
+  if (contactId) return contactId;
+  if (!phoneNumber) return null;
+
+  const { data: contact } = await supabaseAdmin
+    .from('contacts')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('phone_number', phoneNumber)
+    .eq('is_deleted', false)
+    .maybeSingle();
+
+  return contact?.id ?? null;
 }
 
 // ── Classification (Haiku) ─────────────────────────

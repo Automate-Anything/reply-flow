@@ -89,6 +89,20 @@ export function getSubtitle(status: string, createdAt: string): string {
   }
 }
 
+/** Format E.164 phone like +1 (973) 475-5144 */
+export function formatPhoneDisplay(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  // US/CA numbers: 1 + 10 digits
+  if (digits.length === 11 && digits.startsWith('1')) {
+    const area = digits.slice(1, 4);
+    const prefix = digits.slice(4, 7);
+    const line = digits.slice(7);
+    return `+1 (${area}) ${prefix}-${line}`;
+  }
+  // Other international: just add spaces after country code
+  return phone.startsWith('+') ? phone : `+${phone}`;
+}
+
 export function getCardBorder(status: string): string | undefined {
   switch (status) {
     case 'pending': return 'border-amber-500/30';

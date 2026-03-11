@@ -231,8 +231,8 @@ function sanitizeResponseFlow(raw: Record<string, unknown>) {
 function sanitizeStyle(raw: Record<string, unknown>) {
   return {
     tone: (VALID_TONES.has(raw.tone as string) ? raw.tone : 'friendly') as 'professional' | 'friendly' | 'casual' | 'formal',
-    response_length: (VALID_LENGTHS.has(raw.response_length as string) ? raw.response_length : 'moderate') as 'concise' | 'moderate' | 'detailed',
-    emoji_usage: (VALID_EMOJIS.has(raw.emoji_usage as string) ? raw.emoji_usage : 'minimal') as 'none' | 'minimal' | 'moderate',
+    response_length: (VALID_LENGTHS.has(raw.response_length as string) ? raw.response_length : 'concise') as 'concise' | 'moderate' | 'detailed',
+    emoji_usage: (VALID_EMOJIS.has(raw.emoji_usage as string) ? raw.emoji_usage : 'none') as 'none' | 'minimal' | 'moderate',
   };
 }
 
