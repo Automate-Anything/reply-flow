@@ -78,6 +78,14 @@ export function useConversations(
   const [conversations, setConversations] = useState<Conversation[]>(cached || []);
   const [loading, setLoading] = useState(!cached);
 
+  // Reset loading state when query parameters change (e.g. tab switch)
+  // so the UI shows a skeleton instead of stale data from the previous query.
+  useEffect(() => {
+    const nowDefault = isDefaultQuery(search, filters);
+    const hasCached = nowDefault && getCachedConversations() !== null;
+    if (!hasCached) setLoading(true);
+  }, [search, filters]);
+
   const fetchConversations = useCallback(async () => {
     try {
       const params = new URLSearchParams();
