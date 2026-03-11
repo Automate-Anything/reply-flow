@@ -314,11 +314,25 @@ export async function shouldAIRespond(
   const excludedContactIds = Array.isArray(channelSettings.excluded_contact_ids) ? channelSettings.excluded_contact_ids : [];
 
   if (responseMode === 'test') {
-    if (!resolvedContactId || !testContactIds.includes(resolvedContactId)) {
+    const isAllowedTestContact = await sessionMatchesContactFilter(
+      companyId,
+      resolvedContactId,
+      session.phone_number,
+      testContactIds,
+    );
+    if (!isAllowedTestContact) {
       return { action: 'skip' };
     }
-  } else if (resolvedContactId && excludedContactIds.includes(resolvedContactId)) {
-    return { action: 'skip' };
+  } else {
+    const isExcludedContact = await sessionMatchesContactFilter(
+      companyId,
+      resolvedContactId,
+      session.phone_number,
+      excludedContactIds,
+    );
+    if (isExcludedContact) {
+      return { action: 'skip' };
+    }
   }
 
   // 4. Check per-conversation human_takeover
@@ -507,6 +521,43 @@ async function resolveSessionContactId(
     .maybeSingle();
 
   return contact?.id ?? null;
+}
+
+function normalizePhoneForComparison(phoneNumber: string | null | undefined): string | null {
+  if (!phoneNumber) return null;
+  const normalized = phoneNumber.replace(/\D/g, '');
+  return normalized || null;
+}
+
+async function sessionMatchesContactFilter(
+  companyId: string,
+  sessionContactId: string | null,
+  sessionPhoneNumber: string | null | undefined,
+  filterContactIds: string[],
+): Promise<boolean> {
+  if (filterContactIds.length === 0) return false;
+
+  if (sessionContactId && filterContactIds.includes(sessionContactId)) {
+    return true;
+  }
+
+  const normalizedSessionPhone = normalizePhoneForComparison(sessionPhoneNumber);
+  if (!normalizedSessionPhone) return false;
+
+  const { data: filterContacts, error } = await supabaseAdmin
+    .from('contacts')
+    .select('phone_number')
+    .eq('company_id', companyId)
+    .eq('is_deleted', false)
+    .in('id', filterContactIds);
+
+  if (error || !filterContacts?.length) {
+    return false;
+  }
+
+  return filterContacts.some((contact) =>
+    normalizePhoneForComparison(contact.phone_number) === normalizedSessionPhone
+  );
 }
 
 // ── Classification (Haiku) ─────────────────────────
