@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { Clock, Download, FileText, Image as ImageIcon, Loader2, Pin, Play, Reply, Star, X } from 'lucide-react';
+import { Clock, Download, FileText, Image as ImageIcon, Loader2, Mic, Pause, Pin, Play, Reply, Star, X } from 'lucide-react';
 import type { Message } from '@/hooks/useMessages';
 import AIDebugPanel from './AIDebugPanel';
 import type { AIDebugData } from './AIDebugPanel';
@@ -90,9 +90,101 @@ function useMediaUrl(message: Message) {
   return { url, loading };
 }
 
+// ── Voice note player (WhatsApp-style) ───────────────────────────────────────
+
+function VoiceNotePlayer({ src, isOutbound }: { src: string; isOutbound: boolean }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onLoaded = () => setDuration(audio.duration || 0);
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onEnded = () => { setPlaying(false); setCurrentTime(0); };
+
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', onEnded);
+    return () => {
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, []);
+
+  const toggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); } else { audio.play(); }
+    setPlaying(!playing);
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audio.currentTime = pct * duration;
+    setCurrentTime(pct * duration);
+  };
+
+  const progress = duration ? (currentTime / duration) * 100 : 0;
+
+  const fmt = (s: number) => {
+    if (!s || !isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <button
+        onClick={toggle}
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+          isOutbound
+            ? 'bg-white/20 hover:bg-white/30 text-white'
+            : 'bg-primary/10 hover:bg-primary/20 text-primary'
+        )}
+      >
+        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+      </button>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div
+          className={cn(
+            'relative h-1.5 w-full cursor-pointer rounded-full',
+            isOutbound ? 'bg-white/20' : 'bg-muted-foreground/20'
+          )}
+          onClick={seek}
+        >
+          <div
+            className={cn(
+              'absolute left-0 top-0 h-full rounded-full transition-[width] duration-100',
+              isOutbound ? 'bg-white/70' : 'bg-primary/60'
+            )}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Mic className={cn('h-3 w-3', isOutbound ? 'text-white/60' : 'text-muted-foreground')} />
+          <span className={cn('text-[10px]', isOutbound ? 'text-white/60' : 'text-muted-foreground')}>
+            {playing ? fmt(currentTime) : fmt(duration)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Media renderers ──────────────────────────────────────────────────────────
 
-function MediaContent({ message, mediaUrl, mediaLoading }: { message: Message; mediaUrl: string | null; mediaLoading: boolean }) {
+function MediaContent({ message, mediaUrl, mediaLoading, isOutbound }: { message: Message; mediaUrl: string | null; mediaLoading: boolean; isOutbound: boolean }) {
   const [imageExpanded, setImageExpanded] = useState(false);
   const mime = message.media_mime_type || '';
   const type = message.message_type;
@@ -110,7 +202,7 @@ function MediaContent({ message, mediaUrl, mediaLoading }: { message: Message; m
     // No media URL yet — show placeholder based on type
     if (type === 'image') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><ImageIcon className="h-4 w-4" /><span>Image</span></div>;
     if (type === 'video') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Play className="h-4 w-4" /><span>Video</span></div>;
-    if (type === 'audio') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Play className="h-4 w-4" /><span>Audio</span></div>;
+    if (type === 'audio' || type === 'ptt') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Mic className="h-4 w-4" /><span>Voice message</span></div>;
     if (type === 'document') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><FileText className="h-4 w-4" /><span>{message.media_filename || 'Document'}</span></div>;
     return null;
   }
@@ -156,15 +248,8 @@ function MediaContent({ message, mediaUrl, mediaLoading }: { message: Message; m
     );
   }
 
-  if (type === 'audio' || mime.startsWith('audio/')) {
-    return (
-      <audio
-        src={mediaUrl}
-        controls
-        className="w-full max-w-[240px]"
-        preload="metadata"
-      />
-    );
+  if (type === 'audio' || type === 'ptt' || mime.startsWith('audio/')) {
+    return <VoiceNotePlayer src={mediaUrl} isOutbound={isOutbound} />;
   }
 
   if (type === 'document') {
@@ -198,7 +283,7 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
 
   const hasMedia = !!message.media_storage_path;
   const { url: mediaUrl, loading: mediaLoading } = useMediaUrl(message);
-  const isMediaType = ['image', 'video', 'audio', 'document'].includes(message.message_type);
+  const isMediaType = ['image', 'video', 'audio', 'ptt', 'document'].includes(message.message_type);
   const caption = message.message_body;
   // Don't show placeholder text as caption (e.g. "[Image]", "[Audio message]")
   const isPlaceholder = caption && /^\[.+\]$/.test(caption.trim());
@@ -282,7 +367,7 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
           {/* Media content */}
           {isMediaType && hasMedia && (
             <div className="mb-1">
-              <MediaContent message={message} mediaUrl={mediaUrl} mediaLoading={mediaLoading} />
+              <MediaContent message={message} mediaUrl={mediaUrl} mediaLoading={mediaLoading} isOutbound={isOutbound} />
             </div>
           )}
 

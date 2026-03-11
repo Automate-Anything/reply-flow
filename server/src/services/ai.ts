@@ -238,7 +238,7 @@ async function buildMultimodalMessages(rows: RecentMessageRow[]): Promise<AIMess
     }
 
     // Audio: include transcript
-    if (row.message_type === 'audio' && row.media_transcript) {
+    if ((row.message_type === 'audio' || row.message_type === 'ptt') && row.media_transcript) {
       blocks.push({
         type: 'text',
         text: `[Voice message transcript]: ${row.media_transcript}`,

@@ -58,7 +58,7 @@ function extractMessageBody(msg: WhapiIncomingMessage): string {
   if (msg.image?.caption) return msg.image.caption;
   if (msg.video?.caption) return msg.video.caption;
   if (msg.document?.filename) return `[Document: ${msg.document.filename}]`;
-  if (msg.audio) return '[Audio message]';
+  if (msg.audio) return '[Voice message]';
   if (msg.image) return '[Image]';
   if (msg.video) return '[Video]';
   return `[${msg.type || 'Unknown'} message]`;
@@ -302,6 +302,7 @@ export async function processIncomingMessage(
 
   // 4. Build metadata (media + reply context)
   const metadata: Record<string, unknown> = {};
+  // For ptt (push-to-talk / voice notes), the audio data is in the audio field
   const mediaPayload = msg.image || msg.document || msg.audio || msg.video;
   if (mediaPayload) {
     metadata.media = mediaPayload;
@@ -330,7 +331,7 @@ export async function processIncomingMessage(
       chat_id_normalized: chatId,
       phone_number: phoneNumber,
       message_body: messageBody,
-      message_type: msg.type || 'text',
+      message_type: msg.type === 'ptt' ? 'audio' : (msg.type || 'text'),
       message_id_normalized: msg.id,
       direction: isOutbound ? 'outbound' : 'inbound',
       sender_type: isOutbound ? 'human' : 'contact',
@@ -462,7 +463,7 @@ async function processMedia(
   const updateFields: Record<string, unknown> = { media_storage_path: storagePath };
 
   // 2. Extract content for AI based on message type
-  if (messageType === 'audio') {
+  if (messageType === 'audio' || messageType === 'ptt') {
     const transcript = await extractAudioTranscript(storagePath, mimeType);
     if (transcript) {
       // Store transcript for AI only — don't overwrite message_body
