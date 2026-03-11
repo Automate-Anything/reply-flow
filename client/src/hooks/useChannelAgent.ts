@@ -9,6 +9,7 @@ export interface ChannelAgentSettings {
   profile_data: ProfileData;
   max_tokens: number;
   schedule_mode: ScheduleMode;
+  schedule_configured: boolean;
   ai_schedule: BusinessHours | null;
   outside_hours_message: string | null;
   default_language: string;
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS: ChannelAgentSettings = {
   profile_data: {},
   max_tokens: 500,
   schedule_mode: 'always_on',
+  schedule_configured: false,
   ai_schedule: null,
   outside_hours_message: null,
   default_language: 'en',

@@ -9,6 +9,8 @@ interface SectionCardProps {
   title: string;
   isConfigured: boolean;
   summary: ReactNode;
+  statusLabel?: ReactNode;
+  headerNote?: ReactNode;
   isExpanded: boolean;
   onToggle: () => void;
   // Editor props (only used when expanded)
@@ -34,6 +36,8 @@ export default function SectionCard({
   title,
   isConfigured,
   summary,
+  statusLabel,
+  headerNote,
   isExpanded,
   onToggle,
   children,
@@ -66,8 +70,11 @@ export default function SectionCard({
                     : 'bg-muted text-muted-foreground'
                 )}
               >
-                {isConfigured ? 'Configured' : 'Not configured'}
+                {statusLabel ?? (isConfigured ? 'Configured' : 'Not configured')}
               </span>
+              {headerNote && (
+                <span className="text-xs text-muted-foreground">{headerNote}</span>
+              )}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">{summary}</div>
           </div>

@@ -307,6 +307,7 @@ export async function shouldAIRespond(
     .single();
 
   if (!channelSettings?.is_enabled) return { action: 'skip' };
+  if (!channelSettings.agent_id) return { action: 'skip' };
 
   const resolvedContactId = await resolveSessionContactId(companyId, session.contact_id, session.phone_number);
   const responseMode = (channelSettings.response_mode || 'live') as ChannelResponseMode;
