@@ -386,7 +386,7 @@ router.post('/change-plan', requirePermission('billing', 'manage'), async (req, 
       return;
     }
 
-    const { plan_id } = req.body;
+    const { plan_id, coupon_code } = req.body;
     if (!plan_id) {
       res.status(400).json({ error: 'plan_id is required' });
       return;
@@ -430,11 +430,20 @@ router.post('/change-plan', requirePermission('billing', 'manage'), async (req, 
       return;
     }
 
-    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+    const updateParams: Stripe.SubscriptionUpdateParams = {
       items: [{ id: itemId, price: plan.stripe_price_id }],
       proration_behavior: 'create_prorations',
-      cancel_at_period_end: false, // Clear any pending cancellation on plan change
-    });
+      cancel_at_period_end: false,
+    };
+
+    if (coupon_code) {
+      const coupon = await resolveCouponCode(coupon_code);
+      if (coupon) {
+        updateParams.discounts = [{ coupon: coupon.stripe_coupon_id }];
+      }
+    }
+
+    await stripe.subscriptions.update(sub.stripe_subscription_id, updateParams);
 
     // Optimistically update plan_id and clear cancel_at_period_end in DB now.
     // The webhook (customer.subscription.updated) will also sync shortly.

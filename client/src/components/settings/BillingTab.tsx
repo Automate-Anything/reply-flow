@@ -372,7 +372,10 @@ export default function BillingTab() {
   const handleChangePlan = async (planId: PlanId) => {
     setChangingPlan(planId);
     try {
-      await api.post('/billing/change-plan', { plan_id: planId });
+      await api.post('/billing/change-plan', {
+        plan_id: planId,
+        ...(appliedCoupon ? { coupon_code: appliedCoupon } : {}),
+      });
       const direction = activePlanId ? getPlanDirection(activePlanId, planId) : 'upgrade';
       toast.success(`Plan ${direction === 'upgrade' ? 'upgraded' : 'downgraded'} successfully.`);
       await fetchSubscription();
@@ -588,21 +591,53 @@ export default function BillingTab() {
 
       {/* Current plan banner (active paid subscribers, not on trial) */}
       {activePlanId && !isTrialing && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          <span>
-            Current plan: <span className="font-semibold">{activePlanName}</span>
-          </span>
+        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm space-y-2">
+          <div className="flex items-center justify-between">
+            <span>
+              Current plan: <span className="font-semibold">{activePlanName}</span>
+            </span>
+            {hasStripeSubscription && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleManageSubscription}
+                disabled={redirecting}
+                className="gap-1.5 text-muted-foreground"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Manage Payment Method
+              </Button>
+            )}
+          </div>
+          {/* Coupon input for plan changes */}
           {hasStripeSubscription && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleManageSubscription}
-              disabled={redirecting}
-              className="gap-1.5 text-muted-foreground"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Manage Payment Method
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="relative max-w-xs flex-1">
+                <Tag className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="h-7 pl-7 pr-8 text-xs uppercase placeholder:normal-case placeholder:text-muted-foreground"
+                  placeholder="Coupon code (optional)"
+                  value={couponInput}
+                  onChange={(e) => handleCouponChange(e.target.value)}
+                />
+                {couponInput && (
+                  <button
+                    onClick={() => { setCouponInput(''); setCouponState('idle'); setCouponDescription(null); setAppliedCoupon(null); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {couponState === 'checking' && <span className="text-xs text-muted-foreground">Checking…</span>}
+              {couponState === 'valid' && (
+                <span className="text-xs font-medium text-green-600">
+                  <Check className="mr-1 inline h-3.5 w-3.5" />
+                  {couponDescription ?? 'Discount applied'}
+                </span>
+              )}
+              {couponState === 'invalid' && <span className="text-xs text-destructive">Invalid code</span>}
+            </div>
           )}
         </div>
       )}
