@@ -735,7 +735,7 @@ export default function BillingTab() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground max-w-xs">
-              Pre-fund overages so usage continues uninterrupted. Not required — overages can also be charged directly to your payment method.
+              Pre-fund overages so usage continues uninterrupted.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               {TOPUP_PRESETS.map((preset) => (
