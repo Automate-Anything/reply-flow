@@ -293,19 +293,26 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
       />
 
       {/* Schedule send button */}
-      <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+      <Popover
+        open={scheduleOpen}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen && !planLoading && !hasActivePlan) {
+            openNoPlanModal();
+            return;
+          }
+          setScheduleOpen(nextOpen);
+        }}
+      >
         <PopoverTrigger asChild>
-          <PlanGate>
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={!hasText || disabled || sending}
-              className="h-9 w-9 shrink-0"
-              title="Schedule message"
-            >
-              <Clock className="h-4 w-4" />
-            </Button>
-          </PlanGate>
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={!hasText || disabled || sending}
+            className="h-9 w-9 shrink-0"
+            title="Schedule message"
+          >
+            <Clock className="h-4 w-4" />
+          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" side="top" sideOffset={8} className="w-56 p-2">
           <p className="px-2 py-1 text-xs font-medium text-muted-foreground">Schedule send</p>

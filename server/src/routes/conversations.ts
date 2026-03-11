@@ -139,13 +139,6 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       query = query.in('id', labelSessionIds);
     }
 
-    // Snoozed filter: by default hide snoozed, unless explicitly requesting them
-    if (snoozed === 'true') {
-      query = query.not('snoozed_until', 'is', null).gt('snoozed_until', new Date().toISOString());
-    } else {
-      query = query.or(`snoozed_until.is.null,snoozed_until.lte.${new Date().toISOString()}`);
-    }
-
     // Search
     if (search) {
       query = query.or(
@@ -188,6 +181,8 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
+    const nowIso = new Date().toISOString();
+
     // Post-filter for unread: sessions with marked_unread OR actual unread messages
     let filteredData = data || [];
     if (unread === 'true') {
@@ -195,6 +190,13 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
         (s) => s.marked_unread === true || (unreadMap[s.id] || 0) > 0
       );
     }
+
+    // Post-filter for snoozed state to avoid conflicts with other top-level OR filters
+    filteredData = filteredData.filter((session) => {
+      const isCurrentlySnoozed =
+        !!session.snoozed_until && new Date(session.snoozed_until).toISOString() > nowIso;
+      return snoozed === 'true' ? isCurrentlySnoozed : !isCurrentlySnoozed;
+    });
 
     // Get session counts per contact for "returning contact" indicators
     const contactIds = [...new Set(filteredData.map((s) => s.contact_id).filter(Boolean))];
@@ -225,7 +227,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
         assigned_user: s.assigned_user || null,
       }));
 
-    res.json({ sessions, count });
+    res.json({ sessions, count: filteredData.length });
   } catch (err) {
     next(err);
   }
