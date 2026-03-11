@@ -21,6 +21,7 @@ import ChannelDetailPage from '@/components/settings/ChannelDetailView';
 import AIAgentsPage from '@/pages/AIAgentsPage';
 import AgentDetailPage from '@/pages/AgentDetailPage';
 import SuperAdminPage from '@/pages/SuperAdminPage';
+import BillingPage from '@/pages/BillingPage';
 import DebugOverlay from '@/components/debug/DebugOverlay';
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
               <Route path="/invite/:token" element={<AcceptInvitePage />} />
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route element={<ProtectedRoute />}>
+                <Route path="plans" element={<BillingPage />} />
                 <Route element={<PlanProvider><AppLayout /></PlanProvider>}>
                   <Route index element={<DashboardPage />} />
                   <Route path="inbox" element={<InboxPage />} />

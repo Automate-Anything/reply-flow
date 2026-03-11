@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { formatTime as formatTimestamp, formatScheduledTime } from '@/lib/timezone';
+import { useSession } from '@/contexts/SessionContext';
 import { Clock, Download, FileText, Image as ImageIcon, Loader2, Mic, Pause, Pin, Play, Reply, Star, X } from 'lucide-react';
 import type { Message } from '@/hooks/useMessages';
 import AIDebugPanel from './AIDebugPanel';
@@ -18,26 +20,6 @@ interface MessageBubbleProps {
   onCancelScheduled?: (messageId: string) => Promise<void>;
   onReply?: (message: Message) => void;
   isDebugMode?: boolean;
-}
-
-function formatTimestamp(ts: string | null): string {
-  if (!ts) return '';
-  return new Date(ts).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatScheduledTime(ts: string): string {
-  const date = new Date(ts);
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  const diffH = Math.floor(diffMs / 3_600_000);
-
-  if (diffMs <= 0) return 'Sending...';
-  if (diffH < 1) return `in ${Math.ceil(diffMs / 60_000)}m`;
-  if (diffH < 24) return `in ${diffH}h`;
-  return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 function groupReactions(reactions: Array<{ emoji: string; user_id: string }>): Array<{ emoji: string; count: number }> {
@@ -273,6 +255,7 @@ function MediaContent({ message, mediaUrl, mediaLoading, isOutbound }: { message
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function MessageBubble({ message, onCancelScheduled, onReply, isDebugMode }: MessageBubbleProps) {
+  const { companyTimezone: tz } = useSession();
   const isOutbound = message.direction === 'outbound';
   const isAI = message.sender_type === 'ai';
   const isHuman = message.sender_type === 'human';
@@ -312,7 +295,7 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
         {isScheduled && (
           <div className="mb-1 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
             <Clock className="h-3 w-3" />
-            <span>Scheduled {formatScheduledTime(message.scheduled_for!)}</span>
+            <span>Scheduled {formatScheduledTime(message.scheduled_for!, tz)}</span>
             {onCancelScheduled && (
               <button
                 onClick={() => onCancelScheduled(message.id)}
@@ -400,7 +383,7 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
             >
               {message.is_pinned && <Pin className="h-2.5 w-2.5" />}
               {message.is_starred && <Star className="h-2.5 w-2.5 fill-current" />}
-              <span>{formatTimestamp(message.message_ts || message.created_at)}</span>
+              <span>{formatTimestamp(message.message_ts || message.created_at, tz)}</span>
             </div>
           )}
         </div>

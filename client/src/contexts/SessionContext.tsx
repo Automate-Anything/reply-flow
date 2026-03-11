@@ -13,7 +13,7 @@ import api from '@/lib/api';
 
 interface MeResponse {
   profile: { id: string; email: string; full_name: string; avatar_url: string | null };
-  company: { id: string; name: string; slug: string | null; logo_url: string | null } | null;
+  company: { id: string; name: string; slug: string | null; logo_url: string | null; timezone: string | null } | null;
   role: { id: string; name: string; hierarchy_level: number } | null;
   permissions: string[];
   is_super_admin?: boolean;
@@ -28,6 +28,7 @@ interface SessionContextType {
   avatarUrl: string | null;
   companyId: string | null;
   companyName: string | null;
+  companyTimezone: string;
   role: string | null;
   permissions: Set<string>;
   hasPermission: (resource: string, action: string) => boolean;
@@ -57,10 +58,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [companyTimezone, setCompanyTimezone] = useState('UTC');
   const [role, setRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+  const sessionRef = useRef(session);
 
   const hasPermission = useCallback(
     (resource: string, action: string) => {
@@ -78,6 +81,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setAvatarUrl(data.profile?.avatar_url ?? null);
       setCompanyId(data.company?.id ?? null);
       setCompanyName(data.company?.name ?? null);
+      setCompanyTimezone(data.company?.timezone || 'UTC');
       setRole(data.role?.name ?? null);
       setPermissions(new Set(data.permissions));
       setIsSuperAdmin(data.is_super_admin || false);
@@ -89,6 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const updateSession = useCallback((newSession: Session | null) => {
     setSession(newSession);
+    sessionRef.current = newSession;
     if (newSession) {
       localStorage.setItem(CACHE_KEY, JSON.stringify(newSession));
     } else {
@@ -97,6 +102,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setAvatarUrl(null);
       setCompanyId(null);
       setCompanyName(null);
+      setCompanyTimezone('UTC');
       setRole(null);
       setPermissions(new Set());
       setIsSuperAdmin(false);
@@ -144,14 +150,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        // Avoid unnecessary updates on tab focus after first load
-        if (hasLoadedOnceRef.current) {
-          if (newSession) setLoading(true);
+      async (event, newSession) => {
+        if (!hasLoadedOnceRef.current) return;
+
+        // Token refresh / re-sign-in on tab focus — just update the token silently
+        if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
           updateSession(newSession);
-          if (newSession) await fetchMe();
-          setLoading(false);
+          return;
         }
+
+        // For SIGNED_IN, check if user actually changed (tab focus also fires SIGNED_IN)
+        const prevUserId = sessionRef.current?.user?.id;
+        const newUserId = newSession?.user?.id;
+        if (event === 'SIGNED_IN' && prevUserId && prevUserId === newUserId) {
+          updateSession(newSession);
+          return;
+        }
+
+        // Real auth changes (new sign-in, sign-out, password recovery, etc.)
+        if (newSession) setLoading(true);
+        updateSession(newSession);
+        if (newSession) await fetchMe();
+        setLoading(false);
       }
     );
 
@@ -178,6 +198,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     avatarUrl,
     companyId,
     companyName,
+    companyTimezone,
     role,
     permissions,
     hasPermission,

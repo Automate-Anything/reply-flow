@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Send, Zap, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
+import { useSession } from '@/contexts/SessionContext';
 import { useCannedResponses, type CannedResponse } from '@/hooks/useCannedResponses';
 import type { Message } from '@/hooks/useMessages';
 import { PlanGate } from '@/components/auth/PlanGate';
@@ -18,39 +20,17 @@ interface MessageInputProps {
   onCancelReply?: () => void;
 }
 
-function getSchedulePresets(): { label: string; getDate: () => Date }[] {
+function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }[] {
   return [
-    {
-      label: 'In 1 hour',
-      getDate: () => new Date(Date.now() + 3_600_000),
-    },
-    {
-      label: 'In 3 hours',
-      getDate: () => new Date(Date.now() + 3 * 3_600_000),
-    },
-    {
-      label: 'Tomorrow 9am',
-      getDate: () => {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        d.setHours(9, 0, 0, 0);
-        return d;
-      },
-    },
-    {
-      label: 'Next Monday 9am',
-      getDate: () => {
-        const d = new Date();
-        const daysUntilMonday = ((8 - d.getDay()) % 7) || 7;
-        d.setDate(d.getDate() + daysUntilMonday);
-        d.setHours(9, 0, 0, 0);
-        return d;
-      },
-    },
+    { label: 'In 1 hour', getDate: () => new Date(Date.now() + 3_600_000) },
+    { label: 'In 3 hours', getDate: () => new Date(Date.now() + 3 * 3_600_000) },
+    { label: 'Tomorrow 9am', getDate: () => getTomorrowAt(tz, 9) },
+    { label: 'Next Monday 9am', getDate: () => getNextMondayAt(tz, 9) },
   ];
 }
 
 export default function MessageInput({ onSend, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply }: MessageInputProps) {
+  const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
   const [sending, setSending] = useState(false);
@@ -206,7 +186,7 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
     }
   }, [text]);
 
-  const presets = getSchedulePresets();
+  const presets = getSchedulePresets(companyTimezone);
   const hasText = text.trim().length > 0;
 
   // Minimum datetime-local value (now + 1 min)
@@ -315,7 +295,10 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" side="top" sideOffset={8} className="w-56 p-2">
-          <p className="px-2 py-1 text-xs font-medium text-muted-foreground">Schedule send</p>
+          <div className="flex items-center justify-between px-2 py-1">
+            <p className="text-xs font-medium text-muted-foreground">Schedule send</p>
+            <span className="text-[10px] text-muted-foreground">{companyTimezone}</span>
+          </div>
           {presets.map((preset) => (
             <button
               key={preset.label}

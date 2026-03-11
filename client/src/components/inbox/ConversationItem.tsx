@@ -1,8 +1,10 @@
 import { cn } from '@/lib/utils';
+import { formatRelativeDate, formatSnoozeUntil } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Clock, Pin, RotateCcw, Star } from 'lucide-react';
+import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 
@@ -22,32 +24,6 @@ function getStatusLabel(status: string): string | null {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function formatSnoozeUntil(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  if (diffMs <= 0) return 'Snoozed';
-  const diffH = Math.floor(diffMs / 3_600_000);
-  if (diffH < 1) return `Snoozed · ${Math.ceil(diffMs / 60_000)}m`;
-  if (diffH < 24) return `Snoozed · ${diffH}h`;
-  return `Snoozed · ${date.toLocaleDateString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`;
-}
-
-function formatTime(dateStr: string | null): string {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const dayMs = 86_400_000;
-
-  if (diff < dayMs) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-  if (diff < 7 * dayMs) {
-    return date.toLocaleDateString([], { weekday: 'short' });
-  }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
 
 export default function ConversationItem({
   conversation,
@@ -58,6 +34,7 @@ export default function ConversationItem({
   selected,
   onToggleSelect,
 }: ConversationItemProps) {
+  const { companyTimezone: tz } = useSession();
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const name = conversation.contact_name || conversation.phone_number;
   const initial = (name[0] || '?').toUpperCase();
@@ -128,7 +105,7 @@ export default function ConversationItem({
               <Clock className="h-3 w-3 text-muted-foreground" />
             )}
             <span className="text-[11px] text-muted-foreground">
-              {formatTime(conversation.last_message_at)}
+              {formatRelativeDate(conversation.last_message_at, tz)}
             </span>
           </div>
         </div>
@@ -186,7 +163,7 @@ export default function ConversationItem({
                 className="h-4 px-1.5 text-[10px] gap-0.5"
               >
                 <Clock className="h-2.5 w-2.5" />
-                {formatSnoozeUntil(conversation.snoozed_until!)}
+                {formatSnoozeUntil(conversation.snoozed_until!, tz)}
               </Badge>
             )}
             {statusLabel && (

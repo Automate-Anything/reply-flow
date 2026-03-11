@@ -10,31 +10,16 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Clock, Loader2 } from 'lucide-react';
+import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
+import { useSession } from '@/contexts/SessionContext';
 import type { ScheduledMessage } from '@/hooks/useScheduledMessages';
 
-function getSchedulePresets(): { label: string; getDate: () => Date }[] {
+function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }[] {
   return [
     { label: 'In 1 hour', getDate: () => new Date(Date.now() + 3_600_000) },
     { label: 'In 3 hours', getDate: () => new Date(Date.now() + 3 * 3_600_000) },
-    {
-      label: 'Tomorrow 9am',
-      getDate: () => {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        d.setHours(9, 0, 0, 0);
-        return d;
-      },
-    },
-    {
-      label: 'Next Monday 9am',
-      getDate: () => {
-        const d = new Date();
-        const daysUntilMonday = ((8 - d.getDay()) % 7) || 7;
-        d.setDate(d.getDate() + daysUntilMonday);
-        d.setHours(9, 0, 0, 0);
-        return d;
-      },
-    },
+    { label: 'Tomorrow 9am', getDate: () => getTomorrowAt(tz, 9) },
+    { label: 'Next Monday 9am', getDate: () => getNextMondayAt(tz, 9) },
   ];
 }
 
@@ -49,6 +34,7 @@ export default function ScheduledMessageEditDialog({
   onClose,
   onSave,
 }: ScheduledMessageEditDialogProps) {
+  const { companyTimezone } = useSession();
   const [body, setBody] = useState('');
   const [scheduledFor, setScheduledFor] = useState('');
   const [saving, setSaving] = useState(false);
@@ -89,7 +75,7 @@ export default function ScheduledMessageEditDialog({
     return new Date(local).toISOString();
   };
 
-  const presets = getSchedulePresets();
+  const presets = getSchedulePresets(companyTimezone);
 
   return (
     <Dialog open={!!message} onOpenChange={(open) => { if (!open) onClose(); }}>

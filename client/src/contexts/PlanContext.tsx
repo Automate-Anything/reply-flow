@@ -1,15 +1,6 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 
 interface PlanContextType {
   hasActivePlan: boolean;
@@ -27,7 +18,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [hasActivePlan, setHasActivePlan] = useState(true);
   const [planLoading, setPlanLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     api.get('/billing/subscription')
@@ -39,32 +29,28 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       .finally(() => setPlanLoading(false));
   }, []);
 
+  // Redirect to /plans when no active subscription
+  useEffect(() => {
+    if (!planLoading && !hasActivePlan) {
+      navigate('/plans', { replace: true });
+    }
+  }, [planLoading, hasActivePlan, navigate]);
+
+  const openNoPlanModal = useCallback(() => {
+    navigate('/plans');
+  }, [navigate]);
+
+  if (planLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
-    <PlanContext.Provider value={{ hasActivePlan, planLoading, openNoPlanModal: () => setModalOpen(true) }}>
+    <PlanContext.Provider value={{ hasActivePlan, planLoading, openNoPlanModal }}>
       {children}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>No Active Plan</DialogTitle>
-            <DialogDescription>
-              You need an active subscription to use this feature. Choose a plan to get started.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                setModalOpen(false);
-                navigate('/settings?tab=billing');
-              }}
-            >
-              View Plans
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </PlanContext.Provider>
   );
 }

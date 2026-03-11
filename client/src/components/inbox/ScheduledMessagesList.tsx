@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CalendarClock, Clock, MoreVertical, Pencil, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { formatScheduledTime } from '@/lib/timezone';
 import type { ScheduledMessage } from '@/hooks/useScheduledMessages';
 import type { ConversationFilters } from '@/hooks/useConversations';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
@@ -36,27 +37,6 @@ interface ScheduledMessagesListProps {
   tabBar?: React.ReactNode;
 }
 
-function formatScheduledTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-
-  if (diffMs <= 0) return 'Sending soon...';
-
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 60) return `In ${diffMin}m`;
-
-  const diffH = Math.floor(diffMs / 3_600_000);
-  if (diffH < 24) return `In ${diffH}h`;
-
-  return date.toLocaleDateString([], {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 export default function ScheduledMessagesList({
   messages,
@@ -73,7 +53,7 @@ export default function ScheduledMessagesList({
 }: ScheduledMessagesListProps) {
   const [editingMessage, setEditingMessage] = useState<ScheduledMessage | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const { user } = useSession();
+  const { user, companyTimezone: tz } = useSession();
 
   const filteredMessages = messages.filter((msg) => {
     const contactName = msg.session?.contact_name || msg.session?.phone_number || '';
@@ -240,7 +220,7 @@ export default function ScheduledMessagesList({
                       className="h-4 gap-0.5 px-1.5 text-[10px]"
                     >
                       <Clock className="h-2.5 w-2.5" />
-                      {formatScheduledTime(msg.scheduled_for)}
+                      {formatScheduledTime(msg.scheduled_for, tz)}
                     </Badge>
                   </div>
                 </div>

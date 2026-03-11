@@ -63,7 +63,7 @@ export default function OnboardingPage() {
     try {
       await api.post('/company/create');
       await refresh();
-      navigate('/', { replace: true });
+      navigate('/plans', { replace: true });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data

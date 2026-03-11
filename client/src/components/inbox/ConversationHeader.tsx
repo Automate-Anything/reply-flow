@@ -40,6 +40,8 @@ import {
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
+import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
@@ -84,25 +86,10 @@ const SNOOZE_OPTIONS = [
   { label: 'Next week', hours: -2 },
 ];
 
-function getSnoozeUntil(option: (typeof SNOOZE_OPTIONS)[number]): string {
-  const now = new Date();
-  if (option.hours === -1) {
-    // Tomorrow 9am
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(9, 0, 0, 0);
-    return tomorrow.toISOString();
-  }
-  if (option.hours === -2) {
-    // Next Monday 9am
-    const nextMonday = new Date(now);
-    const dayOfWeek = nextMonday.getDay();
-    const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
-    nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
-    nextMonday.setHours(9, 0, 0, 0);
-    return nextMonday.toISOString();
-  }
-  return new Date(now.getTime() + option.hours * 3600000).toISOString();
+function getSnoozeUntil(option: (typeof SNOOZE_OPTIONS)[number], tz?: string): string {
+  if (option.hours === -1) return getTomorrowAt(tz, 9).toISOString();
+  if (option.hours === -2) return getNextMondayAt(tz, 9).toISOString();
+  return new Date(Date.now() + option.hours * 3600000).toISOString();
 }
 
 export default function ConversationHeader({
@@ -119,6 +106,7 @@ export default function ConversationHeader({
   notesPanelOpen,
   onLabelsCreated,
 }: ConversationHeaderProps) {
+  const { companyTimezone } = useSession();
   const [allLabels, setAllLabels] = useState<LabelOption[]>([]);
   const [labelLoading, setLabelLoading] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
@@ -521,7 +509,7 @@ export default function ConversationHeader({
                   <DropdownMenuItem
                     key={opt.label}
                     onClick={() =>
-                      patchConversation({ snoozed_until: getSnoozeUntil(opt) })
+                      patchConversation({ snoozed_until: getSnoozeUntil(opt, companyTimezone) })
                     }
                   >
                     {opt.label}

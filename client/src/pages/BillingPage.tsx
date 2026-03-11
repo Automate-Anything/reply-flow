@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import api from '@/lib/api';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 
 type PlanId = 'starter' | 'pro' | 'scale';
@@ -100,12 +100,14 @@ const TOPUP_PRESETS = [
 ];
 
 export default function BillingPage() {
+  const navigate = useNavigate();
   const [activePlanId, setActivePlanId] = useState<PlanId | null>(null);
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false);
   const [selected, setSelected] = useState<PlanId | null>(null);
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const { hasPermission } = useSession();
   const canManage = hasPermission('billing', 'manage');
 
@@ -128,6 +130,7 @@ export default function BillingPage() {
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       toast.success('Subscription activated! Welcome aboard.');
+      setCheckoutSuccess(true);
       setSearchParams((prev) => { prev.delete('success'); return prev; }, { replace: true });
     }
     if (searchParams.get('topup') === 'success') {
@@ -279,6 +282,17 @@ export default function BillingPage() {
           </Button>
         )}
       </div>
+
+      {checkoutSuccess && (
+        <div className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-900 dark:bg-green-950">
+          <p className="text-sm font-medium text-green-800 dark:text-green-200">
+            Your subscription is active. You're all set!
+          </p>
+          <Button size="sm" onClick={() => navigate('/', { replace: true })}>
+            Go to Dashboard
+          </Button>
+        </div>
+      )}
 
       {loading && (
         <div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>

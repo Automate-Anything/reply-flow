@@ -195,8 +195,8 @@ router.post('/create-checkout-session', requirePermission('billing', 'manage'), 
       mode: 'subscription',
       line_items: [{ price: plan.stripe_price_id, quantity: 1 }],
       metadata: { company_id: companyId, plan_id },
-      success_url: `${env.CLIENT_URL}/settings?tab=billing&success=true`,
-      cancel_url: `${env.CLIENT_URL}/settings?tab=billing`,
+      success_url: `${env.CLIENT_URL}/plans?success=true`,
+      cancel_url: `${env.CLIENT_URL}/plans`,
     };
 
     if (with_trial) {
