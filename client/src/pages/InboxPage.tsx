@@ -9,6 +9,7 @@ import { useScheduledMessages } from '@/hooks/useScheduledMessages';
 import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { useConversationStatuses } from '@/hooks/useConversationStatuses';
+import { useConversationPriorities } from '@/hooks/useConversationPriorities';
 import ConversationList from '@/components/inbox/ConversationList';
 import ConversationHeader from '@/components/inbox/ConversationHeader';
 import MessageThread from '@/components/inbox/MessageThread';
@@ -61,6 +62,7 @@ export default function InboxPage() {
   } = useScheduledMessages(activeTab === 'scheduled');
   const { members: teamMembers } = useTeamMembers(needsConversationSupport);
   const { statuses: conversationStatuses } = useConversationStatuses(needsConversationSupport);
+  const { priorities: conversationPriorities } = useConversationPriorities(needsConversationSupport);
 
   // Fetch labels for bulk actions
   const refreshLabels = useCallback(() => {
@@ -298,6 +300,12 @@ export default function InboxPage() {
               loading={scheduledLoading}
               onUpdate={updateScheduledMessage}
               onCancel={cancelScheduledMsg}
+              search={search}
+              onSearchChange={setSearch}
+              filters={filters}
+              onFiltersChange={setFilters}
+              statuses={conversationStatuses}
+              priorities={conversationPriorities}
               tabBar={tabBar}
             />
           ) : inboxToolsOpen ? (
@@ -325,6 +333,7 @@ export default function InboxPage() {
               onLabelsCreated={refreshLabels}
               onOpenInboxTools={() => setInboxToolsOpen(true)}
               statuses={conversationStatuses}
+              priorities={conversationPriorities}
               tabBar={tabBar}
             />
           )}
@@ -343,6 +352,7 @@ export default function InboxPage() {
               onConversationUpdate={handleConversationUpdate}
               teamMembers={teamMembers}
               statuses={conversationStatuses}
+              priorities={conversationPriorities}
               onOpenContact={() => setContactPanelOpen(true)}
               onToggleNotes={() => setNotesPanelOpen((prev) => !prev)}
               notesPanelOpen={notesPanelOpen}

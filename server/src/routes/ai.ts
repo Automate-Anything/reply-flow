@@ -17,11 +17,11 @@ import type { PipelineEvent, PipelineProgressCallback } from '../services/pipeli
 const router = Router();
 router.use(requireAuth);
 
-// Multer: memory storage, 10MB limit, accept all text-based files
+// Multer: memory storage, 1GB limit, accept all text-based files
 // Content classifier determines processing strategy per file type
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 1024 * 1024 * 1024 },
 });
 
 // ────────────────────────────────────────────────

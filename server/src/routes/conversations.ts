@@ -67,9 +67,13 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       query = query.eq('is_archived', false);
     }
 
+    const statusValues = typeof status === 'string'
+      ? status.split(',').map((value) => value.trim()).filter(Boolean)
+      : [];
+
     // Status filter
-    if (status && status !== 'all') {
-      query = query.eq('status', status);
+    if (statusValues.length > 0 && !statusValues.includes('all')) {
+      query = query.in('status', statusValues);
     }
 
     // Channel filter
@@ -77,18 +81,43 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       query = query.eq('channel_id', Number(channelId));
     }
 
+    const assigneeValues = typeof assignee === 'string'
+      ? assignee.split(',').map((value) => value.trim()).filter(Boolean)
+      : [];
+
     // Assignee filter
-    if (assignee === 'me') {
-      query = query.eq('assigned_to', req.userId);
-    } else if (assignee === 'unassigned') {
-      query = query.is('assigned_to', null);
-    } else if (assignee && assignee !== 'all') {
-      query = query.eq('assigned_to', String(assignee));
+    if (assigneeValues.length > 0 && !assigneeValues.includes('all')) {
+      const assigneeOrParts: string[] = [];
+      const explicitAssigneeIds: string[] = [];
+
+      for (const value of assigneeValues) {
+        if (value === 'me') {
+          assigneeOrParts.push(`assigned_to.eq.${req.userId}`);
+        } else if (value === 'unassigned') {
+          assigneeOrParts.push('assigned_to.is.null');
+        } else if (value === 'others') {
+          assigneeOrParts.push(`and(assigned_to.not.is.null,assigned_to.neq.${req.userId})`);
+        } else {
+          explicitAssigneeIds.push(value);
+        }
+      }
+
+      if (explicitAssigneeIds.length > 0) {
+        assigneeOrParts.push(`assigned_to.in.(${explicitAssigneeIds.join(',')})`);
+      }
+
+      if (assigneeOrParts.length > 0) {
+        query = query.or(assigneeOrParts.join(','));
+      }
     }
 
+    const priorityValues = typeof priority === 'string'
+      ? priority.split(',').map((value) => value.trim()).filter(Boolean)
+      : [];
+
     // Priority filter
-    if (priority && priority !== 'all') {
-      query = query.eq('priority', String(priority));
+    if (priorityValues.length > 0 && !priorityValues.includes('all')) {
+      query = query.in('priority', priorityValues);
     }
 
     // Starred filter
@@ -363,12 +392,19 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
     }
 
     if (priority !== undefined) {
-      const validPriorities = ['none', 'low', 'medium', 'high', 'urgent'];
-      if (!validPriorities.includes(priority)) {
+      const normalizedPriority = String(priority).trim();
+      const { data: priorityRow } = await supabaseAdmin
+        .from('conversation_priorities')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('name', normalizedPriority)
+        .eq('is_deleted', false)
+        .single();
+      if (!priorityRow) {
         res.status(400).json({ error: 'Invalid priority' });
         return;
       }
-      updates.priority = priority;
+      updates.priority = normalizedPriority;
     }
 
     if (is_starred !== undefined) {
@@ -545,14 +581,21 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
         break;
       }
       case 'priority': {
-        const validPriorities = ['none', 'low', 'medium', 'high', 'urgent'];
-        if (!validPriorities.includes(value)) {
+        const normalizedPriority = String(value).trim();
+        const { data: priorityRow } = await supabaseAdmin
+          .from('conversation_priorities')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('name', normalizedPriority)
+          .eq('is_deleted', false)
+          .single();
+        if (!priorityRow) {
           res.status(400).json({ error: 'Invalid priority' });
           return;
         }
         await supabaseAdmin
           .from('chat_sessions')
-          .update({ priority: value, updated_at: new Date().toISOString() })
+          .update({ priority: normalizedPriority, updated_at: new Date().toISOString() })
           .in('id', validIds);
         break;
       }

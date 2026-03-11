@@ -10,6 +10,7 @@ import BulkActionBar from './BulkActionBar';
 import type { Conversation, ConversationFilters } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
+import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 
 interface LabelOption {
   id: string;
@@ -39,6 +40,7 @@ interface ConversationListProps {
   onLabelsCreated?: () => void;
   onOpenInboxTools?: () => void;
   statuses?: ConversationStatus[];
+  priorities?: ConversationPriority[];
   tabBar?: React.ReactNode;
 }
 
@@ -63,6 +65,7 @@ export default function ConversationList({
   onLabelsCreated,
   onOpenInboxTools,
   statuses = [],
+  priorities = [],
   tabBar,
 }: ConversationListProps) {
   return (
@@ -78,7 +81,12 @@ export default function ConversationList({
               onChange={(e) => onSearchChange(e.target.value)}
             />
           </div>
-          <ConversationFiltersPopover filters={filters} onFiltersChange={onFiltersChange} statuses={statuses} />
+          <ConversationFiltersPopover
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            statuses={statuses}
+            priorities={priorities}
+          />
           {onOpenInboxTools && (
             <Button
               variant="ghost"
@@ -149,11 +157,13 @@ export default function ConversationList({
                 teamMembers={teamMembers}
                 labels={labels}
                 statuses={statuses}
+                priorities={priorities}
                 onUpdate={onRefresh}
               >
                 <ConversationItem
                   conversation={conv}
                   isActive={conv.id === activeId}
+                  priorities={priorities}
                   onClick={() => onSelect(conv)}
                   selectable={selectionMode}
                   selected={selectedIds.includes(conv.id)}
@@ -187,6 +197,7 @@ export default function ConversationList({
           labels={labels}
           onLabelsCreated={onLabelsCreated}
           statuses={statuses}
+          priorities={priorities}
         />
       )}
     </div>

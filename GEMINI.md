@@ -1,8 +1,8 @@
-# CLAUDE.md
+# GEMINI.md
 
 ## Cross-Sync Rule (MANDATORY)
 
-This project maintains parallel instruction files for different AI tools: `CLAUDE.md`, `AGENTS.md`, and `GEMINI.md`. Whenever you add, modify, or remove a rule in THIS file, you MUST ask the user: **"Do you want me to apply this change to the other instruction files too? (AGENTS.md, GEMINI.md)"**. Do not silently sync — always ask first.
+This project maintains parallel instruction files for different AI tools: `CLAUDE.md`, `AGENTS.md`, and `GEMINI.md`. Whenever you add, modify, or remove a rule in THIS file, you MUST ask the user: **"Do you want me to apply this change to the other instruction files too? (CLAUDE.md, AGENTS.md)"**. Do not silently sync — always ask first.
 
 ## Documentation Guide
 
@@ -49,14 +49,6 @@ Before starting a new plan, phase, or major feature:
 2. **Create a feature branch** — Branch off `main` with a descriptive name (e.g., `phase-1e-knowledge-base-rag`). Never work directly on `main` for feature work.
 3. **One branch per phase/feature** — Keep branches focused. Commit and push before switching to a different feature.
 
-## Parallel Agents & Worktrees (MANDATORY)
-
-When running parallel sub-agents to work on independent tasks simultaneously:
-
-1. **Always use isolated git worktrees** — Each sub-agent MUST run in its own worktree (`isolation: "worktree"`) so there are no file conflicts between agents working concurrently.
-2. **Merge after completion** — Once all sub-agents have finished their work, merge the worktree branches back into the current branch and resolve any integration points (conflicting imports, shared types, overlapping route registrations, etc.).
-3. **Never run parallel agents on the same working tree** — Concurrent file edits without worktree isolation will cause conflicts and corrupted state.
-
 ## Pre-Code Checklist (MANDATORY)
 
 Before writing ANY new code, you MUST complete the following checks:
@@ -67,7 +59,7 @@ Before writing ANY new code, you MUST complete the following checks:
 - Check the acceptance criteria to know what "done" looks like
 
 ### 2. Check Existing Code
-- Search the codebase for existing implementations related to the task (use Grep/Glob)
+- Search the codebase for existing implementations related to the task
 - Read any files you plan to modify before editing them
 - Identify existing patterns, utilities, and conventions already in use — follow them
 - Check for existing types, interfaces, and schemas that cover your use case

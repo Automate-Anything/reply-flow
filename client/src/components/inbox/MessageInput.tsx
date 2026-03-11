@@ -70,12 +70,20 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   const filteredResponses = useMemo(() => {
     if (!quickReplyQuery) return responses;
     const q = quickReplyQuery.toLowerCase();
-    return responses.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        (r.shortcut && r.shortcut.toLowerCase().includes(q)) ||
-        r.content.toLowerCase().includes(q)
-    );
+    return responses
+      .filter(
+        (r) =>
+          r.title.toLowerCase().includes(q) ||
+          (r.shortcut && r.shortcut.toLowerCase().includes(q)) ||
+          r.content.toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        const aShortcut = a.shortcut?.toLowerCase() || '';
+        const bShortcut = b.shortcut?.toLowerCase() || '';
+        const aExact = aShortcut === q ? 1 : 0;
+        const bExact = bShortcut === q ? 1 : 0;
+        return bExact - aExact || a.title.localeCompare(b.title);
+      });
   }, [responses, quickReplyQuery]);
 
   const handleSend = async () => {
@@ -120,9 +128,11 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   };
 
   const insertCannedResponse = (response: CannedResponse) => {
-    const slashIndex = text.lastIndexOf('/');
-    const before = slashIndex > 0 ? text.slice(0, slashIndex) : '';
-    const newText = before + response.content;
+    const match = text.match(/(^|[\s\n])\/([^\s\n]*)$/);
+    const replacement = `${match?.[1] || ''}${response.content}`;
+    const newText = match
+      ? `${text.slice(0, text.length - match[0].length)}${replacement}`
+      : response.content;
     setText(newText);
     onDraftChange?.(newText);
     setShowQuickReplies(false);

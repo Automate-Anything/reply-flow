@@ -35,12 +35,13 @@ interface Props {
 }
 
 const ACCEPTED_TYPES = '.pdf,.docx,.txt,.md,.markdown,.mdx,.html,.htm,.csv,.tsv,.json,.jsonl,.xlsx,.xls,.ts,.tsx,.js,.jsx,.py,.go,.java,.rb,.php,.c,.cpp,.h,.rs,.swift,.kt,.cs,.sh,.sql,.r,.yaml,.yml,.toml,.ini,.xml,.env';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 function EmbeddingStatus({
@@ -783,7 +784,7 @@ export default function KnowledgeBase({ entries, onAdd, onUpload, onUpdate, onDe
                   <Upload className="h-5 w-5 text-muted-foreground" />
                   <div className="text-center">
                     <p className="text-sm font-medium">Click to upload a file</p>
-                    <p className="text-xs text-muted-foreground">Any text-based file (max 10MB)</p>
+                    <p className="text-xs text-muted-foreground">Any text-based file (max 1GB)</p>
                   </div>
                 </button>
               )}

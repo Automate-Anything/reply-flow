@@ -17,6 +17,7 @@ import api from '@/lib/api';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
+import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 import { usePlan } from '@/contexts/PlanContext';
 
 interface LabelOption {
@@ -33,6 +34,7 @@ interface BulkActionBarProps {
   labels: LabelOption[];
   onLabelsCreated?: () => void;
   statuses?: ConversationStatus[];
+  priorities?: ConversationPriority[];
 }
 
 const FALLBACK_STATUSES = [
@@ -40,14 +42,6 @@ const FALLBACK_STATUSES = [
   { value: 'pending', label: 'Pending' },
   { value: 'resolved', label: 'Resolved' },
   { value: 'closed', label: 'Closed' },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: 'urgent', label: 'Urgent', color: 'bg-red-500' },
-  { value: 'high', label: 'High', color: 'bg-orange-500' },
-  { value: 'medium', label: 'Medium', color: 'bg-yellow-500' },
-  { value: 'low', label: 'Low', color: 'bg-blue-500' },
-  { value: 'none', label: 'None', color: 'bg-gray-300' },
 ];
 
 export default function BulkActionBar({
@@ -58,12 +52,22 @@ export default function BulkActionBar({
   labels,
   onLabelsCreated,
   statuses = [],
+  priorities = [],
 }: BulkActionBarProps) {
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [loading, setLoading] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [creatingLabel, setCreatingLabel] = useState(false);
   const newLabelInputRef = useRef<HTMLInputElement>(null);
+  const priorityOptions = priorities.length > 0
+    ? priorities
+    : [
+        { id: 'urgent', name: 'Urgent', color: '#EF4444', sort_order: 0, is_default: false },
+        { id: 'high', name: 'High', color: '#F97316', sort_order: 1, is_default: false },
+        { id: 'medium', name: 'Medium', color: '#EAB308', sort_order: 2, is_default: false },
+        { id: 'low', name: 'Low', color: '#3B82F6', sort_order: 3, is_default: false },
+        { id: 'none', name: 'None', color: '#9CA3AF', sort_order: 4, is_default: true },
+      ];
 
   const handleCreateLabel = async () => {
     const name = newLabelName.trim();
@@ -154,10 +158,10 @@ export default function BulkActionBar({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
-          {PRIORITY_OPTIONS.map((p) => (
-            <DropdownMenuItem key={p.value} onClick={() => executeBulk('priority', p.value)}>
-              <span className={`mr-2 h-2 w-2 rounded-full ${p.color}`} />
-              {p.label}
+          {priorityOptions.map((p) => (
+            <DropdownMenuItem key={p.id} onClick={() => executeBulk('priority', p.name)}>
+              <span className="mr-2 h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+              {p.name}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

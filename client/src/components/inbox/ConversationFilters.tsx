@@ -1,12 +1,6 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Popover,
   PopoverContent,
@@ -16,25 +10,60 @@ import { ArrowDownUp, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-r
 import { cn } from '@/lib/utils';
 import type { ConversationFilters as FilterState } from '@/hooks/useConversations';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
+import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 
 interface ConversationFiltersProps {
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
   statuses?: ConversationStatus[];
+  priorities?: ConversationPriority[];
+}
+
+function toggleMultiValue(values: string[] | undefined, value: string): string[] | undefined {
+  const current = values || [];
+  if (value === 'all') return undefined;
+  const next = current.includes(value)
+    ? current.filter((item) => item !== value)
+    : [...current, value];
+  return next.length > 0 ? next : undefined;
+}
+
+function getSummary(values: string[] | undefined, fallback: string, labels: Record<string, string>) {
+  if (!values || values.length === 0) return fallback;
+  if (values.length === 1) return labels[values[0]] || values[0];
+  return `${values.length} selected`;
 }
 
 export default function ConversationFilters({
   filters,
   onFiltersChange,
   statuses = [],
+  priorities = [],
 }: ConversationFiltersProps) {
   const updateFilter = (key: keyof FilterState, value: unknown) => {
     onFiltersChange({ ...filters, [key]: value });
   };
 
-  const isStatusActive = filters.status && filters.status !== 'all';
-  const isAssigneeActive = filters.assignee && filters.assignee !== 'all';
-  const isPriorityActive = filters.priority && filters.priority !== 'all';
+  const statusValues = filters.status || [];
+  const assigneeValues = filters.assignee || [];
+  const priorityValues = filters.priority || [];
+
+  const statusLabels = Object.fromEntries(
+    (statuses.length > 0
+      ? statuses.map((status) => [status.name, status.name])
+      : [['open', 'Open'], ['pending', 'Pending'], ['resolved', 'Resolved'], ['closed', 'Closed']]
+    ).concat([['snoozed', 'Snoozed']])
+  );
+  const assigneeLabels: Record<string, string> = {
+    me: 'Mine',
+    others: 'Others',
+    unassigned: 'Unassigned',
+  };
+  const priorityLabels = Object.fromEntries(priorities.map((priority) => [priority.name, priority.name]));
+
+  const isStatusActive = statusValues.length > 0;
+  const isAssigneeActive = assigneeValues.length > 0;
+  const isPriorityActive = priorityValues.length > 0;
 
   const activeFilterCount = [
     isStatusActive,
@@ -46,6 +75,24 @@ export default function ConversationFilters({
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0;
+
+  const statusOptions = statuses.length > 0
+    ? statuses.map((status) => ({ value: status.name, label: status.name }))
+    : [
+        { value: 'open', label: 'Open' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'resolved', label: 'Resolved' },
+        { value: 'closed', label: 'Closed' },
+      ];
+  const priorityOptions = priorities.length > 0
+    ? priorities.map((priority) => ({ value: priority.name, label: priority.name, color: priority.color }))
+    : [
+        { value: 'Urgent', label: 'Urgent', color: '#EF4444' },
+        { value: 'High', label: 'High', color: '#F97316' },
+        { value: 'Medium', label: 'Medium', color: '#EAB308' },
+        { value: 'Low', label: 'Low', color: '#3B82F6' },
+        { value: 'None', label: 'None', color: '#9CA3AF' },
+      ];
 
   return (
     <div className="flex items-center gap-1.5">
@@ -65,7 +112,7 @@ export default function ConversationFilters({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-56 p-3">
+        <PopoverContent align="start" className="w-72 p-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Filters</span>
             {hasActiveFilters && (
@@ -73,85 +120,74 @@ export default function ConversationFilters({
                 variant="ghost"
                 size="sm"
                 className="h-auto px-1.5 py-0.5 text-xs text-muted-foreground"
-                onClick={() => onFiltersChange({})}
+                onClick={() => onFiltersChange({ sort: filters.sort })}
               >
                 Clear all
               </Button>
             )}
           </div>
 
-          <div className="mt-3 space-y-2.5">
-            <FilterRow
+          <div className="mt-3 space-y-3">
+            <FilterSection
               icon={<CircleDot className="h-3.5 w-3.5" />}
               label="Status"
-              active={!!isStatusActive}
+              active={isStatusActive}
+              summary={getSummary(statusValues, 'All', statusLabels)}
             >
-              <Select
-                value={filters.status || 'all'}
-                onValueChange={(v) => updateFilter('status', v)}
-              >
-                <SelectTrigger className="h-7 w-full border-transparent bg-muted/60 px-2 text-xs shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  {statuses.length > 0
-                    ? statuses.map((s) => (
-                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                      ))
-                    : <>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                      </>
-                  }
-                  <SelectItem value="snoozed">Snoozed</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterRow>
+              {statusOptions.map((status) => (
+                <MultiSelectRow
+                  key={status.value}
+                  label={status.label}
+                  checked={statusValues.includes(status.value)}
+                  onCheckedChange={() => updateFilter('status', toggleMultiValue(filters.status, status.value))}
+                />
+              ))}
+            </FilterSection>
 
-            <FilterRow
+            <FilterSection
               icon={<User className="h-3.5 w-3.5" />}
               label="Assignee"
-              active={!!isAssigneeActive}
+              active={isAssigneeActive}
+              summary={getSummary(assigneeValues, 'All', assigneeLabels)}
             >
-              <Select
-                value={filters.assignee || 'all'}
-                onValueChange={(v) => updateFilter('assignee', v)}
-              >
-                <SelectTrigger className="h-7 w-full border-transparent bg-muted/60 px-2 text-xs shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="me">Mine</SelectItem>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterRow>
+              <MultiSelectRow
+                label="Mine"
+                checked={assigneeValues.includes('me')}
+                onCheckedChange={() => updateFilter('assignee', toggleMultiValue(filters.assignee, 'me'))}
+              />
+              <MultiSelectRow
+                label="Others"
+                checked={assigneeValues.includes('others')}
+                onCheckedChange={() => updateFilter('assignee', toggleMultiValue(filters.assignee, 'others'))}
+              />
+              <MultiSelectRow
+                label="Unassigned"
+                checked={assigneeValues.includes('unassigned')}
+                onCheckedChange={() => updateFilter('assignee', toggleMultiValue(filters.assignee, 'unassigned'))}
+              />
+            </FilterSection>
 
-            <FilterRow
+            <FilterSection
               icon={<Flag className="h-3.5 w-3.5" />}
               label="Priority"
-              active={!!isPriorityActive}
+              active={isPriorityActive}
+              summary={getSummary(priorityValues, 'All', priorityLabels)}
             >
-              <Select
-                value={filters.priority || 'all'}
-                onValueChange={(v) => updateFilter('priority', v)}
-              >
-                <SelectTrigger className="h-7 w-full border-transparent bg-muted/60 px-2 text-xs shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </FilterRow>
+              {priorityOptions.map((priority) => (
+                <MultiSelectRow
+                  key={priority.value}
+                  label={priority.label}
+                  checked={priorityValues.includes(priority.value)}
+                  onCheckedChange={() => updateFilter('priority', toggleMultiValue(filters.priority, priority.value))}
+                  leading={
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: priority.color }}
+                    />
+                  }
+                />
+              ))}
+            </FilterSection>
 
             <div className="flex items-center justify-between pt-0.5">
               <div className="flex items-center gap-2">
@@ -168,9 +204,7 @@ export default function ConversationFilters({
                 )}
                 onClick={() => updateFilter('starred', !filters.starred)}
               >
-                <Star
-                  className={cn('h-3 w-3', filters.starred && 'fill-current')}
-                />
+                <Star className={cn('h-3 w-3', filters.starred && 'fill-current')} />
               </Button>
             </div>
 
@@ -189,9 +223,7 @@ export default function ConversationFilters({
                 )}
                 onClick={() => updateFilter('unread', !filters.unread)}
               >
-                <Mail
-                  className={cn('h-3 w-3', filters.unread && 'fill-current')}
-                />
+                <Mail className={cn('h-3 w-3', filters.unread && 'fill-current')} />
               </Button>
             </div>
           </div>
@@ -200,18 +232,24 @@ export default function ConversationFilters({
             <div className="flex items-center gap-2">
               <ArrowDownUp className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Sort</span>
-              <Select
-                value={filters.sort || 'newest'}
-                onValueChange={(v) => updateFilter('sort', v as 'newest' | 'oldest')}
-              >
-                <SelectTrigger className="ml-auto h-7 w-auto border-transparent bg-muted/60 px-2 text-xs shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">Newest</SelectItem>
-                  <SelectItem value="oldest">Oldest</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="ml-auto flex items-center gap-1 rounded-md bg-muted/60 p-0.5">
+                <Button
+                  variant={filters.sort !== 'oldest' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => updateFilter('sort', 'newest')}
+                >
+                  Newest
+                </Button>
+                <Button
+                  variant={filters.sort === 'oldest' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => updateFilter('sort', 'oldest')}
+                >
+                  Oldest
+                </Button>
+              </div>
             </div>
           </div>
         </PopoverContent>
@@ -220,24 +258,53 @@ export default function ConversationFilters({
   );
 }
 
-function FilterRow({
+function FilterSection({
   icon,
   label,
   active,
+  summary,
   children,
 }: {
   icon: React.ReactNode;
   label: string;
   active: boolean;
+  summary: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className={cn('text-muted-foreground', active && 'text-primary')}>{icon}</div>
-      <span className={cn('w-16 shrink-0 text-xs', active && 'font-medium text-primary')}>
-        {label}
-      </span>
-      <div className="flex-1">{children}</div>
+    <div className="space-y-2 rounded-lg border bg-muted/20 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className={cn('text-muted-foreground', active && 'text-primary')}>{icon}</div>
+          <span className={cn('text-xs', active && 'font-medium text-primary')}>{label}</span>
+        </div>
+        <span className="text-[11px] text-muted-foreground">{summary}</span>
+      </div>
+      <div className="space-y-1">{children}</div>
     </div>
+  );
+}
+
+function MultiSelectRow({
+  label,
+  checked,
+  onCheckedChange,
+  leading,
+}: {
+  label: string;
+  checked: boolean;
+  onCheckedChange: () => void;
+  leading?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onCheckedChange}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent/70"
+    >
+      <Checkbox checked={checked} />
+      {leading}
+      <span className="text-xs">{label}</span>
+    </button>
   );
 }
