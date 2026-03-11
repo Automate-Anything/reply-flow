@@ -32,6 +32,11 @@ export interface WhapiIncomingMessage {
     mime_type: string;
     link?: string;
   };
+  voice?: {
+    id: string;
+    mime_type: string;
+    link?: string;
+  };
   video?: {
     id: string;
     mime_type: string;

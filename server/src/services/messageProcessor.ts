@@ -62,7 +62,7 @@ function extractMessageBody(msg: WhapiIncomingMessage): string {
   if (msg.image?.caption) return msg.image.caption;
   if (msg.video?.caption) return msg.video.caption;
   if (msg.document?.filename) return `[Document: ${msg.document.filename}]`;
-  if (msg.audio) return '[Voice message]';
+  if (msg.audio || msg.voice) return '[Voice message]';
   if (msg.image) return '[Image]';
   if (msg.video) return '[Video]';
   return `[${msg.type || 'Unknown'} message]`;
@@ -162,6 +162,11 @@ export async function processIncomingMessage(
   userId: string,
   channelPhoneNumber?: string
 ): Promise<void> {
+  // DEBUG: Log raw payload for voice/audio messages to understand Whapi's format
+  if (msg.type === 'voice' || msg.type === 'ptt' || msg.type === 'audio') {
+    console.log(`[webhook][DEBUG] Voice/audio message raw payload:`, JSON.stringify(msg, null, 2));
+  }
+
   // If msg.from matches the channel's own number, it's an outbound message even if from_me is missing/false.
   // This happens with linked WhatsApp devices where Whapi doesn't always set from_me correctly.
   const channelPhone = normalizeChatId(channelPhoneNumber);
@@ -313,8 +318,8 @@ export async function processIncomingMessage(
 
   // 4. Build metadata (media + reply context)
   const metadata: Record<string, unknown> = {};
-  // For ptt (push-to-talk / voice notes), the audio data is in the audio field
-  const mediaPayload = msg.image || msg.document || msg.audio || msg.video;
+  // Voice notes come as type "voice" with data in the voice field (not audio)
+  const mediaPayload = msg.image || msg.document || msg.audio || msg.voice || msg.video;
   if (mediaPayload) {
     metadata.media = mediaPayload;
   }
@@ -342,7 +347,7 @@ export async function processIncomingMessage(
       chat_id_normalized: chatId,
       phone_number: phoneNumber,
       message_body: messageBody,
-      message_type: msg.type === 'ptt' ? 'audio' : (msg.type || 'text'),
+      message_type: (msg.type === 'ptt' || msg.type === 'voice') ? 'audio' : (msg.type || 'text'),
       message_id_normalized: msg.id,
       direction: isOutbound ? 'outbound' : 'inbound',
       sender_type: isOutbound ? 'human' : 'contact',
@@ -474,7 +479,7 @@ async function processMedia(
   const updateFields: Record<string, unknown> = { media_storage_path: storagePath };
 
   // 2. Extract content for AI based on message type
-  if (messageType === 'audio' || messageType === 'ptt') {
+  if (messageType === 'audio' || messageType === 'ptt' || messageType === 'voice') {
     const transcript = await extractAudioTranscript(storagePath, mimeType);
     if (transcript) {
       // Store transcript for AI only — don't overwrite message_body
