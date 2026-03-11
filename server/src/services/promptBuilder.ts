@@ -17,6 +17,7 @@ export interface Scenario {
   id: string;
   label: string;
   detection_criteria: string;
+  do_not_respond?: boolean;
 
   // Instructions
   goal?: string;
@@ -322,6 +323,7 @@ function buildScenariosSection(flow: ResponseFlow, kbEntries: KBEntry[] = [], t:
     const lines: string[] = [];
     lines.push(`### ${sc.label}`);
     lines.push(`**Detect**: ${sc.detection_criteria}`);
+    if (sc.do_not_respond) lines.push('**Automation**: Do not respond automatically. Hand this conversation to a human.');
     if (sc.goal) lines.push(`**Goal**: ${sc.goal}`);
     lines.push(`**Style**: ${formatStyleBrief(resolved)}`);
     if (sc.instructions) lines.push(`**Instructions**:\n${sc.instructions}`);
@@ -537,6 +539,10 @@ export async function buildScenarioResponsePrompt(
     : null;
 
   if (matchedScenario) {
+    if (matchedScenario.do_not_respond) {
+      track('Automation', '## Automation\nDo not send an automatic reply for this scenario. Hand the conversation to a human team member.');
+    }
+
     // Resolved style (scenario overrides + defaults)
     const resolved = resolveScenarioStyle(matchedScenario, flow.default_style);
     const styleDesc = formatStyleDescription(resolved, t);

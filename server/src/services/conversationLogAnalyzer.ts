@@ -243,6 +243,8 @@ function sanitizeScenario(raw: Record<string, unknown>): Scenario {
     detection_criteria: typeof raw.detection_criteria === 'string' ? raw.detection_criteria.trim() : '',
   };
 
+  if (typeof raw.do_not_respond === 'boolean') scenario.do_not_respond = raw.do_not_respond;
+
   // Optional string fields
   if (typeof raw.goal === 'string' && raw.goal.trim()) scenario.goal = raw.goal.trim();
   if (typeof raw.instructions === 'string' && raw.instructions.trim()) scenario.instructions = raw.instructions.trim();

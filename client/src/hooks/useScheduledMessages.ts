@@ -14,11 +14,16 @@ export interface ScheduledMessage {
   } | null;
 }
 
-export function useScheduledMessages() {
+export function useScheduledMessages(enabled = true) {
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchScheduled = useCallback(async () => {
+    if (!enabled) {
+      setScheduledMessages([]);
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = await api.get('/messages/scheduled');
       setScheduledMessages(data.messages || []);
@@ -27,11 +32,17 @@ export function useScheduledMessages() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setScheduledMessages([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     fetchScheduled();
-  }, [fetchScheduled]);
+  }, [enabled, fetchScheduled]);
 
   const updateMessage = useCallback(
     async (messageId: string, updates: { body?: string; scheduledFor?: string }) => {

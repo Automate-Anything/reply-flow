@@ -51,6 +51,7 @@ export default function ChannelsPage() {
       const { data } = await api.get('/whatsapp/channels');
       const nextChannels = data.channels || [];
       setChannels(nextChannels);
+      if (showLoader) setLoading(false);
 
       const channelsNeedingMetadata = nextChannels.filter((channel: ChannelInfo) =>
         channel.channel_status === 'connected' && (
@@ -61,19 +62,21 @@ export default function ChannelsPage() {
       );
 
       if (channelsNeedingMetadata.length > 0) {
-        await Promise.allSettled(
-          channelsNeedingMetadata.map((channel: ChannelInfo) =>
-            api.get(`/whatsapp/health-check?channelId=${channel.id}`)
-          )
-        );
+        void (async () => {
+          await Promise.allSettled(
+            channelsNeedingMetadata.map((channel: ChannelInfo) =>
+              api.get(`/whatsapp/health-check?channelId=${channel.id}`)
+            )
+          );
 
-        const { data: refreshedData } = await api.get('/whatsapp/channels');
-        setChannels(refreshedData.channels || []);
+          const { data: refreshedData } = await api.get('/whatsapp/channels');
+          setChannels(refreshedData.channels || []);
+        })();
       }
     } catch {
       toast.error('Failed to load channels');
     } finally {
-      setLoading(false);
+      if (!showLoader) setLoading(false);
     }
   }, []);
 

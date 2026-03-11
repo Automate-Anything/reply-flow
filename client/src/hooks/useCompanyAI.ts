@@ -29,6 +29,7 @@ export interface Scenario {
   id: string;
   label: string;
   detection_criteria: string;
+  do_not_respond?: boolean;
 
   // Instructions
   goal?: string;

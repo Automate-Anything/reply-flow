@@ -234,10 +234,38 @@ router.post('/test-reply', requirePermission('ai_settings', 'view'), async (req,
       matched_scenario = classification.scenario_label;
       confidence = classification.confidence;
 
+      const matchedScenario = matched_scenario
+        ? resolvedProfileData.response_flow?.scenarios?.find((scenario) => scenario.label === matched_scenario)
+        : null;
+
       // Step 2: Build targeted response prompt
       systemPrompt = await buildScenarioResponsePrompt(
         resolvedProfileData, kbData, matched_scenario, undefined, onSection,
       );
+
+      if (matchedScenario?.do_not_respond) {
+        const result: Record<string, unknown> = {
+          matched_scenario,
+          confidence,
+          response: '',
+          suppressed: true,
+        };
+
+        if (include_debug) {
+          result.debug = {
+            promptSections,
+            systemPrompt,
+            tokens: { input: 0, output: 0 },
+            responseTimeMs: 0,
+            model: 'suppressed',
+            stopReason: 'scenario_do_not_respond',
+            kbEntriesUsed: kbData.length,
+          };
+        }
+
+        res.json(result);
+        return;
+      }
     } else {
       // Legacy path
       systemPrompt = await buildSystemPrompt(resolvedProfileData, kbData, undefined, onSection);

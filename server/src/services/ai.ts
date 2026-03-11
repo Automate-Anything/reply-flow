@@ -48,6 +48,11 @@ export interface ClassificationResult {
   confidence: 'high' | 'medium' | 'low';
 }
 
+function getScenarioByLabel(profileData: ProfileData, label: string | null) {
+  if (!label) return null;
+  return profileData.response_flow?.scenarios.find((scenario) => scenario.label === label) ?? null;
+}
+
 interface DaySchedule {
   enabled: boolean;
   open: string;  // "HH:MM"
@@ -593,6 +598,18 @@ export async function generateAndSendAIReply(
   if (hasScenarios) {
     try {
       classification = await classifyMessage(profileData, textMessages);
+      const matchedScenario = getScenarioByLabel(profileData, classification.scenario_label);
+      if (matchedScenario?.do_not_respond) {
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({
+            human_takeover: true,
+            auto_resume_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId);
+        return;
+      }
       systemPrompt = await buildScenarioResponsePrompt(
         profileData, kbEntries, classification.scenario_label, channelOverrides, onSection,
       );
@@ -690,6 +707,7 @@ export async function sendOutsideHoursReply(
     : `${session.chat_id}@s.whatsapp.net`;
 
   const now = new Date().toISOString();
+  const outboundMetadata = { source: 'ai_send', kind: 'outside_hours' };
   // Insert to DB before sending so the record exists when Whapi echoes the message back,
   // preventing the echo from being saved as sender_type: 'human' in the webhook handler.
   const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
@@ -705,6 +723,7 @@ export async function sendOutsideHoursReply(
     status: 'sent',
     read: true,
     message_ts: now,
+    metadata: outboundMetadata,
   }).select('id').single();
 
   if (insertError) throw insertError;
@@ -759,6 +778,10 @@ async function sendAndStoreMessage(
     : `${session.chat_id}@s.whatsapp.net`;
 
   const now = new Date().toISOString();
+  const outboundMetadata = {
+    source: 'ai_send',
+    ...(metadata ?? {}),
+  };
   // Insert to DB before sending so the record exists when Whapi echoes the message back,
   // preventing the echo from being saved as sender_type: 'human' in the webhook handler.
   const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
@@ -774,7 +797,7 @@ async function sendAndStoreMessage(
     status: 'sent',
     read: true,
     message_ts: now,
-    metadata: metadata ?? null,
+    metadata: outboundMetadata,
   }).select('id').single();
 
   if (insertError) throw insertError;

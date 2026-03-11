@@ -34,7 +34,7 @@ export default function FallbackToggle({ mode, onChange, fallbackStyle, onFallba
         >
           <RadioCircle selected={mode === 'respond_basics'} />
           <div>
-            <p className="text-xs font-medium">AI responds</p>
+            <p className="text-xs font-medium">AI responds with default communication style</p>
             <p className="text-xs text-muted-foreground">
               Uses your communication style and knowledge base to handle unmatched messages.
             </p>

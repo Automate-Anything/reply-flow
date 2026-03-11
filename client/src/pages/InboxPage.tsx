@@ -34,7 +34,8 @@ export default function InboxPage() {
   const [inboxToolsOpen, setInboxToolsOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
-  const { debugMode } = useDebugMode();
+  const needsConversationSupport = activeTab !== 'scheduled' || !!activeConversation;
+  const { debugMode } = useDebugMode(needsConversationSupport);
 
   // Draft persistence
   const draftRef = useRef<string>('');
@@ -57,9 +58,9 @@ export default function InboxPage() {
     loading: scheduledLoading,
     updateMessage: updateScheduledMessage,
     cancelMessage: cancelScheduledMsg,
-  } = useScheduledMessages();
-  const { members: teamMembers } = useTeamMembers();
-  const { statuses: conversationStatuses } = useConversationStatuses();
+  } = useScheduledMessages(activeTab === 'scheduled');
+  const { members: teamMembers } = useTeamMembers(needsConversationSupport);
+  const { statuses: conversationStatuses } = useConversationStatuses(needsConversationSupport);
 
   // Fetch labels for bulk actions
   const refreshLabels = useCallback(() => {

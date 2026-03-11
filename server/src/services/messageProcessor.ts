@@ -160,13 +160,23 @@ export async function processIncomingMessage(
 ): Promise<void> {
   // If msg.from matches the channel's own number, it's an outbound message even if from_me is missing/false.
   // This happens with linked WhatsApp devices where Whapi doesn't always set from_me correctly.
-  const channelPhone = channelPhoneNumber ? normalizeChatId(channelPhoneNumber) : null;
-  const isOutbound = msg.from_me === true || (channelPhone !== null && normalizeChatId(msg.from) === channelPhone);
+  const channelPhone = normalizeChatId(channelPhoneNumber);
+  const { isOutbound, phoneNumber, chatId } = resolveMessageRouting(msg, channelPhone);
   // For outbound messages, msg.from is our own number — the contact is identified by chat_id
-  const phoneNumber = isOutbound ? normalizeChatId(msg.chat_id) : normalizeChatId(msg.from);
-  const chatId = normalizeChatId(msg.chat_id);
   const messageBody = extractMessageBody(msg);
   const messageTs = new Date(msg.timestamp * 1000).toISOString();
+
+  if (!phoneNumber || !chatId) {
+    console.warn('[webhook] Could not resolve message routing', {
+      id: msg.id,
+      from: msg.from,
+      to: msg.to,
+      chat_id: msg.chat_id,
+      from_me: msg.from_me,
+      channelPhone,
+    });
+    return;
+  }
 
   // 1. Find or create contact
   const { data: existingContact } = await supabaseAdmin
@@ -268,17 +278,21 @@ export async function processIncomingMessage(
   // In both cases, an outbound message with the same body already exists in the session.
   // We only compare against outbound messages so a contact legitimately sending the same
   // message twice is never suppressed.
-  {
+  if (isOutbound) {
     const windowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { data: existingOutbound } = await supabaseAdmin
+    const { data: recentOutbound } = await supabaseAdmin
       .from('chat_messages')
-      .select('id')
+      .select('id, metadata')
       .eq('session_id', sessionId)
       .eq('company_id', companyId)
       .eq('direction', 'outbound')
       .eq('message_body', messageBody)
-      .gte('created_at', windowStart)
-      .maybeSingle();
+      .gte('created_at', windowStart);
+
+    const existingOutbound = (recentOutbound || []).find((message) => {
+      const source = (message.metadata as { source?: string } | null)?.source;
+      return source === 'app_send' || source === 'ai_send';
+    });
 
     if (existingOutbound) {
       console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}`);

@@ -10,11 +10,11 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ChevronDown, HelpCircle } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Scenario, CommunicationStyle, ScenarioKBAttachment } from '@/hooks/useCompanyAI';
 import type { KnowledgeBase } from '@/hooks/useCompanyKB';
-import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 import StyleFields from './StyleFields';
 import { getPlaceholders } from './scenarioPlaceholders';
 import KBPicker from '../KBPicker';
@@ -57,6 +57,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
   const [rules, setRules] = useState('');
   const [exampleResponse, setExampleResponse] = useState('');
   const [escalationTrigger, setEscalationTrigger] = useState('');
+  const [doNotRespond, setDoNotRespond] = useState(false);
   const [style, setStyle] = useState<CommunicationStyle>({});
   const [showStyle, setShowStyle] = useState(false);
 
@@ -73,6 +74,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         setRules(scenario.rules || '');
         setExampleResponse(scenario.example_response || '');
         setEscalationTrigger(scenario.escalation_trigger || '');
+        setDoNotRespond(!!scenario.do_not_respond);
         setStyle({
           tone: scenario.tone ?? defaultStyle.tone,
           response_length: scenario.response_length ?? defaultStyle.response_length,
@@ -90,6 +92,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
         setRules('');
         setExampleResponse('');
         setEscalationTrigger('');
+        setDoNotRespond(false);
         setStyle({ ...defaultStyle });
         setShowStyle(false);
       }
@@ -104,6 +107,7 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
     onSave({
       label: label.trim(),
       detection_criteria: criteria.trim(),
+      do_not_respond: doNotRespond || undefined,
       goal: goal.trim() || undefined,
       instructions: instructions.trim() || undefined,
       kb_attachments: kbAttachments.length > 0 ? kbAttachments : undefined,
@@ -172,7 +176,19 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
           </div>
 
           {/* ── How to Respond ── */}
-          <SectionHeader label="How to Respond" />
+          <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 px-3 py-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Do not respond automatically</Label>
+              <p className="text-xs text-muted-foreground">
+                When this scenario matches, the AI will stay silent and switch the conversation into human takeover.
+              </p>
+            </div>
+            <Switch checked={doNotRespond} onCheckedChange={setDoNotRespond} />
+          </div>
+
+          {!doNotRespond && (
+            <>
+              <SectionHeader label="How to Respond" />
 
           <div className="space-y-1.5">
             <Label className="text-xs">Goal</Label>
@@ -202,22 +218,24 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
           </div>
 
           {/* ── Communication Style ── */}
-          <SectionHeader
-            label="Communication Style"
-            onClick={() => setShowStyle(!showStyle)}
-            expandIcon={
-              <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', showStyle && 'rotate-180')} />
-            }
-          />
-          {!showStyle && (
-            <p className="text-center text-[10px] text-muted-foreground">
-              Uses the agent's communication style. Click to override for this scenario.
-            </p>
-          )}
-          {showStyle && (
+          <SectionHeader label="Communication Style" />
+          <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 px-3 py-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Override default communication style</Label>
+              <p className="text-xs text-muted-foreground">
+                Turn this on to customize tone, response length, and emoji usage for this scenario only.
+              </p>
+            </div>
+            <Switch checked={showStyle} onCheckedChange={setShowStyle} />
+          </div>
+          {showStyle ? (
             <div>
               <StyleFields style={style} onChange={setStyle} compact />
             </div>
+          ) : (
+            <p className="text-center text-[10px] text-muted-foreground">
+              Using the default communication style for this scenario.
+            </p>
           )}
 
           {/* ── Knowledge Base ── */}
@@ -265,7 +283,6 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
 
           {/* ── Human Takeover ── */}
           <SectionHeader label="Human Takeover" />
-
           <div className="space-y-1.5">
             <Label className="text-xs">Pause Condition</Label>
             <textarea
@@ -279,6 +296,8 @@ export default function ScenarioDialog({ open, onOpenChange, scenario, defaultSt
               When these conditions are met, the AI will stop responding and wait for a team member to reply.
             </p>
           </div>
+            </>
+          )}
 
         </div>
 

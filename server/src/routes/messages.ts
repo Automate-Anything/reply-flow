@@ -84,6 +84,11 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
     console.log('[send] whapi result:', JSON.stringify(result));
 
     // Store in DB
+    const outboundMetadata = {
+      ...(replyMetadata || {}),
+      source: 'app_send',
+    };
+
     const now = new Date().toISOString();
     const { data: message, error: msgError } = await supabaseAdmin
       .from('chat_messages')
@@ -101,7 +106,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
         status: 'sent',
         read: true,
         message_ts: now,
-        metadata: replyMetadata,
+        metadata: outboundMetadata,
       })
       .select()
       .single();
@@ -178,6 +183,7 @@ router.post('/schedule', requirePermission('messages', 'create'), async (req, re
         status: 'scheduled',
         scheduled_for: scheduledDate.toISOString(),
         read: true,
+        metadata: { source: 'app_send' },
       })
       .select()
       .single();
@@ -528,7 +534,10 @@ router.post('/:messageId/forward', requirePermission('messages', 'create'), asyn
         status: 'sent',
         read: true,
         message_ts: now,
-        metadata: { forwarded_from: { session_id: originalMsg.session_id, message_id: originalMsg.id } },
+        metadata: {
+          source: 'app_send',
+          forwarded_from: { session_id: originalMsg.session_id, message_id: originalMsg.id },
+        },
       })
       .select()
       .single();
