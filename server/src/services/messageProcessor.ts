@@ -7,12 +7,16 @@ import { downloadAndStore } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 
 /**
- * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
+ * Normalizes a WhatsApp JID/chat_id to a plain digits-only phone number.
  * e.g. "1234567890@s.whatsapp.net" -> "1234567890"
+ *      "+1234567890" -> "1234567890"
+ * Stripping non-digit characters ensures channel phone numbers stored with "+"
+ * or other formatting still match the bare numbers Whapi sends.
  */
 function normalizeChatId(chatId?: string | null): string | null {
   if (!chatId) return null;
-  return chatId.replace(/@.*$/, '');
+  const stripped = chatId.replace(/@.*$/, '').replace(/\D/g, '');
+  return stripped || null;
 }
 
 function pickCounterpartyId(
@@ -271,14 +275,12 @@ export async function processIncomingMessage(
     }
   }
 
-  // 3b. Secondary dedup: Whapi echoes API-sent messages back through the webhook.
+  // 3b. Secondary dedup: Whapi echoes messages back through the webhook.
   // This catches two failure modes:
   //   (a) Echo arrives with from_me=true but message_id_normalized format doesn't match → primary dedup misses it
   //   (b) Echo arrives with from_me absent/false → treated as inbound, primary dedup misses it
   // In both cases, an outbound message with the same body already exists in the session.
-  // We only compare against outbound messages so a contact legitimately sending the same
-  // message twice is never suppressed.
-  if (isOutbound) {
+  {
     const windowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: recentOutbound } = await supabaseAdmin
       .from('chat_messages')
@@ -289,13 +291,22 @@ export async function processIncomingMessage(
       .eq('message_body', messageBody)
       .gte('created_at', windowStart);
 
-    const existingOutbound = (recentOutbound || []).find((message) => {
-      const source = (message.metadata as { source?: string } | null)?.source;
-      return source === 'app_send' || source === 'ai_send';
-    });
+    if (isOutbound) {
+      // Case (a): echo classified as outbound — only match against app/AI sent messages
+      const existingOutbound = (recentOutbound || []).find((message) => {
+        const source = (message.metadata as { source?: string } | null)?.source;
+        return source === 'app_send' || source === 'ai_send';
+      });
 
-    if (existingOutbound) {
-      console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}`);
+      if (existingOutbound) {
+        console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}`);
+        return;
+      }
+    } else if (recentOutbound && recentOutbound.length > 0) {
+      // Case (b): echo classified as inbound because from_me was absent/false.
+      // A recent outbound message with the same body already exists — this is an echo,
+      // not a genuine inbound message. Skip it to avoid inflating the unread count.
+      console.log(`[webhook] Echo skipped (inbound echo of outbound): msg.id=${msg.id}, from_me=${msg.from_me}`);
       return;
     }
   }
@@ -336,7 +347,7 @@ export async function processIncomingMessage(
       direction: isOutbound ? 'outbound' : 'inbound',
       sender_type: isOutbound ? 'human' : 'contact',
       status: isOutbound ? 'sent' : 'received',
-      read: false,
+      read: isOutbound ? true : false,
       message_ts: messageTs,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
       media_mime_type: mediaMimeType || null,
