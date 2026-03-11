@@ -77,7 +77,7 @@ async function resolveCouponCode(code: string): Promise<{ stripe_coupon_id: stri
   const { data } = await supabaseAdmin
     .from('coupon_codes')
     .select('stripe_coupon_id, description')
-    .eq('code', code.trim().toUpperCase())
+    .ilike('code', code.trim())
     .eq('is_active', true)
     .maybeSingle();
   return data ?? null;
