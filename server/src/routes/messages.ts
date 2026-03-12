@@ -616,8 +616,9 @@ router.post('/:messageId/react', requirePermission('messages', 'create'), async 
     if (!result) { res.status(404).json({ error: 'Message not found' }); return; }
 
     // Update reactions array: remove existing reaction by this user, add new if emoji provided
+    // Match both the UUID and 'self' (webhook echoes may have stored 'self' for our reactions)
     const reactions = Array.isArray(result.msg.reactions) ? [...result.msg.reactions] : [];
-    const filtered = reactions.filter((r: { user_id: string }) => r.user_id !== userId);
+    const filtered = reactions.filter((r: { user_id: string }) => r.user_id !== userId && r.user_id !== 'self');
     if (emoji) {
       filtered.push({ emoji, user_id: userId });
     }

@@ -702,13 +702,37 @@ async function handleReaction(
     return;
   }
 
-  // Build user_id from the sender — use the phone number as identifier for contact reactions
+  const reactions = Array.isArray(targetMsg.reactions) ? [...targetMsg.reactions] : [];
+
+  // For outbound reactions (webhook echo of our own reaction sent from the app):
+  // The app already stored the reaction with the real user UUID, so skip the echo
+  // to avoid overwriting the UUID with 'self'.
+  if (isOutbound) {
+    // Check if we already have a non-phone-number (UUID) reaction with this emoji
+    const alreadyHasOurReaction = reactions.some(
+      (r) => r.emoji === emoji && !/^\d+$/.test(r.user_id) && r.user_id !== 'self'
+    );
+    // For reaction additions: skip if we already have it stored with a UUID
+    if (emoji && alreadyHasOurReaction) {
+      console.log(`[webhook] Skipping outbound reaction echo — already stored with UUID`);
+      return;
+    }
+    // For reaction removals (empty emoji): the app already removed it, skip echo
+    if (!emoji) {
+      const hadOurReaction = reactions.some(
+        (r) => !/^\d+$/.test(r.user_id)
+      );
+      if (!hadOurReaction) {
+        console.log(`[webhook] Skipping outbound reaction removal echo — already removed`);
+        return;
+      }
+    }
+  }
+
+  // Build user_id: phone number for contacts, 'self' for outbound (fallback if app didn't store it)
   const userId = isOutbound ? 'self' : normalizeChatId(msg.from) || 'unknown';
 
-  // Update reactions: remove existing reaction from this user, add new one if emoji is set
-  const reactions = Array.isArray(targetMsg.reactions) ? [...targetMsg.reactions] : [];
-  // For outbound (our own) reactions, filter out both 'self' and app user UUIDs.
-  // Contact user_ids are always phone numbers (digits only), so anything non-numeric is "us".
+  // Remove existing reaction from this user
   const isOurReaction = (r: { user_id: string }) =>
     isOutbound ? (r.user_id === 'self' || !/^\d+$/.test(r.user_id)) : r.user_id === userId;
   const filtered = reactions.filter((r) => !isOurReaction(r));
@@ -716,7 +740,6 @@ async function handleReaction(
   if (emoji) {
     filtered.push({ emoji, user_id: userId });
   }
-  // If emoji is empty/null, it's a reaction removal — just save the filtered array
 
   await supabaseAdmin
     .from('chat_messages')
