@@ -549,6 +549,9 @@ export default function InboxPage() {
             contactId={activeConversation.contact_id}
             open={contactPanelOpen}
             onClose={() => setContactPanelOpen(false)}
+            previewName={activeConversation.contact_name}
+            previewPhone={activeConversation.phone_number}
+            previewPicture={activeConversation.profile_picture_url}
             onProfilePictureLoaded={(url) => {
               setActiveConversation((prev) =>
                 prev && !prev.profile_picture_url ? { ...prev, profile_picture_url: url } : prev

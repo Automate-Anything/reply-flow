@@ -24,9 +24,13 @@ interface ContactPanelProps {
   open: boolean;
   onClose: () => void;
   onProfilePictureLoaded?: (url: string) => void;
+  /** Pre-loaded data from conversation for instant header display while full contact loads */
+  previewName?: string | null;
+  previewPhone?: string | null;
+  previewPicture?: string | null;
 }
 
-export default function ContactPanel({ contactId, open, onClose, onProfilePictureLoaded }: ContactPanelProps) {
+export default function ContactPanel({ contactId, open, onClose, onProfilePictureLoaded, previewName, previewPhone, previewPicture }: ContactPanelProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -118,7 +122,7 @@ export default function ContactPanel({ contactId, open, onClose, onProfilePictur
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') ||
       contact.whatsapp_name ||
       contact.phone_number
-    : '';
+    : previewName || previewPhone || '';
 
   return (
     <Sheet open={open} onOpenChange={(v) => {
@@ -145,8 +149,8 @@ export default function ContactPanel({ contactId, open, onClose, onProfilePictur
         <SheetHeader className="border-b px-4 py-3">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              {contact?.profile_picture_url && (
-                <AvatarImage src={contact.profile_picture_url} alt={displayName} />
+              {(contact?.profile_picture_url || previewPicture) && (
+                <AvatarImage src={(contact?.profile_picture_url || previewPicture)!} alt={displayName} />
               )}
               <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
                 {(displayName[0] || '?').toUpperCase()}
@@ -154,7 +158,7 @@ export default function ContactPanel({ contactId, open, onClose, onProfilePictur
             </Avatar>
             <div className="min-w-0 flex-1">
               <SheetTitle className="truncate text-sm">{displayName}</SheetTitle>
-              <p className="text-xs text-muted-foreground">{contact?.phone_number}</p>
+              <p className="text-xs text-muted-foreground">{contact?.phone_number || previewPhone}</p>
             </div>
           </div>
         </SheetHeader>
