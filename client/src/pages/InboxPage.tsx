@@ -30,6 +30,7 @@ export default function InboxPage() {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ConversationFilters>({});
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const restoredConvRef = useRef(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [allLabels, setAllLabels] = useState<{ id: string; name: string; color: string }[]>([]);
@@ -78,6 +79,32 @@ export default function InboxPage() {
   useEffect(() => {
     refreshLabels();
   }, [refreshLabels]);
+
+  // Restore active conversation from sessionStorage on first load
+  useEffect(() => {
+    if (restoredConvRef.current || convsLoading || conversations.length === 0) return;
+    restoredConvRef.current = true;
+    const savedId = sessionStorage.getItem('reply-flow-active-conversation');
+    if (savedId) {
+      const conv = conversations.find((c) => c.id === savedId);
+      if (conv) {
+        draftRef.current = conv.draft_message || '';
+        setActiveConversation(conv);
+        if (conv.unread_count > 0 || conv.marked_unread) {
+          api.post(`/conversations/${conv.id}/read`).then(() => refetchConvs());
+        }
+      }
+    }
+  }, [conversations, convsLoading, refetchConvs]);
+
+  // Persist active conversation id to sessionStorage
+  useEffect(() => {
+    if (activeConversation) {
+      sessionStorage.setItem('reply-flow-active-conversation', activeConversation.id);
+    } else {
+      sessionStorage.removeItem('reply-flow-active-conversation');
+    }
+  }, [activeConversation]);
 
   // Draft save helper
   const saveDraft = useCallback(async (sessionId: string, text: string) => {

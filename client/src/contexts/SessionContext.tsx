@@ -121,6 +121,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('reply-flow-contacts');
       localStorage.removeItem('reply-flow-kbs');
       localStorage.removeItem('reply-flow-channels');
+      sessionStorage.removeItem('reply-flow-active-conversation');
+      sessionStorage.removeItem('reply-flow-scroll-positions');
       setProfileFullName(null);
       setAvatarUrl(null);
       setCompanyId(null);
