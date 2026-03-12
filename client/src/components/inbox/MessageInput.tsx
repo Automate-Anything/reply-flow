@@ -211,7 +211,7 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   }, [typedLinkPreview?.url]);
 
   return (
-    <div className="border-t bg-background">
+    <div className="relative z-10 border-t bg-background">
       {/* Link preview banner */}
       {typedLinkPreview && !previewDismissed && (
         <div className="border-b px-4 py-3">

@@ -232,7 +232,7 @@ function MediaContent({ message, mediaUrl, mediaLoading, isOutbound, voiceTimeSl
         <img
           src={mediaUrl}
           alt={message.media_filename || 'Image'}
-          className="max-h-64 max-w-full cursor-pointer rounded-lg object-contain"
+          className="max-h-56 w-full cursor-pointer object-cover"
           onClick={() => setImageExpanded(true)}
           loading="lazy"
         />
@@ -261,7 +261,7 @@ function MediaContent({ message, mediaUrl, mediaLoading, isOutbound, voiceTimeSl
       <video
         src={mediaUrl}
         controls
-        className="max-h-64 max-w-full rounded-lg"
+        className="max-h-80 w-full"
         preload="metadata"
       />
     );
@@ -436,6 +436,7 @@ export default function MessageBubble({ message, messages = [], contactName, onC
   const { url: mediaUrl, loading: mediaLoading } = useMediaUrl(message);
   const isMediaType = ['image', 'video', 'audio', 'ptt', 'voice', 'document'].includes(message.message_type);
   const isVoiceType = ['audio', 'ptt', 'voice'].includes(message.message_type);
+  const isVisualMedia = ['image', 'video'].includes(message.message_type) && hasMedia;
   const caption = message.message_body;
   // Don't show placeholder text as caption (e.g. "[Image]", "[Audio message]")
   const isPlaceholder = caption && /^\[.+\]$/.test(caption.trim());
@@ -504,7 +505,8 @@ export default function MessageBubble({ message, messages = [], contactName, onC
 
         <div
           className={cn(
-            'rounded-2xl px-4 py-2',
+            'overflow-hidden rounded-2xl',
+            isVisualMedia ? 'p-0' : 'px-4 py-2',
             isScheduled
               ? 'border border-dashed border-primary/30 bg-primary/5 text-foreground'
               : isOutbound
@@ -518,7 +520,8 @@ export default function MessageBubble({ message, messages = [], contactName, onC
           {reply && (
             <div
               className={cn(
-                '-mx-2 mb-1.5 rounded-lg border-l-2 px-3 py-1.5 text-xs',
+                'mb-1.5 rounded-lg border-l-2 px-3 py-1.5 text-xs',
+                isVisualMedia ? 'mx-2 mt-2' : '-mx-2',
                 isOutbound
                   ? 'border-white/50 bg-black/10'
                   : 'border-primary/50 bg-background/50'
@@ -556,7 +559,7 @@ export default function MessageBubble({ message, messages = [], contactName, onC
 
           {/* Media content */}
           {isMediaType && (hasMedia || isVoiceType) && (
-            <div className="mb-1">
+            <div className={isVisualMedia ? 'relative' : 'mb-1'}>
               <MediaContent
                 message={message}
                 mediaUrl={mediaUrl}
@@ -568,12 +571,24 @@ export default function MessageBubble({ message, messages = [], contactName, onC
                     : undefined
                 }
               />
+              {/* Gradient fade + overlay timestamp on image when no caption */}
+              {isVisualMedia && !showCaption && !isScheduled && (
+                <>
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent" />
+                  <span className="absolute bottom-1.5 right-2 inline-flex items-center gap-1 text-[10px] leading-none text-white drop-shadow-sm whitespace-nowrap">
+                    {(isAI || isHuman) && <span className="font-medium uppercase tracking-wider">{isAI ? 'AI' : 'You'}</span>}
+                    {(isAI || isHuman) && <span>·</span>}
+                    <span>{formatTimestamp(message.message_ts || message.created_at, tz)}</span>
+                    {isOutbound && message.status !== 'scheduled' && <MessageStatusIcon status={message.status} />}
+                  </span>
+                </>
+              )}
             </div>
           )}
 
           {/* Text body / caption — with inline timestamp */}
           {showCaption && (
-            <div className="relative">
+            <div className={cn('relative', isVisualMedia && 'px-4 py-2')}>
               <p className={cn('whitespace-pre-wrap text-sm leading-relaxed', linkPreview && 'break-all')}>{caption}{!isScheduled && !isVoiceType && <TimeSpacer wide={isAI || isHuman} hasStatus={isOutbound} />}</p>
               {!isScheduled && !isVoiceType && <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} />}
             </div>
@@ -595,8 +610,8 @@ export default function MessageBubble({ message, messages = [], contactName, onC
             </div>
           )}
 
-          {/* Standalone time for media-only messages (no caption, non-voice) */}
-          {!isScheduled && isMediaType && !isVoiceType && !showCaption && hasMedia && (
+          {/* Standalone time for media-only messages (no caption, non-voice, non-visual) */}
+          {!isScheduled && isMediaType && !isVoiceType && !isVisualMedia && !showCaption && hasMedia && (
             <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} standalone />
           )}
 
