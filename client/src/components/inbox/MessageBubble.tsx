@@ -29,12 +29,15 @@ interface MessageBubbleProps {
 
 
 
-function groupReactions(reactions: Array<{ emoji: string; user_id: string }>): Array<{ emoji: string; count: number }> {
-  const map = new Map<string, number>();
+function groupReactions(reactions: Array<{ emoji: string; user_id: string }>, myUserId: string | null): Array<{ emoji: string; count: number; isMine: boolean }> {
+  const map = new Map<string, { count: number; isMine: boolean }>();
   for (const r of reactions) {
-    map.set(r.emoji, (map.get(r.emoji) || 0) + 1);
+    const existing = map.get(r.emoji) || { count: 0, isMine: false };
+    existing.count += 1;
+    if (myUserId && r.user_id === myUserId) existing.isMine = true;
+    map.set(r.emoji, existing);
   }
-  return Array.from(map, ([emoji, count]) => ({ emoji, count }));
+  return Array.from(map, ([emoji, { count, isMine }]) => ({ emoji, count, isMine }));
 }
 
 // ── Media URL cache (avoids re-fetching signed URLs for the same message) ────
@@ -443,7 +446,8 @@ export default function MessageBubble({ message, messages = [], contactName, onC
   const isHuman = message.sender_type === 'human';
   const isScheduled = message.status === 'scheduled' && message.scheduled_for;
   const reply = (message.metadata?.reply as ReplyMetadata) || null;
-  const reactions = groupReactions(message.reactions || []);
+  const { userId: myUserId } = useSession();
+  const reactions = groupReactions(message.reactions || [], myUserId);
   const [showEmojiBar, setShowEmojiBar] = useState(false);
   const [reacting, setReacting] = useState(false);
 
@@ -452,9 +456,10 @@ export default function MessageBubble({ message, messages = [], contactName, onC
     setReacting(true);
     setShowEmojiBar(false);
     try {
-      const existing = message.reactions?.find((r) => r.emoji === emoji);
+      // Toggle: if I already reacted with this emoji, remove it; otherwise add it
+      const myExisting = message.reactions?.find((r) => r.emoji === emoji && r.user_id === myUserId);
       const { data } = await api.post(`/messages/${message.id}/react`, {
-        emoji: existing ? '' : emoji,
+        emoji: myExisting ? '' : emoji,
       });
       onMessageUpdate(data.message);
     } catch {
@@ -462,7 +467,7 @@ export default function MessageBubble({ message, messages = [], contactName, onC
     } finally {
       setReacting(false);
     }
-  }, [message.id, message.reactions, reacting, onMessageUpdate]);
+  }, [message.id, message.reactions, myUserId, reacting, onMessageUpdate]);
   const debugData = isDebugMode && isAI ? (message.metadata?.debug as AIDebugData | undefined) : undefined;
 
   const hasMedia = !!message.media_storage_path;
@@ -688,11 +693,17 @@ export default function MessageBubble({ message, messages = [], contactName, onC
         {/* Reactions */}
         {reactions.length > 0 && (
           <div className={cn('-mt-1 flex gap-0.5', isOutbound ? 'justify-end' : 'justify-start')}>
-            {reactions.map(({ emoji, count }) => (
+            {reactions.map(({ emoji, count, isMine }) => (
               <button
                 key={emoji}
                 onClick={() => handleReact(emoji)}
-                className="rounded-full border bg-background px-1.5 py-0.5 text-xs shadow-sm transition-colors hover:bg-accent"
+                className={cn(
+                  'rounded-full border px-1.5 py-0.5 text-xs shadow-sm transition-colors hover:bg-accent',
+                  isMine
+                    ? 'border-primary/50 bg-primary/10'
+                    : 'bg-background'
+                )}
+                title={isMine ? 'Click to remove your reaction' : 'Click to react'}
               >
                 {emoji}{count > 1 ? ` ${count}` : ''}
               </button>
