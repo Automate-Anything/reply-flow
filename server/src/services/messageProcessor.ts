@@ -707,7 +707,11 @@ async function handleReaction(
 
   // Update reactions: remove existing reaction from this user, add new one if emoji is set
   const reactions = Array.isArray(targetMsg.reactions) ? [...targetMsg.reactions] : [];
-  const filtered = reactions.filter((r: { user_id: string }) => r.user_id !== userId);
+  // For outbound (our own) reactions, filter out both 'self' and app user UUIDs.
+  // Contact user_ids are always phone numbers (digits only), so anything non-numeric is "us".
+  const isOurReaction = (r: { user_id: string }) =>
+    isOutbound ? (r.user_id === 'self' || !/^\d+$/.test(r.user_id)) : r.user_id === userId;
+  const filtered = reactions.filter((r) => !isOurReaction(r));
 
   if (emoji) {
     filtered.push({ emoji, user_id: userId });
