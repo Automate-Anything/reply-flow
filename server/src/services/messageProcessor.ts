@@ -646,7 +646,7 @@ async function processMediaFromBuffer(
  * Fetches a contact's WhatsApp profile picture and stores it in the contacts table.
  * Skips if the contact already has a fresh profile picture URL (within 7 days).
  */
-async function fetchAndStoreProfilePicture(
+export async function fetchAndStoreProfilePicture(
   contactId: string,
   phoneNumber: string,
   channelId: number

@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/lib/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { DatabaseZap, Menu, Moon, Sun, LogOut, Loader2, User, Building2 } from 'lucide-react';
-import { toast } from 'sonner';
-import api from '@/lib/api';
+import { Menu, Moon, Sun, LogOut, Loader2, User, Building2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -49,20 +47,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
     .slice(0, 2);
 
   const [signingOut, setSigningOut] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-
-  const handleSeedDemo = async () => {
-    setSeeding(true);
-    try {
-      await api.post('/seed');
-      toast.success('Demo data loaded — refresh the page');
-    } catch {
-      toast.error('Failed to load demo data');
-    } finally {
-      setSeeding(false);
-    }
-  };
-
   const handleSignOut = async () => {
     setSigningOut(true);
     await supabase.auth.signOut();
@@ -89,17 +73,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleSeedDemo}
-          disabled={seeding}
-          className="h-9 w-9"
-          title="Load demo data"
-        >
-          <DatabaseZap className={`h-4 w-4 ${seeding ? 'animate-spin' : ''}`} />
-          <span className="sr-only">Load demo data</span>
-        </Button>
         <Button
           variant="ghost"
           size="icon"

@@ -4,6 +4,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { extractSessionMemories } from '../services/sessionMemory.js';
 import { getAccessibleSessionFilter, getConversationAccess, ensureConversationAccessOnAssign } from '../services/accessControl.js';
+import { fetchAndStoreProfilePicture } from '../services/messageProcessor.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -230,6 +231,18 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }));
 
     res.json({ sessions, count: filteredData.length });
+
+    // Background: fetch profile pictures for contacts missing them
+    const missingPics = sessions.filter(
+      (s) => !s.profile_picture_url && s.contact_id && s.phone_number && s.channel_id
+    );
+    if (missingPics.length > 0) {
+      Promise.allSettled(
+        missingPics.map((s) =>
+          fetchAndStoreProfilePicture(s.contact_id!, s.phone_number, s.channel_id!)
+        )
+      ).catch(() => {});
+    }
   } catch (err) {
     next(err);
   }

@@ -192,12 +192,32 @@ export default function InboxPage() {
     ),
     onSessionUpdate: useCallback(
       (session: Partial<Conversation> & { id: string }) => {
+        // Realtime payload only has raw chat_sessions columns — preserve joined fields
+        // (profile_picture_url from contacts, labels from conversation_labels, assigned_user from users)
         setConversations((prev) =>
-          prev.map((c) => (c.id === session.id ? { ...c, ...session } : c))
+          prev.map((c) => {
+            if (c.id !== session.id) return c;
+            return {
+              ...c,
+              ...session,
+              profile_picture_url: c.profile_picture_url,
+              labels: c.labels,
+              assigned_user: c.assigned_user,
+              contact_session_count: c.contact_session_count,
+            };
+          })
         );
-        setActiveConversation((prev) =>
-          prev && prev.id === session.id ? { ...prev, ...session } : prev
-        );
+        setActiveConversation((prev) => {
+          if (!prev || prev.id !== session.id) return prev;
+          return {
+            ...prev,
+            ...session,
+            profile_picture_url: prev.profile_picture_url,
+            labels: prev.labels,
+            assigned_user: prev.assigned_user,
+            contact_session_count: prev.contact_session_count,
+          };
+        });
       },
       [setConversations]
     ),
