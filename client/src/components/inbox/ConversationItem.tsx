@@ -3,7 +3,7 @@ import { formatRelativeDate, formatSnoozeUntil } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Camera, Clock, FileText, Mic, Pin, Play, RotateCcw, Star } from 'lucide-react';
+import { Camera, Clock, FileText, Mic, Pin, Play, RotateCcw, Star, Sticker } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
@@ -43,6 +43,7 @@ const MEDIA_PATTERNS: { pattern: RegExp; icon: typeof Mic; getLabel: (text: stri
   { pattern: /^\[Image\]$/i, icon: Camera, getLabel: () => 'Photo' },
   { pattern: /^\[Video\]$/i, icon: Play, getLabel: () => 'Video' },
   { pattern: /^\[Document: .+\]$/i, icon: FileText, getLabel: (t) => t.replace(/^\[Document: (.+)\]$/, '$1') },
+  { pattern: /^\[Sticker\]$/i, icon: Sticker, getLabel: () => 'Sticker' },
 ];
 
 function formatLastMessage(text: string) {

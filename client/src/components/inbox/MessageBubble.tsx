@@ -226,6 +226,17 @@ function MediaContent({ message, mediaUrl, mediaLoading, isOutbound, voiceTimeSl
     return null;
   }
 
+  if (type === 'sticker') {
+    return (
+      <img
+        src={mediaUrl}
+        alt="Sticker"
+        className="h-32 w-32 object-contain"
+        loading="lazy"
+      />
+    );
+  }
+
   if (type === 'image' || mime.startsWith('image/')) {
     return (
       <>
@@ -434,9 +445,9 @@ export default function MessageBubble({ message, messages = [], contactName, onC
 
   const hasMedia = !!message.media_storage_path;
   const { url: mediaUrl, loading: mediaLoading } = useMediaUrl(message);
-  const isMediaType = ['image', 'video', 'audio', 'ptt', 'voice', 'document'].includes(message.message_type);
+  const isMediaType = ['image', 'video', 'audio', 'ptt', 'voice', 'document', 'sticker'].includes(message.message_type);
   const isVoiceType = ['audio', 'ptt', 'voice'].includes(message.message_type);
-  const isVisualMedia = ['image', 'video'].includes(message.message_type) && hasMedia;
+  const isVisualMedia = ['image', 'video', 'sticker'].includes(message.message_type) && hasMedia;
   const caption = message.message_body;
   // Don't show placeholder text as caption (e.g. "[Image]", "[Audio message]")
   const isPlaceholder = caption && /^\[.+\]$/.test(caption.trim());
@@ -506,14 +517,18 @@ export default function MessageBubble({ message, messages = [], contactName, onC
         <div
           className={cn(
             'overflow-hidden rounded-2xl',
-            isVisualMedia ? 'p-0' : 'px-4 py-2',
-            isScheduled
-              ? 'border border-dashed border-primary/30 bg-primary/5 text-foreground'
-              : isOutbound
-                ? isAI
-                  ? 'bg-purple-100 text-purple-900 dark:bg-purple-950 dark:text-purple-100'
-                  : 'bg-primary/90 text-primary-foreground'
-                : 'bg-muted text-foreground'
+            message.message_type === 'sticker'
+              ? 'bg-transparent p-0'
+              : isVisualMedia ? 'p-0' : 'px-4 py-2',
+            message.message_type !== 'sticker' && (
+              isScheduled
+                ? 'border border-dashed border-primary/30 bg-primary/5 text-foreground'
+                : isOutbound
+                  ? isAI
+                    ? 'bg-purple-100 text-purple-900 dark:bg-purple-950 dark:text-purple-100'
+                    : 'bg-primary/90 text-primary-foreground'
+                  : 'bg-muted text-foreground'
+            )
           )}
         >
           {/* Quoted message preview (inside bubble) */}

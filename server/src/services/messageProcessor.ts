@@ -72,6 +72,22 @@ function extractMessageBody(msg: WhapiIncomingMessage): string {
   }
   if (msg.image) return '[Image]';
   if (msg.video) return '[Video]';
+  if (msg.sticker) return '[Sticker]';
+  // Interactive messages (outbound buttons/lists sent by business)
+  if (msg.interactive) {
+    return msg.interactive.body?.text || msg.interactive.header?.text || '[Interactive message]';
+  }
+  // Reply messages (user clicked a button or list item)
+  if (msg.reply) {
+    if (msg.reply.buttons_reply?.title) return msg.reply.buttons_reply.title;
+    if (msg.reply.list_reply?.title) return msg.reply.list_reply.title;
+  }
+  // Action messages (reactions, votes, etc.)
+  if (msg.action) {
+    if (msg.action.type === 'reaction' && msg.action.emoji) return msg.action.emoji;
+    if (msg.action.type === 'vote') return '[Poll vote]';
+    return '[Action]';
+  }
   return `[${msg.type || 'Unknown'} message]`;
 }
 
@@ -356,7 +372,8 @@ export async function processIncomingMessage(
   }
 
   // Voice notes come as type "voice" with data in the voice field (not audio)
-  const mediaPayload = msg.image || msg.document || msg.audio || msg.voice || msg.video;
+  // Stickers are image/webp files — treat as media
+  const mediaPayload = msg.image || msg.document || msg.audio || msg.voice || msg.video || msg.sticker;
   if (mediaPayload) {
     metadata.media = mediaPayload;
   }
@@ -412,7 +429,9 @@ export async function processIncomingMessage(
       chat_id_normalized: chatId,
       phone_number: phoneNumber,
       message_body: messageBody,
-      message_type: (msg.type === 'ptt' || msg.type === 'voice') ? 'audio' : (msg.type || 'text'),
+      message_type: (msg.type === 'ptt' || msg.type === 'voice') ? 'audio'
+        : msg.type === 'reply' ? 'text'  // button/list reply is just text
+        : (msg.type || 'text'),
       message_id_normalized: msg.id,
       direction: isOutbound ? 'outbound' : 'inbound',
       sender_type: isOutbound ? 'human' : 'contact',

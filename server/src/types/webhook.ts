@@ -45,6 +45,35 @@ export interface WhapiIncomingMessage {
     caption?: string;
     link?: string;
   };
+  sticker?: {
+    id: string;
+    mime_type: string;
+    link?: string;
+    animated?: boolean;
+  };
+  interactive?: {
+    type?: string;
+    header?: { type?: string; text?: string };
+    body?: { text?: string };
+    footer?: { text?: string };
+    action?: {
+      buttons?: Array<{ type?: string; reply?: { id?: string; title?: string } }>;
+      sections?: Array<{ title?: string; rows?: Array<{ id?: string; title?: string; description?: string }> }>;
+      name?: string;
+      product_retailer_id?: string;
+    };
+  };
+  action?: {
+    type?: string;
+    target?: string;
+    emoji?: string;
+    votes?: string[];
+  };
+  reply?: {
+    type?: string;
+    buttons_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string; description?: string };
+  };
   link_preview?: {
     body?: string;
     url?: string;
