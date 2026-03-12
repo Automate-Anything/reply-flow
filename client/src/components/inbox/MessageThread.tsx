@@ -85,17 +85,11 @@ export default function MessageThread({
   // Detect when switching to a new conversation
   useEffect(() => {
     if (prevSessionRef.current !== sessionId) {
-      const isNewChat = prevSessionRef.current !== null;
       prevSessionRef.current = sessionId;
       hasRestoredScroll.current = false;
       prevMessageCountRef.current = 0;
       setShowScrollDown(false);
-
-      if (isNewChat) {
-        // Clicking a different chat — always start at bottom
-        // Will be handled by the messages effect below (scrolls to bottom)
-        hasRestoredScroll.current = true;
-      }
+      // The messages effect will handle scroll: restore saved position or scroll to bottom
     }
   }, [sessionId]);
 
