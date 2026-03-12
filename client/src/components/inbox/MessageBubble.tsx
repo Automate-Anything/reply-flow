@@ -596,9 +596,9 @@ export default function MessageBubble({ message, messages = [], contactName, con
       }
     : fetchedPreview;
 
-  // Don't render empty bubbles (e.g. action messages with no body and no media)
-  const hasContent = message.message_body || isMediaType || linkPreview || isScheduled;
-  if (!hasContent) return null;
+  // Don't render empty bubbles (e.g. action/system messages with only placeholder text and no media)
+  const hasRealContent = (message.message_body && !isPlaceholder) || isMediaType || linkPreview || isScheduled;
+  if (!hasRealContent) return null;
 
   return (
     <div
