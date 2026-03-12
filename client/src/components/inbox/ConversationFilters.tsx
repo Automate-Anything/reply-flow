@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,7 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { ArrowDownUp, ChevronRight, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-react';
+import { ArrowDownUp, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationFilters as FilterState } from '@/hooks/useConversations';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
@@ -290,8 +289,6 @@ function FilterSection({
   summary: string;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(active);
-
   return (
     <AccordionItem value={value}>
       <AccordionTrigger className="py-2.5">
