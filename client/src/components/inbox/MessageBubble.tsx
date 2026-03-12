@@ -21,6 +21,7 @@ interface MessageBubbleProps {
   message: Message;
   messages?: Message[];
   contactName?: string;
+  contactAvatarUrl?: string | null;
   onCancelScheduled?: (messageId: string) => Promise<void>;
   onReply?: (message: Message) => void;
   onMessageUpdate?: (message: Message) => void;
@@ -52,12 +53,16 @@ function groupReactions(reactions: Array<{ emoji: string; user_id: string }>, my
 function ReactionDetailPopover({
   reaction,
   contactName,
+  contactAvatar,
+  userAvatar,
   onRemove,
   onClose,
   align,
 }: {
   reaction: GroupedReaction;
   contactName?: string;
+  contactAvatar?: string | null;
+  userAvatar?: string | null;
   onRemove: () => void;
   onClose: () => void;
   align: 'left' | 'right';
@@ -66,29 +71,57 @@ function ReactionDetailPopover({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div className={cn(
-        'absolute bottom-full z-50 mb-2 w-48 rounded-lg border bg-background p-2 shadow-lg',
+        'absolute bottom-full z-50 mb-2 w-56 overflow-hidden rounded-xl border bg-background shadow-xl',
         align === 'right' ? 'right-0' : 'left-0'
       )}>
-        <div className="mb-1.5 flex items-center gap-2 border-b pb-1.5">
-          <span className="text-lg">{reaction.emoji}</span>
-          <span className="text-xs text-muted-foreground">{reaction.count}</span>
+        {/* Tabs header */}
+        <div className="flex gap-3 border-b px-3 pt-2">
+          <button className="border-b-2 border-primary pb-1.5 text-xs font-medium">
+            All {reaction.count}
+          </button>
+          <button className="border-b-2 border-primary pb-1.5 text-xs font-medium">
+            {reaction.emoji} {reaction.count}
+          </button>
         </div>
-        <div className="space-y-1">
-          {reaction.reactors.map((r) => (
-            <div key={r.user_id} className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs font-medium">
-                {r.isMe ? 'You' : (contactName || r.user_id)}
-              </span>
-              {r.isMe && (
-                <button
-                  onClick={onRemove}
-                  className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
+
+        {/* Reactor list */}
+        <div className="p-2">
+          {reaction.reactors.map((r) => {
+            const name = r.isMe ? 'You' : (contactName || r.user_id);
+            const avatar = r.isMe ? userAvatar : contactAvatar;
+            const initial = (name[0] || '?').toUpperCase();
+
+            return (
+              <button
+                key={r.user_id}
+                onClick={r.isMe ? onRemove : undefined}
+                className={cn(
+                  'flex w-full items-center gap-2.5 rounded-lg px-2 py-2',
+                  r.isMe && 'cursor-pointer hover:bg-accent'
+                )}
+              >
+                {/* Avatar */}
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  {avatar ? (
+                    <img src={avatar} alt={name} className="h-9 w-9 rounded-full object-cover" />
+                  ) : (
+                    <span className="text-xs font-semibold text-primary">{initial}</span>
+                  )}
+                </div>
+
+                {/* Name + subtitle */}
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-sm font-medium">{name}</p>
+                  {r.isMe && (
+                    <p className="text-[11px] text-muted-foreground">Click to remove</p>
+                  )}
+                </div>
+
+                {/* Large emoji */}
+                <span className="shrink-0 text-2xl">{reaction.emoji}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </>
@@ -494,8 +527,8 @@ function LinkPreviewCard({ preview, isOutbound }: { preview: LinkPreview; isOutb
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-export default function MessageBubble({ message, messages = [], contactName, onCancelScheduled, onReply, onMessageUpdate, isDebugMode }: MessageBubbleProps) {
-  const { companyTimezone: tz } = useSession();
+export default function MessageBubble({ message, messages = [], contactName, contactAvatarUrl, onCancelScheduled, onReply, onMessageUpdate, isDebugMode }: MessageBubbleProps) {
+  const { companyTimezone: tz, avatarUrl: myAvatarUrl } = useSession();
   const isOutbound = message.direction === 'outbound';
   const isAI = message.sender_type === 'ai';
   const isHuman = message.sender_type === 'human';
@@ -766,6 +799,8 @@ export default function MessageBubble({ message, messages = [], contactName, onC
                   <ReactionDetailPopover
                     reaction={r}
                     contactName={contactName}
+                    contactAvatar={contactAvatarUrl}
+                    userAvatar={myAvatarUrl}
                     onRemove={() => { setOpenReactionDetail(null); handleReact(r.emoji); }}
                     onClose={() => setOpenReactionDetail(null)}
                     align={isOutbound ? 'right' : 'left'}

@@ -10,6 +10,7 @@ interface MessageThreadProps {
   loading: boolean;
   sessionId: string;
   contactName?: string;
+  contactAvatarUrl?: string | null;
   onSend: (body: string) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   onCancelScheduled: (messageId: string) => Promise<void>;
@@ -28,6 +29,7 @@ export default function MessageThread({
   loading,
   sessionId,
   contactName,
+  contactAvatarUrl,
   onSend,
   onSchedule,
   onCancelScheduled,
@@ -79,6 +81,7 @@ export default function MessageThread({
                   message={msg}
                   messages={messages}
                   contactName={contactName}
+                  contactAvatarUrl={contactAvatarUrl}
                   onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
                   onReply={onReply}
                   onMessageUpdate={onMessageUpdate}

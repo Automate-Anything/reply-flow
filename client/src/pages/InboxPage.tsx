@@ -449,6 +449,7 @@ export default function InboxPage() {
               loading={msgsLoading}
               sessionId={activeConversation.id}
               contactName={activeConversation.contact_name || activeConversation.phone_number}
+              contactAvatarUrl={activeConversation.profile_picture_url}
               onSend={handleSend}
               onSchedule={handleSchedule}
               onCancelScheduled={handleCancelScheduled}
