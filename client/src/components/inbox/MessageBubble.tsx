@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { formatTime as formatTimestamp, formatScheduledTime } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
-import { AlertCircle, Check, CheckCheck, Clock, Download, ExternalLink, FileText, Image as ImageIcon, Loader2, Mic, Pause, Pin, Play, Reply, Star, X } from 'lucide-react';
+import { AlertCircle, Check, CheckCheck, Clock, Download, ExternalLink, FileText, Image as ImageIcon, Loader2, Mic, Pause, Pin, Play, Reply, Smile, Star, X } from 'lucide-react';
 import type { Message } from '@/hooks/useMessages';
 import { useLinkPreview } from '@/hooks/useLinkPreview';
 import type { LinkPreview } from '@/hooks/useLinkPreview';
@@ -23,6 +23,7 @@ interface MessageBubbleProps {
   contactName?: string;
   onCancelScheduled?: (messageId: string) => Promise<void>;
   onReply?: (message: Message) => void;
+  onMessageUpdate?: (message: Message) => void;
   isDebugMode?: boolean;
 }
 
@@ -433,7 +434,9 @@ function LinkPreviewCard({ preview, isOutbound }: { preview: LinkPreview; isOutb
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function MessageBubble({ message, messages = [], contactName, onCancelScheduled, onReply, isDebugMode }: MessageBubbleProps) {
+const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+export default function MessageBubble({ message, messages = [], contactName, onCancelScheduled, onReply, onMessageUpdate, isDebugMode }: MessageBubbleProps) {
   const { companyTimezone: tz } = useSession();
   const isOutbound = message.direction === 'outbound';
   const isAI = message.sender_type === 'ai';
@@ -441,6 +444,25 @@ export default function MessageBubble({ message, messages = [], contactName, onC
   const isScheduled = message.status === 'scheduled' && message.scheduled_for;
   const reply = (message.metadata?.reply as ReplyMetadata) || null;
   const reactions = groupReactions(message.reactions || []);
+  const [showEmojiBar, setShowEmojiBar] = useState(false);
+  const [reacting, setReacting] = useState(false);
+
+  const handleReact = useCallback(async (emoji: string) => {
+    if (reacting || !onMessageUpdate) return;
+    setReacting(true);
+    setShowEmojiBar(false);
+    try {
+      const existing = message.reactions?.find((r) => r.emoji === emoji);
+      const { data } = await api.post(`/messages/${message.id}/react`, {
+        emoji: existing ? '' : emoji,
+      });
+      onMessageUpdate(data.message);
+    } catch {
+      // silently fail
+    } finally {
+      setReacting(false);
+    }
+  }, [message.id, message.reactions, reacting, onMessageUpdate]);
   const debugData = isDebugMode && isAI ? (message.metadata?.debug as AIDebugData | undefined) : undefined;
 
   const hasMedia = !!message.media_storage_path;
@@ -487,15 +509,46 @@ export default function MessageBubble({ message, messages = [], contactName, onC
         isOutbound ? 'justify-end' : 'justify-start'
       )}
     >
-      {/* Reply button — outbound messages: appears to the left */}
-      {isOutbound && onReply && !isScheduled && (
-        <button
-          onClick={() => onReply(message)}
-          className="shrink-0 rounded-full p-1 opacity-0 transition-opacity hover:bg-muted group-hover/msg:opacity-100"
-          title="Reply"
-        >
-          <Reply className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
+      {/* Action buttons — outbound messages: appears to the left */}
+      {isOutbound && !isScheduled && (
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/msg:opacity-100">
+          {onMessageUpdate && (
+            <div className="relative">
+              <button
+                onClick={() => setShowEmojiBar(!showEmojiBar)}
+                className="rounded-full p-1 hover:bg-muted"
+                title="React"
+              >
+                <Smile className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+              {showEmojiBar && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowEmojiBar(false)} />
+                  <div className="absolute bottom-full right-0 z-50 mb-1 flex gap-0.5 rounded-full border bg-background px-1 py-0.5 shadow-lg">
+                    {QUICK_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleReact(emoji)}
+                        className="rounded-full px-1 py-0.5 text-base transition-transform hover:scale-125 hover:bg-accent"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {onReply && (
+            <button
+              onClick={() => onReply(message)}
+              className="rounded-full p-1 hover:bg-muted"
+              title="Reply"
+            >
+              <Reply className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          )}
+        </div>
       )}
 
       <div className={cn('max-w-[70%]', linkPreview && 'max-w-[340px]', isScheduled && 'group')}>
@@ -634,14 +687,15 @@ export default function MessageBubble({ message, messages = [], contactName, onC
 
         {/* Reactions */}
         {reactions.length > 0 && (
-          <div className={cn('mt-1 flex gap-0.5', isOutbound ? 'justify-end' : 'justify-start')}>
+          <div className={cn('-mt-1 flex gap-0.5', isOutbound ? 'justify-end' : 'justify-start')}>
             {reactions.map(({ emoji, count }) => (
-              <span
+              <button
                 key={emoji}
-                className="rounded-full border bg-background px-1.5 py-0.5 text-xs shadow-sm"
+                onClick={() => handleReact(emoji)}
+                className="rounded-full border bg-background px-1.5 py-0.5 text-xs shadow-sm transition-colors hover:bg-accent"
               >
                 {emoji}{count > 1 ? ` ${count}` : ''}
-              </span>
+              </button>
             ))}
           </div>
         )}
@@ -650,15 +704,46 @@ export default function MessageBubble({ message, messages = [], contactName, onC
         {debugData && <AIDebugPanel debugData={debugData} />}
       </div>
 
-      {/* Reply button — inbound messages: appears to the right */}
-      {!isOutbound && onReply && !isScheduled && (
-        <button
-          onClick={() => onReply(message)}
-          className="shrink-0 rounded-full p-1 opacity-0 transition-opacity hover:bg-muted group-hover/msg:opacity-100"
-          title="Reply"
-        >
-          <Reply className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
+      {/* Action buttons — inbound messages: appears to the right */}
+      {!isOutbound && !isScheduled && (
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/msg:opacity-100">
+          {onReply && (
+            <button
+              onClick={() => onReply(message)}
+              className="rounded-full p-1 hover:bg-muted"
+              title="Reply"
+            >
+              <Reply className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          )}
+          {onMessageUpdate && (
+            <div className="relative">
+              <button
+                onClick={() => setShowEmojiBar(!showEmojiBar)}
+                className="rounded-full p-1 hover:bg-muted"
+                title="React"
+              >
+                <Smile className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+              {showEmojiBar && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowEmojiBar(false)} />
+                  <div className="absolute bottom-full left-0 z-50 mb-1 flex gap-0.5 rounded-full border bg-background px-1 py-0.5 shadow-lg">
+                    {QUICK_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleReact(emoji)}
+                        className="rounded-full px-1 py-0.5 text-base transition-transform hover:scale-125 hover:bg-accent"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

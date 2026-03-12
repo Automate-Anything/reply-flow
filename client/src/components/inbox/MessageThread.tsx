@@ -81,6 +81,7 @@ export default function MessageThread({
                   contactName={contactName}
                   onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
                   onReply={onReply}
+                  onMessageUpdate={onMessageUpdate}
                   isDebugMode={isDebugMode}
                 />
               </MessageContextMenu>
