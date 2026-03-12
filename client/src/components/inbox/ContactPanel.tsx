@@ -23,9 +23,10 @@ interface ContactPanelProps {
   contactId: string | null;
   open: boolean;
   onClose: () => void;
+  onProfilePictureLoaded?: (url: string) => void;
 }
 
-export default function ContactPanel({ contactId, open, onClose }: ContactPanelProps) {
+export default function ContactPanel({ contactId, open, onClose, onProfilePictureLoaded }: ContactPanelProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -54,12 +55,15 @@ export default function ContactPanel({ contactId, open, onClose }: ContactPanelP
         email: data.contact.email || '',
         company: data.contact.company || '',
       });
+      if (data.contact.profile_picture_url) {
+        onProfilePictureLoaded?.(data.contact.profile_picture_url);
+      }
     } catch {
       toast.error('Failed to load contact');
     } finally {
       setLoading(false);
     }
-  }, [contactId]);
+  }, [contactId, onProfilePictureLoaded]);
 
   useEffect(() => {
     if (open && contactId) {

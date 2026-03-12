@@ -106,14 +106,28 @@ export default function InboxPage() {
     }
   }, [activeConversation]);
 
-  // Keep activeConversation in sync with the conversations list (picks up fresh profile_picture_url, etc.)
+  // Fetch profile picture if the active conversation has a contact but no picture yet
+  const fetchedPicForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!activeConversation || convsLoading) return;
-    const fresh = conversations.find((c) => c.id === activeConversation.id);
-    if (fresh && fresh.profile_picture_url !== activeConversation.profile_picture_url) {
-      setActiveConversation((prev) => prev ? { ...prev, profile_picture_url: fresh.profile_picture_url } : prev);
-    }
-  }, [conversations, convsLoading, activeConversation]);
+    if (!activeConversation?.contact_id) return;
+    if (activeConversation.profile_picture_url) return;
+    // Don't re-fetch for the same contact
+    if (fetchedPicForRef.current === activeConversation.contact_id) return;
+    fetchedPicForRef.current = activeConversation.contact_id;
+
+    api.get(`/contacts/${activeConversation.contact_id}`).then(({ data }) => {
+      const url = data.contact?.profile_picture_url;
+      if (url) {
+        setActiveConversation((prev) =>
+          prev && prev.id === activeConversation.id ? { ...prev, profile_picture_url: url } : prev
+        );
+        // Also update the conversations list so the sidebar shows the picture
+        setConversations((prev) =>
+          prev.map((c) => c.id === activeConversation.id ? { ...c, profile_picture_url: url } : c)
+        );
+      }
+    }).catch(() => { /* silently fail */ });
+  }, [activeConversation, setConversations]);
 
   // Draft save helper
   const saveDraft = useCallback(async (sessionId: string, text: string) => {
@@ -515,6 +529,14 @@ export default function InboxPage() {
             contactId={activeConversation.contact_id}
             open={contactPanelOpen}
             onClose={() => setContactPanelOpen(false)}
+            onProfilePictureLoaded={(url) => {
+              setActiveConversation((prev) =>
+                prev && !prev.profile_picture_url ? { ...prev, profile_picture_url: url } : prev
+              );
+              setConversations((prev) =>
+                prev.map((c) => c.id === activeConversation.id && !c.profile_picture_url ? { ...c, profile_picture_url: url } : c)
+              );
+            }}
           />
 
           {/* Forward message modal */}
