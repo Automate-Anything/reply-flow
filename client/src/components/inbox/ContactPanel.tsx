@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -47,6 +47,10 @@ export default function ContactPanel({ contactId, open, onClose, onProfilePictur
   const [newNote, setNewNote] = useState('');
   const [noteSubmitting, setNoteSubmitting] = useState(false);
 
+  // Stable ref for callback to avoid infinite re-fetch loops
+  const onProfilePictureLoadedRef = useRef(onProfilePictureLoaded);
+  onProfilePictureLoadedRef.current = onProfilePictureLoaded;
+
   const fetchContact = useCallback(async () => {
     if (!contactId) return;
     setLoading(true);
@@ -60,14 +64,14 @@ export default function ContactPanel({ contactId, open, onClose, onProfilePictur
         company: data.contact.company || '',
       });
       if (data.contact.profile_picture_url) {
-        onProfilePictureLoaded?.(data.contact.profile_picture_url);
+        onProfilePictureLoadedRef.current?.(data.contact.profile_picture_url);
       }
     } catch {
       toast.error('Failed to load contact');
     } finally {
       setLoading(false);
     }
-  }, [contactId, onProfilePictureLoaded]);
+  }, [contactId]);
 
   // Clear stale contact data immediately when switching contacts
   useEffect(() => {
