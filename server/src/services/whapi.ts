@@ -253,17 +253,52 @@ export async function reactToMessage(channelToken: string, messageId: string, em
 }
 
 /**
- * Fetches the direct download URL for a media file by its Whapi media ID.
- * Used as a fallback when the webhook doesn't include a `link` in the payload.
+ * Downloads media binary by its Whapi media ID.
+ * Whapi's GET /media/{id} returns raw binary data, not a JSON URL.
  */
-export async function getMediaUrl(channelToken: string, mediaId: string): Promise<string | null> {
+export async function downloadMediaById(channelToken: string, mediaId: string): Promise<Buffer | null> {
   const gate = gateApi(channelToken);
   try {
-    const { data } = await gate.get(`/media/${mediaId}`);
-    return data.link || data.url || null;
+    const { data } = await gate.get(`/media/${mediaId}`, { responseType: 'arraybuffer' });
+    return Buffer.from(data);
   } catch {
     return null;
   }
+}
+
+/**
+ * Fetches a message from Whapi by its WhatsApp message ID.
+ * Returns the media link/info if the message contains media.
+ */
+export async function getMessageById(channelToken: string, messageId: string): Promise<{
+  type?: string;
+  media?: { id?: string; link?: string; mime_type?: string };
+} | null> {
+  const gate = gateApi(channelToken);
+  try {
+    const { data } = await gate.get(`/messages/${messageId}`);
+    const mediaPayload = data?.image || data?.document || data?.audio || data?.voice || data?.video;
+    return {
+      type: data?.type,
+      media: mediaPayload ? {
+        id: mediaPayload.id,
+        link: mediaPayload.link,
+        mime_type: mediaPayload.mime_type,
+      } : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @deprecated Use downloadMediaById() instead — Whapi returns binary, not a URL.
+ * Kept for backward compatibility but will always return null.
+ */
+export async function getMediaUrl(channelToken: string, mediaId: string): Promise<string | null> {
+  // Whapi's GET /media/{id} returns raw binary, not JSON with a URL.
+  // This function cannot work as designed. Use downloadMediaById() instead.
+  return null;
 }
 
 export async function forwardMessage(channelToken: string, messageId: string, to: string): Promise<unknown> {

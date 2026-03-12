@@ -3,9 +3,9 @@ import type { WhapiIncomingMessage } from '../types/webhook.js';
 import { shouldAIRespond, generateAndSendAIReply, sendOutsideHoursReply } from './ai.js';
 import { checkMessageAllowance, deductOverageBalance, triggerAutoTopup } from './billingService.js';
 import { extractSessionMemories } from './sessionMemory.js';
-import { downloadAndStore } from './mediaStorage.js';
+import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
-import { getMediaUrl } from './whapi.js';
+import { downloadMediaById } from './whapi.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -328,7 +328,8 @@ export async function processIncomingMessage(
   const mediaMimeType = mediaPayload?.mime_type as string | undefined;
   const mediaFilename = (mediaPayload as Record<string, unknown>)?.filename as string | undefined;
 
-  // Fallback: if Whapi didn't include a direct link, fetch it via the Gate API
+  // Fallback: if Whapi didn't include a direct link, download binary via the Gate API
+  let mediaBuffer: Buffer | null = null;
   if (!mediaLink && mediaId && mediaMimeType) {
     try {
       const { data: ch } = await supabaseAdmin
@@ -337,11 +338,10 @@ export async function processIncomingMessage(
         .eq('id', channelId)
         .single();
       if (ch?.channel_token) {
-        const resolved = await getMediaUrl(ch.channel_token, mediaId);
-        if (resolved) mediaLink = resolved;
+        mediaBuffer = await downloadMediaById(ch.channel_token, mediaId);
       }
     } catch (err) {
-      console.error('Media link fallback error:', err);
+      console.error('Media binary fallback error:', err);
     }
   }
 
@@ -373,9 +373,13 @@ export async function processIncomingMessage(
 
   // 5a. Download, store, and extract media content BEFORE AI triggers
   // This must complete so the AI has access to images, transcripts, and document text
-  if (mediaLink && mediaMimeType && insertedMessage) {
+  if (insertedMessage && mediaMimeType) {
     try {
-      await processMedia(insertedMessage.id, mediaLink, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
+      if (mediaLink) {
+        await processMedia(insertedMessage.id, mediaLink, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
+      } else if (mediaBuffer) {
+        await processMediaFromBuffer(insertedMessage.id, mediaBuffer, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
+      }
     } catch (err) {
       console.error('Media processing error:', err);
     }
@@ -503,6 +507,43 @@ async function processMedia(
   // Images and videos: no server-side extraction needed — Claude Vision handles these directly
 
   // 3. Update the message record
+  await supabaseAdmin
+    .from('chat_messages')
+    .update(updateFields)
+    .eq('id', messageId);
+}
+
+/**
+ * Stores an already-downloaded media buffer in Supabase Storage and extracts
+ * text content (transcripts for audio, text for documents) for AI use.
+ * Used when Whapi doesn't provide a download link and we fetch binary directly.
+ */
+async function processMediaFromBuffer(
+  messageId: string,
+  buffer: Buffer,
+  companyId: string,
+  channelId: number,
+  mimeType: string,
+  filename: string | undefined,
+  messageType: string,
+): Promise<void> {
+  const storagePath = await storeBuffer(buffer, companyId, channelId, messageId, mimeType, filename);
+  if (!storagePath) return;
+
+  const updateFields: Record<string, unknown> = { media_storage_path: storagePath };
+
+  if (messageType === 'audio' || messageType === 'ptt' || messageType === 'voice') {
+    const transcript = await extractAudioTranscript(storagePath, mimeType);
+    if (transcript) {
+      updateFields.media_transcript = transcript;
+    }
+  } else if (messageType === 'document') {
+    const extractedText = await extractDocumentText(storagePath, mimeType, filename);
+    if (extractedText) {
+      updateFields.media_extracted_text = extractedText;
+    }
+  }
+
   await supabaseAdmin
     .from('chat_messages')
     .update(updateFields)

@@ -94,6 +94,41 @@ export async function getSignedUrl(
 }
 
 /**
+ * Stores an already-downloaded media buffer in Supabase Storage.
+ * Returns the storage path on success, or null on failure.
+ */
+export async function storeBuffer(
+  buffer: Buffer,
+  companyId: string,
+  channelId: number,
+  messageId: string,
+  mimeType: string,
+  filename?: string,
+): Promise<string | null> {
+  try {
+    const ext = getExtension(mimeType, filename);
+    const storagePath = `${companyId}/${channelId}/${messageId}.${ext}`;
+
+    const { error } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (error) {
+      console.error('Supabase storage upload error:', error.message);
+      return null;
+    }
+
+    return storagePath;
+  } catch (err) {
+    console.error('Buffer store error:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
  * Downloads a stored media file as a Buffer (for AI processing).
  */
 export async function downloadFromStorage(storagePath: string): Promise<Buffer | null> {
