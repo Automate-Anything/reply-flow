@@ -105,11 +105,14 @@ export default function MessageThread({
 
       const positions = getScrollPositions();
       const savedScroll = positions[sessionId];
-      if (savedScroll !== undefined && savedScroll > 0) {
-        el.scrollTop = savedScroll;
-      } else {
-        bottomRef.current?.scrollIntoView();
-      }
+      // Defer scroll restore to next frame so the browser has finished layout
+      requestAnimationFrame(() => {
+        if (savedScroll !== undefined && savedScroll > 0) {
+          el.scrollTop = savedScroll;
+        } else {
+          bottomRef.current?.scrollIntoView();
+        }
+      });
       return;
     }
 
