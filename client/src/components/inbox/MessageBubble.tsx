@@ -596,10 +596,6 @@ export default function MessageBubble({ message, messages = [], contactName, con
       }
     : fetchedPreview;
 
-  // Don't render empty bubbles (e.g. action/system messages with only placeholder text and no media)
-  const hasRealContent = (message.message_body && !isPlaceholder) || isMediaType || linkPreview || isScheduled;
-  if (!hasRealContent) return null;
-
   return (
     <div
       data-component="MessageBubble"
@@ -776,7 +772,7 @@ export default function MessageBubble({ message, messages = [], contactName, con
           )}
 
           {/* Regular text message (only when showCaption hasn't already rendered the body) */}
-          {!isMediaType && !showCaption && message.message_body && (
+          {!isMediaType && !showCaption && (
             <div className="relative">
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.message_body}{!isScheduled && <TimeSpacer wide={isAI || isHuman} hasStatus={isOutbound} />}</p>
               {!isScheduled && <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} />}
