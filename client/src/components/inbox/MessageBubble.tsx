@@ -734,7 +734,13 @@ export default function MessageBubble({ message, messages = [], contactName, con
                 isOutbound={isOutbound}
                 voiceTimeSlot={
                   isVoiceType && !isScheduled
-                    ? <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} />
+                    ? <span className={cn('inline-flex items-center gap-1 text-[10px] leading-none whitespace-nowrap', isOutbound ? 'text-white/60' : 'text-muted-foreground')}>
+                        {isAI && <span className="font-medium uppercase tracking-wider">AI</span>}
+                        {isHuman && <span className="font-medium uppercase tracking-wider">You</span>}
+                        {(isAI || isHuman) && <span>·</span>}
+                        <span>{formatTimestamp(message.message_ts || message.created_at, tz)}</span>
+                        {isOutbound && message.status !== 'scheduled' && <MessageStatusIcon status={message.status} />}
+                      </span>
                     : undefined
                 }
               />
