@@ -249,7 +249,7 @@ export async function unpinMessage(channelToken: string, messageId: string): Pro
 
 export async function reactToMessage(channelToken: string, messageId: string, emoji: string): Promise<void> {
   const gate = gateApi(channelToken);
-  await gate.put(`/messages/${messageId}/react`, { emoji });
+  await gate.put(`/messages/${messageId}/reaction`, { emoji });
 }
 
 /**
