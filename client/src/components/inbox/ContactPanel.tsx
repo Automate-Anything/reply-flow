@@ -65,10 +65,15 @@ export default function ContactPanel({ contactId, open, onClose, onProfilePictur
     }
   }, [contactId, onProfilePictureLoaded]);
 
+  // Clear stale contact data immediately when switching contacts
+  useEffect(() => {
+    setContact(null);
+    setEditing(false);
+  }, [contactId]);
+
   useEffect(() => {
     if (open && contactId) {
       fetchContact();
-      setEditing(false);
     }
   }, [open, contactId, fetchContact]);
 
