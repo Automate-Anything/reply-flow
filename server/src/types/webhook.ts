@@ -31,17 +31,26 @@ export interface WhapiIncomingMessage {
     id: string;
     mime_type: string;
     link?: string;
+    duration?: number;
   };
   voice?: {
     id: string;
     mime_type: string;
     link?: string;
+    duration?: number;
   };
   video?: {
     id: string;
     mime_type: string;
     caption?: string;
     link?: string;
+  };
+  link_preview?: {
+    body?: string;
+    title?: string;
+    description?: string;
+    canonical_url?: string;
+    thumbnail?: string;
   };
   from_name?: string;
   chat_id: string;

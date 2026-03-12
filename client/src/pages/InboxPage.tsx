@@ -424,6 +424,7 @@ export default function InboxPage() {
               messages={messages}
               loading={msgsLoading}
               sessionId={activeConversation.id}
+              contactName={activeConversation.contact_name || activeConversation.phone_number}
               onSend={handleSend}
               onSchedule={handleSchedule}
               onCancelScheduled={handleCancelScheduled}

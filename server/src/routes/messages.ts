@@ -658,4 +658,90 @@ router.post('/:messageId/forward', requirePermission('messages', 'create'), asyn
   }
 });
 
+// ── Link preview (OG metadata) ────────────────────────────────────────────────
+
+router.get('/link-preview', async (req, res, next) => {
+  try {
+    const url = req.query.url as string;
+    if (!url) { res.status(400).json({ error: 'url is required' }); return; }
+
+    // Validate URL
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+    } catch {
+      res.status(400).json({ error: 'Invalid URL' });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(parsed.href, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LinkPreview/1.0)',
+        'Accept': 'text/html',
+      },
+      redirect: 'follow',
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      res.json({ title: null, description: null, image: null, site_name: null, url: parsed.href });
+      return;
+    }
+
+    // Only read first 50KB to find OG tags
+    const reader = response.body?.getReader();
+    if (!reader) { res.json({ title: null, description: null, image: null, site_name: null, url: parsed.href }); return; }
+
+    let html = '';
+    const decoder = new TextDecoder();
+    while (html.length < 50_000) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: true });
+      // Stop once we've passed </head> — OG tags are in <head>
+      if (html.includes('</head>')) break;
+    }
+    reader.cancel().catch(() => {});
+
+    const getMetaContent = (property: string): string | null => {
+      // Match both property="..." and name="..."
+      const re = new RegExp(
+        `<meta[^>]*(?:property|name)=["']${property}["'][^>]*content=["']([^"']*)["']|<meta[^>]*content=["']([^"']*)["'][^>]*(?:property|name)=["']${property}["']`,
+        'i'
+      );
+      const m = html.match(re);
+      return m?.[1] || m?.[2] || null;
+    };
+
+    // Also grab <title> as fallback
+    const titleTag = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || null;
+
+    const ogTitle = getMetaContent('og:title') || getMetaContent('twitter:title') || titleTag;
+    const ogDescription = getMetaContent('og:description') || getMetaContent('twitter:description') || getMetaContent('description');
+    const ogImage = getMetaContent('og:image') || getMetaContent('twitter:image');
+    const ogSiteName = getMetaContent('og:site_name');
+
+    // Cache for 1 hour
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json({
+      title: ogTitle ? ogTitle.slice(0, 300) : null,
+      description: ogDescription ? ogDescription.slice(0, 500) : null,
+      image: ogImage || null,
+      site_name: ogSiteName || parsed.hostname,
+      url: parsed.href,
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      res.json({ title: null, description: null, image: null, site_name: null, url: req.query.url });
+      return;
+    }
+    next(err);
+  }
+});
+
 export default router;

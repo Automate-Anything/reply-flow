@@ -9,6 +9,7 @@ interface MessageThreadProps {
   messages: Message[];
   loading: boolean;
   sessionId: string;
+  contactName?: string;
   onSend: (body: string) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   onCancelScheduled: (messageId: string) => Promise<void>;
@@ -26,6 +27,7 @@ export default function MessageThread({
   messages,
   loading,
   sessionId,
+  contactName,
   onSend,
   onSchedule,
   onCancelScheduled,
@@ -75,6 +77,8 @@ export default function MessageThread({
               >
                 <MessageBubble
                   message={msg}
+                  messages={messages}
+                  contactName={contactName}
                   onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
                   onReply={onReply}
                   isDebugMode={isDebugMode}

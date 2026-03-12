@@ -3,7 +3,7 @@ import { formatRelativeDate, formatSnoozeUntil } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Clock, Pin, RotateCcw, Star } from 'lucide-react';
+import { Camera, Clock, FileText, Mic, Pin, Play, RotateCcw, Star } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
@@ -29,6 +29,35 @@ const FALLBACK_PRIORITY_COLORS: Record<string, string> = {
 function getStatusLabel(status: string): string | null {
   if (status === 'open') return null;
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+const MEDIA_PATTERNS: { pattern: RegExp; icon: typeof Mic; getLabel: (text: string) => string }[] = [
+  { pattern: /^\[Voice message( \d+:\d{2})?\]$/i, icon: Mic, getLabel: (t) => {
+    const m = t.match(/(\d+:\d{2})/);
+    return m ? m[1] : 'Voice message';
+  }},
+  { pattern: /^\[Audio message( \d+:\d{2})?\]$/i, icon: Mic, getLabel: (t) => {
+    const m = t.match(/(\d+:\d{2})/);
+    return m ? m[1] : 'Audio message';
+  }},
+  { pattern: /^\[Image\]$/i, icon: Camera, getLabel: () => 'Photo' },
+  { pattern: /^\[Video\]$/i, icon: Play, getLabel: () => 'Video' },
+  { pattern: /^\[Document: .+\]$/i, icon: FileText, getLabel: (t) => t.replace(/^\[Document: (.+)\]$/, '$1') },
+];
+
+function formatLastMessage(text: string) {
+  const trimmed = text.trim();
+  for (const { pattern, icon: Icon, getLabel } of MEDIA_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return (
+        <span className="inline-flex items-center gap-1">
+          <Icon className="h-3 w-3" />
+          {getLabel(trimmed)}
+        </span>
+      );
+    }
+  }
+  return text;
 }
 
 
@@ -136,7 +165,7 @@ export default function ConversationItem({
                 {conversation.last_message_direction === 'outbound' && (
                   <span className="font-normal text-muted-foreground">You: </span>
                 )}
-                {conversation.last_message || 'No messages yet'}
+                {conversation.last_message ? formatLastMessage(conversation.last_message) : 'No messages yet'}
               </>
             )}
           </span>

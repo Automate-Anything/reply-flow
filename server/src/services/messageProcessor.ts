@@ -56,10 +56,19 @@ function resolveMessageRouting(
  */
 function extractMessageBody(msg: WhapiIncomingMessage): string {
   if (msg.text?.body) return msg.text.body;
+  if (msg.link_preview?.body) return msg.link_preview.body;
   if (msg.image?.caption) return msg.image.caption;
   if (msg.video?.caption) return msg.video.caption;
   if (msg.document?.filename) return `[Document: ${msg.document.filename}]`;
-  if (msg.audio || msg.voice) return '[Voice message]';
+  if (msg.audio || msg.voice) {
+    const dur = (msg.audio?.duration ?? msg.voice?.duration);
+    if (dur) {
+      const m = Math.floor(dur / 60);
+      const s = dur % 60;
+      return `[Voice message ${m}:${s.toString().padStart(2, '0')}]`;
+    }
+    return '[Voice message]';
+  }
   if (msg.image) return '[Image]';
   if (msg.video) return '[Video]';
   return `[${msg.type || 'Unknown'} message]`;
@@ -306,18 +315,39 @@ export async function processIncomingMessage(
     }
   }
 
-  // 4. Build metadata (media + reply context)
+  // 4. Build metadata (media + reply context + link preview)
   const metadata: Record<string, unknown> = {};
+
+  // Store link preview metadata from Whapi
+  if (msg.link_preview) {
+    metadata.link_preview = {
+      title: msg.link_preview.title || null,
+      description: msg.link_preview.description || null,
+      canonical_url: msg.link_preview.canonical_url || null,
+      thumbnail: msg.link_preview.thumbnail || null,
+    };
+  }
+
   // Voice notes come as type "voice" with data in the voice field (not audio)
   const mediaPayload = msg.image || msg.document || msg.audio || msg.voice || msg.video;
   if (mediaPayload) {
     metadata.media = mediaPayload;
   }
   if (msg.context?.quoted_id) {
+    // Look up the quoted message in our DB to get the real sender_type
+    let quotedSender: string | null = msg.context.quoted_author || null;
+    const { data: quotedMsg } = await supabaseAdmin
+      .from('messages')
+      .select('sender_type')
+      .eq('message_id_normalized', msg.context.quoted_id)
+      .maybeSingle();
+    if (quotedMsg?.sender_type) {
+      quotedSender = quotedMsg.sender_type;
+    }
     metadata.reply = {
       quoted_message_id: msg.context.quoted_id,
       quoted_content: msg.context.quoted_content?.body?.slice(0, 200) || null,
-      quoted_sender: msg.context.quoted_author || null,
+      quoted_sender: quotedSender,
       quoted_type: msg.context.quoted_type || null,
     };
   }
