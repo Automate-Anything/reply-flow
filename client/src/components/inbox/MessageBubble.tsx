@@ -42,7 +42,8 @@ function groupReactions(reactions: Array<{ emoji: string; user_id: string }>, my
   for (const r of reactions) {
     const existing = map.get(r.emoji) || { emoji: r.emoji, count: 0, isMine: false, reactors: [] };
     existing.count += 1;
-    const isMe = !!(myUserId && r.user_id === myUserId);
+    // "self" comes from webhook echoes, UUID comes from app-initiated reactions
+    const isMe = r.user_id === 'self' || !!(myUserId && r.user_id === myUserId);
     if (isMe) existing.isMine = true;
     existing.reactors.push({ user_id: r.user_id, isMe });
     map.set(r.emoji, existing);
@@ -546,7 +547,7 @@ export default function MessageBubble({ message, messages = [], contactName, con
     setShowEmojiBar(false);
     try {
       // Toggle: if I already reacted with this emoji, remove it; otherwise add it
-      const myExisting = message.reactions?.find((r) => r.emoji === emoji && r.user_id === myUserId);
+      const myExisting = message.reactions?.find((r) => r.emoji === emoji && (r.user_id === myUserId || r.user_id === 'self'));
       const { data } = await api.post(`/messages/${message.id}/react`, {
         emoji: myExisting ? '' : emoji,
       });
