@@ -62,8 +62,8 @@ export default function MessageThread({
 }: MessageThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevSessionRef = useRef<string | null>(null);
-  const hasRestoredScroll = useRef(false);
+  const restoredForSessionRef = useRef<string | null>(null);
+  const wasLoadingRef = useRef(false);
   const prevMessageCountRef = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
 
@@ -79,39 +79,37 @@ export default function MessageThread({
     const el = scrollContainerRef.current;
     if (!el) return;
     setShowScrollDown(!isNearBottom());
-    saveScrollPosition(sessionId, el.scrollTop);
-  }, [sessionId, isNearBottom]);
-
-  // Detect when switching to a new conversation
-  useEffect(() => {
-    if (prevSessionRef.current !== sessionId) {
-      prevSessionRef.current = sessionId;
-      hasRestoredScroll.current = false;
-      prevMessageCountRef.current = 0;
-      setShowScrollDown(false);
-      // The messages effect will handle scroll: restore saved position or scroll to bottom
+    // Only save scroll position if we've finished restoring for this session
+    if (restoredForSessionRef.current === sessionId) {
+      saveScrollPosition(sessionId, el.scrollTop);
     }
-  }, [sessionId]);
+  }, [sessionId, isNearBottom]);
 
   // Handle scroll on message changes: restore position, stick to bottom, or leave alone
   useEffect(() => {
-    if (loading || messages.length === 0) return;
+    // Track loading state so we know when fresh messages arrive
+    if (loading) {
+      wasLoadingRef.current = true;
+      return;
+    }
+    if (messages.length === 0) return;
     const el = scrollContainerRef.current;
     if (!el) return;
 
-    // First load for this session — restore saved position or scroll to bottom
-    if (!hasRestoredScroll.current) {
-      hasRestoredScroll.current = true;
+    // First load for this session — only after loading→loaded transition
+    if (restoredForSessionRef.current !== sessionId && wasLoadingRef.current) {
+      wasLoadingRef.current = false;
+      restoredForSessionRef.current = sessionId;
+      prevMessageCountRef.current = messages.length;
+      setShowScrollDown(false);
+
       const positions = getScrollPositions();
       const savedScroll = positions[sessionId];
       if (savedScroll !== undefined && savedScroll > 0) {
-        // Restore saved scroll position (e.g., after refresh or page navigation)
         el.scrollTop = savedScroll;
       } else {
-        // No saved position — scroll to bottom
         bottomRef.current?.scrollIntoView();
       }
-      prevMessageCountRef.current = messages.length;
       return;
     }
 
