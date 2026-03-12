@@ -112,7 +112,17 @@ export default function InboxPage() {
       (msg: Message) => {
         if (activeConversation && msg.session_id === activeConversation.id) {
           setMessages((prev) => {
+            // Already have this exact message
             if (prev.some((m) => m.id === msg.id)) return prev;
+            // If this is an outbound message and we have a pending temp message,
+            // skip — the sendMessage response handler will replace the temp message
+            if (
+              msg.direction === 'outbound' &&
+              msg.sender_type === 'human' &&
+              prev.some((m) => m.id.startsWith('temp-') && m.session_id === msg.session_id)
+            ) {
+              return prev;
+            }
             return [...prev, msg];
           });
           markRead();

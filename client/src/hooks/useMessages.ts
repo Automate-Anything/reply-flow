@@ -80,10 +80,13 @@ export function useMessages(sessionId: string | null) {
 
       try {
         const { data } = await api.post('/messages/send', { sessionId, body, quotedMessageId });
-        // Replace temp message with real server message
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? data.message : m))
-        );
+        // Replace temp message with real server message, and remove any
+        // duplicate that Realtime may have already inserted
+        const realId = data.message.id;
+        setMessages((prev) => {
+          const withoutDupe = prev.filter((m) => m.id !== realId);
+          return withoutDupe.map((m) => (m.id === tempId ? data.message : m));
+        });
         return data.message;
       } catch (err) {
         // Mark optimistic message as failed
