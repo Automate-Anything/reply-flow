@@ -191,7 +191,7 @@ export default function MessageThread({
         {showScrollDown && (
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-3 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border bg-background shadow-lg transition-colors hover:bg-accent"
+            className="absolute bottom-4 left-1/2 z-20 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border bg-background shadow-lg transition-colors hover:bg-accent"
             title="Scroll to bottom"
           >
             <ArrowDown className="h-4 w-4" />
