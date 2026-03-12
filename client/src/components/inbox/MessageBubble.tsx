@@ -29,15 +29,70 @@ interface MessageBubbleProps {
 
 
 
-function groupReactions(reactions: Array<{ emoji: string; user_id: string }>, myUserId: string | null): Array<{ emoji: string; count: number; isMine: boolean }> {
-  const map = new Map<string, { count: number; isMine: boolean }>();
+interface GroupedReaction {
+  emoji: string;
+  count: number;
+  isMine: boolean;
+  reactors: Array<{ user_id: string; isMe: boolean }>;
+}
+
+function groupReactions(reactions: Array<{ emoji: string; user_id: string }>, myUserId: string | null): GroupedReaction[] {
+  const map = new Map<string, GroupedReaction>();
   for (const r of reactions) {
-    const existing = map.get(r.emoji) || { count: 0, isMine: false };
+    const existing = map.get(r.emoji) || { emoji: r.emoji, count: 0, isMine: false, reactors: [] };
     existing.count += 1;
-    if (myUserId && r.user_id === myUserId) existing.isMine = true;
+    const isMe = !!(myUserId && r.user_id === myUserId);
+    if (isMe) existing.isMine = true;
+    existing.reactors.push({ user_id: r.user_id, isMe });
     map.set(r.emoji, existing);
   }
-  return Array.from(map, ([emoji, { count, isMine }]) => ({ emoji, count, isMine }));
+  return Array.from(map.values());
+}
+
+function ReactionDetailPopover({
+  reaction,
+  contactName,
+  onRemove,
+  onClose,
+  align,
+}: {
+  reaction: GroupedReaction;
+  contactName?: string;
+  onRemove: () => void;
+  onClose: () => void;
+  align: 'left' | 'right';
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className={cn(
+        'absolute bottom-full z-50 mb-2 w-48 rounded-lg border bg-background p-2 shadow-lg',
+        align === 'right' ? 'right-0' : 'left-0'
+      )}>
+        <div className="mb-1.5 flex items-center gap-2 border-b pb-1.5">
+          <span className="text-lg">{reaction.emoji}</span>
+          <span className="text-xs text-muted-foreground">{reaction.count}</span>
+        </div>
+        <div className="space-y-1">
+          {reaction.reactors.map((r) => (
+            <div key={r.user_id} className="flex items-center justify-between gap-2">
+              <span className="truncate text-xs font-medium">
+                {r.isMe ? 'You' : (contactName || r.user_id)}
+              </span>
+              {r.isMe && (
+                <button
+                  onClick={onRemove}
+                  className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
 }
 
 // ── Media URL cache (avoids re-fetching signed URLs for the same message) ────
@@ -450,6 +505,7 @@ export default function MessageBubble({ message, messages = [], contactName, onC
   const reactions = groupReactions(message.reactions || [], myUserId);
   const [showEmojiBar, setShowEmojiBar] = useState(false);
   const [reacting, setReacting] = useState(false);
+  const [openReactionDetail, setOpenReactionDetail] = useState<string | null>(null);
 
   const handleReact = useCallback(async (emoji: string) => {
     if (reacting || !onMessageUpdate) return;
@@ -693,20 +749,29 @@ export default function MessageBubble({ message, messages = [], contactName, onC
         {/* Reactions */}
         {reactions.length > 0 && (
           <div className={cn('-mt-1 flex gap-0.5', isOutbound ? 'justify-end' : 'justify-start')}>
-            {reactions.map(({ emoji, count, isMine }) => (
-              <button
-                key={emoji}
-                onClick={() => handleReact(emoji)}
-                className={cn(
-                  'rounded-full border px-1.5 py-0.5 text-xs shadow-sm transition-colors hover:bg-accent',
-                  isMine
-                    ? 'border-primary/50 bg-primary/10'
-                    : 'bg-background'
+            {reactions.map((r) => (
+              <div key={r.emoji} className="relative">
+                <button
+                  onClick={() => setOpenReactionDetail(openReactionDetail === r.emoji ? null : r.emoji)}
+                  className={cn(
+                    'rounded-full border px-1.5 py-0.5 text-xs shadow-sm transition-colors hover:bg-accent',
+                    r.isMine
+                      ? 'border-primary/50 bg-primary/10'
+                      : 'bg-background'
+                  )}
+                >
+                  {r.emoji}{r.count > 1 ? ` ${r.count}` : ''}
+                </button>
+                {openReactionDetail === r.emoji && (
+                  <ReactionDetailPopover
+                    reaction={r}
+                    contactName={contactName}
+                    onRemove={() => { setOpenReactionDetail(null); handleReact(r.emoji); }}
+                    onClose={() => setOpenReactionDetail(null)}
+                    align={isOutbound ? 'right' : 'left'}
+                  />
                 )}
-                title={isMine ? 'Click to remove your reaction' : 'Click to react'}
-              >
-                {emoji}{count > 1 ? ` ${count}` : ''}
-              </button>
+              </div>
             ))}
           </div>
         )}
