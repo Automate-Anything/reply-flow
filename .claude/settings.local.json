@@ -1,6 +1,19 @@
 {
   "permissions": {
     "allow": [
+      "Bash",
+      "WebSearch",
+      "WebFetch",
+      "Read",
+      "Edit",
+      "Write",
+      "LS",
+      "Grep",
+      "Glob",
+      "MultiEdit",
+      "Task",
+      "mcp__*",
+
       "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/.env*)",
       "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/.env*)",
       "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/client/.env*)",
@@ -13,6 +26,15 @@
       "Bash(npx tsc --noEmit)",
       "Bash(npx tsc:*)",
       "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout .:*)",
+      "Bash(git clean:*)"
     ]
-  }
+  },
+  "defaultMode": "acceptEdits",
+  "skipDangerousModePermissionPrompt": true
 }
