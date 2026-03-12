@@ -23,8 +23,10 @@ export function useRealtimeMessages({ onNewMessage, onMessageUpdate, onSessionUp
   useEffect(() => {
     if (!companyId) return;
 
+    let cancelled = false;
+
     const channel = supabase
-      .channel('inbox-realtime')
+      .channel(`inbox-realtime-${companyId}`)
       .on(
         'postgres_changes',
         {
@@ -34,7 +36,9 @@ export function useRealtimeMessages({ onNewMessage, onMessageUpdate, onSessionUp
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
-          onNewMessageRef.current?.(payload.new as Message);
+          if (!cancelled) {
+            onNewMessageRef.current?.(payload.new as Message);
+          }
         }
       )
       .on(
@@ -46,7 +50,9 @@ export function useRealtimeMessages({ onNewMessage, onMessageUpdate, onSessionUp
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
-          onMessageUpdateRef.current?.(payload.new as Partial<Message> & { id: string });
+          if (!cancelled) {
+            onMessageUpdateRef.current?.(payload.new as Partial<Message> & { id: string });
+          }
         }
       )
       .on(
@@ -58,12 +64,26 @@ export function useRealtimeMessages({ onNewMessage, onMessageUpdate, onSessionUp
           filter: `company_id=eq.${companyId}`,
         },
         (payload) => {
-          onSessionUpdateRef.current?.(payload.new as Partial<Conversation> & { id: string });
+          if (!cancelled) {
+            onSessionUpdateRef.current?.(payload.new as Partial<Conversation> & { id: string });
+          }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (cancelled) return;
+        if (status === 'SUBSCRIBED') {
+          console.log('[realtime] connected');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[realtime] channel error, will auto-retry:', err);
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[realtime] subscription timed out, retrying...');
+        } else if (status === 'CLOSED') {
+          console.log('[realtime] channel closed');
+        }
+      });
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
   }, [companyId]);

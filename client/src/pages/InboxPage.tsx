@@ -168,22 +168,36 @@ export default function InboxPage() {
   };
 
   const handleSend = async (body: string) => {
+    // Clear draft timer BEFORE the async send — otherwise the pending timer
+    // can fire during the await and re-save the draft to the server after
+    // the send endpoint already cleared it.
+    draftRef.current = '';
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    if (activeConversation) {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === activeConversation.id ? { ...c, draft_message: null } : c))
+      );
+    }
+
+    // Build reply metadata for optimistic message display
+    const replyMeta = replyingTo
+      ? {
+          reply: {
+            quoted_message_id: replyingTo.id,
+            quoted_content: (replyingTo.message_body || '').slice(0, 200),
+            quoted_sender: replyingTo.sender_type,
+            quoted_type: replyingTo.message_type,
+          },
+        }
+      : undefined;
+    const quotedId = replyingTo?.id;
+    setReplyingTo(null);
+
     try {
-      await sendMessage(body, replyingTo?.id);
-      setReplyingTo(null);
-
-      // Clear draft (server also clears it atomically on send)
-      draftRef.current = '';
-      if (draftTimerRef.current) {
-        clearTimeout(draftTimerRef.current);
-        draftTimerRef.current = null;
-      }
-      if (activeConversation) {
-        setConversations((prev) =>
-          prev.map((c) => (c.id === activeConversation.id ? { ...c, draft_message: null } : c))
-        );
-      }
-
+      await sendMessage(body, quotedId, replyMeta);
       refetchConvs();
     } catch {
       toast.error('Failed to send message');

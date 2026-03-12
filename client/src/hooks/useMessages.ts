@@ -49,14 +49,49 @@ export function useMessages(sessionId: string | null) {
   }, [fetchMessages]);
 
   const sendMessage = useCallback(
-    async (body: string, quotedMessageId?: string) => {
+    async (body: string, quotedMessageId?: string, replyMetadata?: Record<string, unknown>) => {
       if (!sessionId) return;
-      const { data } = await api.post('/messages/send', { sessionId, body, quotedMessageId });
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === data.message.id)) return prev;
-        return [...prev, data.message];
-      });
-      return data.message;
+
+      // Create optimistic message with pending status (shown immediately)
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const now = new Date().toISOString();
+      const optimisticMsg: Message = {
+        id: tempId,
+        session_id: sessionId,
+        message_body: body,
+        message_type: 'text',
+        direction: 'outbound',
+        sender_type: 'human',
+        status: 'pending',
+        read: true,
+        message_ts: now,
+        scheduled_for: null,
+        created_at: now,
+        metadata: replyMetadata || null,
+        is_starred: false,
+        is_pinned: false,
+        reactions: [],
+        media_storage_path: null,
+        media_mime_type: null,
+        media_filename: null,
+      };
+
+      setMessages((prev) => [...prev, optimisticMsg]);
+
+      try {
+        const { data } = await api.post('/messages/send', { sessionId, body, quotedMessageId });
+        // Replace temp message with real server message
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? data.message : m))
+        );
+        return data.message;
+      } catch (err) {
+        // Mark optimistic message as failed
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m))
+        );
+        throw err;
+      }
     },
     [sessionId]
   );

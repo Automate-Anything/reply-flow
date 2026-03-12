@@ -71,20 +71,24 @@ app.use(cors({
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
 
 app.use(express.json({ limit: '12mb' }));
+
+// Whapi webhook must receive the raw parsed JSON without sanitization —
+// register it BEFORE sanitizeBody so link_preview payloads aren't modified.
+app.use('/api/whatsapp/webhook', webhookLimiter, webhookRouter);
+
 app.use(sanitizeBody);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Webhook has its own rate limit (no auth, higher threshold)
-app.use('/api/whatsapp/webhook', webhookLimiter, webhookRouter);
-
 // Apply general rate limit to all other API routes
 app.use('/api', apiLimiter);
 
 app.use('/api/whatsapp', whatsappRouter);
-app.use('/api/messages', sendLimiter, messagesRouter);
+app.use('/api/messages/send', sendLimiter);
+app.use('/api/messages/schedule', sendLimiter);
+app.use('/api/messages', messagesRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/labels', labelsRouter);
 app.use('/api/contacts', contactImportExportRouter);

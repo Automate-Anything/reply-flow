@@ -47,8 +47,11 @@ export interface WhapiIncomingMessage {
   };
   link_preview?: {
     body?: string;
+    url?: string;
     title?: string;
     description?: string;
+    preview?: string; // base64 thumbnail
+    // Whapi may also send these aliases
     canonical_url?: string;
     thumbnail?: string;
   };
@@ -64,7 +67,9 @@ export interface WhapiIncomingMessage {
 
 export interface WhapiStatusUpdate {
   id: string;
-  status: string;
+  status: 'pending' | 'sent' | 'delivered' | 'read' | 'played' | 'failed' | 'deleted';
+  code?: number; // 0=failed, 1=pending, 2=sent, 3=delivered, 4=read, 5=played, 6=deleted
   timestamp: number;
-  chat_id: string;
+  chat_id?: string;
+  recipient_id?: string;
 }

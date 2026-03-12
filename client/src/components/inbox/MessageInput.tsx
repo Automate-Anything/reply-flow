@@ -2,11 +2,12 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
-import { Send, Zap, Clock, CalendarClock, X } from 'lucide-react';
+import { Send, Zap, Clock, CalendarClock, X, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
 import { useCannedResponses, type CannedResponse } from '@/hooks/useCannedResponses';
+import { useLinkPreview } from '@/hooks/useLinkPreview';
 import type { Message } from '@/hooks/useMessages';
 import { PlanGate } from '@/components/auth/PlanGate';
 import { usePlan } from '@/contexts/PlanContext';
@@ -44,10 +45,9 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { responses } = useCannedResponses();
 
-  // Sync text when switching conversations
-  useEffect(() => {
-    setText(initialDraft || '');
-  }, [initialDraft]);
+  // Note: conversation switching is handled via key={sessionId} on the parent,
+  // which remounts this component with the correct initialDraft. No useEffect
+  // needed — this prevents refetchConvs() from overwriting the input mid-typing.
 
   const filteredResponses = useMemo(() => {
     if (!quickReplyQuery) return responses;
@@ -72,13 +72,18 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setSending(true);
+    // Clear input immediately for responsive feel (don't wait for server)
+    setText('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     try {
       await onSend(trimmed);
-      setText('');
-      onDraftChange?.('');
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
+      // Don't call onDraftChange here — handleSend in InboxPage already
+      // clears the draft before the await to prevent race conditions.
+    } catch {
+      // Restore text on failure so the user doesn't lose their message
+      setText(trimmed);
     } finally {
       setSending(false);
     }
@@ -191,8 +196,61 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   const presets = getSchedulePresets(companyTimezone);
   const hasText = text.trim().length > 0;
 
+  // Link preview for URLs typed in the input
+  const [previewDismissed, setPreviewDismissed] = useState(false);
+  const { preview: typedLinkPreview, loading: previewLoading } = useLinkPreview(
+    previewDismissed ? null : text
+  );
+  // Reset dismissal when text changes substantially (new URL typed)
+  const lastPreviewUrl = useRef<string | null>(null);
+  useEffect(() => {
+    if (typedLinkPreview?.url && typedLinkPreview.url !== lastPreviewUrl.current) {
+      lastPreviewUrl.current = typedLinkPreview.url;
+      setPreviewDismissed(false);
+    }
+  }, [typedLinkPreview?.url]);
+
   return (
     <div className="border-t bg-background">
+      {/* Link preview banner */}
+      {typedLinkPreview && !previewDismissed && (
+        <div className="border-b px-4 py-3">
+          <div className="flex items-start gap-3.5">
+            {typedLinkPreview.image && (
+              <img
+                src={typedLinkPreview.image}
+                alt=""
+                className="h-[90px] w-[90px] shrink-0 rounded-lg object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
+            <div className="min-w-0 flex-1 py-0.5">
+              <div className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <ExternalLink className="h-3 w-3" />
+                {(() => { try { return new URL(typedLinkPreview.url).hostname.replace(/^www\./, ''); } catch { return ''; } })()}
+              </div>
+              {typedLinkPreview.title && (
+                <p className="mt-1 text-sm font-semibold leading-snug line-clamp-2">{typedLinkPreview.title}</p>
+              )}
+              {typedLinkPreview.description && (
+                <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground line-clamp-2">{typedLinkPreview.description}</p>
+              )}
+            </div>
+            <button
+              onClick={() => setPreviewDismissed(true)}
+              className="shrink-0 rounded p-0.5 hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+      )}
+      {previewLoading && !typedLinkPreview && !previewDismissed && (
+        <div className="border-b px-3 py-2">
+          <p className="text-[11px] text-muted-foreground">Loading link preview...</p>
+        </div>
+      )}
+
       {/* Reply banner */}
       {replyingTo && (
         <div className="flex items-center gap-2 border-b px-3 py-2">

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { formatTime as formatTimestamp, formatScheduledTime } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
-import { Clock, Download, ExternalLink, FileText, Image as ImageIcon, Loader2, Mic, Pause, Pin, Play, Reply, Star, X } from 'lucide-react';
+import { AlertCircle, Check, CheckCheck, Clock, Download, ExternalLink, FileText, Image as ImageIcon, Loader2, Mic, Pause, Pin, Play, Reply, Star, X } from 'lucide-react';
 import type { Message } from '@/hooks/useMessages';
 import { useLinkPreview } from '@/hooks/useLinkPreview';
 import type { LinkPreview } from '@/hooks/useLinkPreview';
@@ -290,25 +290,48 @@ function MediaContent({ message, mediaUrl, mediaLoading, isOutbound, voiceTimeSl
 }
 
 // Invisible spacer that reserves room for the inline timestamp at end of text
-function TimeSpacer() {
-  return <span className="inline-block w-[70px]" />;
+function TimeSpacer({ wide, hasStatus }: { wide?: boolean; hasStatus?: boolean }) {
+  // wide: sender label (You/AI) adds ~30px; hasStatus: delivery icon adds ~16px
+  const width = 75 + (wide ? 30 : 0) + (hasStatus ? 16 : 0);
+  return <span className="inline-block" style={{ width }} />;
 }
 
-// Inline timestamp component (floated right when inside text, standalone for voice notes)
-function InlineTime({ message, isAI, isHuman, tz, standalone }: {
+// Inline timestamp — absolutely positioned at bottom-right of the text container.
+// The TimeSpacer inside the <p> reserves room so text doesn't overlap the timestamp.
+// WhatsApp-style message delivery status icon
+function MessageStatusIcon({ status }: { status: string }) {
+  switch (status) {
+    case 'pending':
+      return <Clock className="h-3 w-3" />;
+    case 'sent':
+      return <Check className="h-3 w-3" />;
+    case 'delivered':
+      return <CheckCheck className="h-3 w-3" />;
+    case 'read':
+    case 'played':
+      return <CheckCheck className="h-3 w-3 text-blue-400" />;
+    case 'failed':
+      return <AlertCircle className="h-3 w-3 text-red-400" />;
+    default:
+      return null;
+  }
+}
+
+function InlineTime({ message, isAI, isHuman, isOutbound, tz, standalone }: {
   message: Message;
   isAI: boolean;
   isHuman: boolean;
+  isOutbound: boolean;
   tz: string;
   standalone?: boolean;
 }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 text-[10px] leading-none opacity-60',
+        'inline-flex items-center gap-1 text-[10px] leading-none opacity-60 whitespace-nowrap',
         standalone
           ? 'mt-1 justify-end w-full'
-          : 'float-right ml-2 mt-1 -mb-1 relative top-[2px]'
+          : 'absolute bottom-[1px] right-0'
       )}
     >
       {isAI && <span className="font-medium uppercase tracking-wider">AI</span>}
@@ -317,6 +340,7 @@ function InlineTime({ message, isAI, isHuman, tz, standalone }: {
       {message.is_pinned && <Pin className="h-2.5 w-2.5" />}
       {message.is_starred && <Star className="h-2.5 w-2.5 fill-current" />}
       <span>{formatTimestamp(message.message_ts || message.created_at, tz)}</span>
+      {isOutbound && message.status !== 'scheduled' && <MessageStatusIcon status={message.status} />}
     </span>
   );
 }
@@ -327,6 +351,7 @@ function LinkPreviewCard({ preview, isOutbound }: { preview: LinkPreview; isOutb
   const domain = preview.site_name || (() => {
     try { return new URL(preview.url).hostname.replace(/^www\./, ''); } catch { return ''; }
   })();
+  const isBase64 = preview.image?.startsWith('data:');
 
   return (
     <a
@@ -339,12 +364,30 @@ function LinkPreviewCard({ preview, isOutbound }: { preview: LinkPreview; isOutb
       )}
     >
       {preview.image && (
-        <img
-          src={preview.image}
-          alt=""
-          className="h-32 w-full object-cover"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-        />
+        isBase64 ? (
+          // Whapi base64 thumbnails are tiny — show as blurred background with sharp overlay
+          <div className="relative h-32 w-full overflow-hidden">
+            <img
+              src={preview.image}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl"
+            />
+            <img
+              src={preview.image}
+              alt=""
+              className="relative mx-auto h-full object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
+            />
+          </div>
+        ) : (
+          <img
+            src={preview.image}
+            alt=""
+            className="h-32 w-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        )
       )}
       <div className="px-3 py-2">
         {domain && (
@@ -398,7 +441,7 @@ export default function MessageBubble({ message, messages = [], contactName, onC
   const isPlaceholder = caption && /^\[.+\]$/.test(caption.trim());
   const showCaption = caption && !isPlaceholder;
 
-  // Link preview: use Whapi metadata if available, otherwise fetch OG tags
+  // Link preview: merge Whapi metadata with OG-fetched data
   const rawStoredPreview = message.metadata?.link_preview as Record<string, string> | undefined;
   const storedPreview: LinkPreview | undefined = rawStoredPreview
     ? {
@@ -410,11 +453,19 @@ export default function MessageBubble({ message, messages = [], contactName, onC
       }
     : undefined;
   const hasStoredPreview = storedPreview && (storedPreview.title || storedPreview.description || storedPreview.image);
-  const { preview: fetchedPreview } = useLinkPreview(
-    // Only fetch if no stored preview and the message has a URL
-    !hasStoredPreview && !isMediaType && caption ? caption : null
-  );
-  const linkPreview = hasStoredPreview ? storedPreview : fetchedPreview;
+  // Also fetch OG tags — prefer OG image (higher res) over Whapi's base64 thumbnail
+  const urlForOgFetch = !isMediaType
+    ? (storedPreview?.url || (isPlaceholder ? null : caption))
+    : null;
+  const { preview: fetchedPreview } = useLinkPreview(urlForOgFetch);
+  const linkPreview = hasStoredPreview
+    ? {
+        ...storedPreview!,
+        image: fetchedPreview?.image || storedPreview!.image,
+        title: storedPreview!.title || fetchedPreview?.title || null,
+        description: storedPreview!.description || fetchedPreview?.description || null,
+      }
+    : fetchedPreview;
 
   return (
     <div
@@ -435,7 +486,7 @@ export default function MessageBubble({ message, messages = [], contactName, onC
         </button>
       )}
 
-      <div className={cn('max-w-[70%]', isScheduled && 'group')}>
+      <div className={cn('max-w-[70%]', linkPreview && 'max-w-[340px]', isScheduled && 'group')}>
         {isScheduled && (
           <div className="mb-1 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
             <Clock className="h-3 w-3" />
@@ -513,7 +564,7 @@ export default function MessageBubble({ message, messages = [], contactName, onC
                 isOutbound={isOutbound}
                 voiceTimeSlot={
                   isVoiceType && !isScheduled
-                    ? <InlineTime message={message} isAI={isAI} isHuman={isHuman} tz={tz} />
+                    ? <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} />
                     : undefined
                 }
               />
@@ -522,31 +573,31 @@ export default function MessageBubble({ message, messages = [], contactName, onC
 
           {/* Text body / caption — with inline timestamp */}
           {showCaption && (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">
-              {caption}
-              {!isScheduled && !isVoiceType && <><TimeSpacer /><InlineTime message={message} isAI={isAI} isHuman={isHuman} tz={tz} /></>}
-            </p>
+            <div className="relative">
+              <p className={cn('whitespace-pre-wrap text-sm leading-relaxed', linkPreview && 'break-all')}>{caption}{!isScheduled && !isVoiceType && <TimeSpacer wide={isAI || isHuman} hasStatus={isOutbound} />}</p>
+              {!isScheduled && !isVoiceType && <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} />}
+            </div>
           )}
 
           {/* Fallback: no media stored yet, show the placeholder text (skip voice — handled above) */}
           {isMediaType && !hasMedia && !isVoiceType && (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">
-              {message.message_body}
-              {!isScheduled && <><TimeSpacer /><InlineTime message={message} isAI={isAI} isHuman={isHuman} tz={tz} /></>}
-            </p>
+            <div className="relative">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.message_body}{!isScheduled && <TimeSpacer wide={isAI || isHuman} hasStatus={isOutbound} />}</p>
+              {!isScheduled && <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} />}
+            </div>
           )}
 
           {/* Regular text message (only when showCaption hasn't already rendered the body) */}
           {!isMediaType && !showCaption && (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">
-              {message.message_body}
-              {!isScheduled && <><TimeSpacer /><InlineTime message={message} isAI={isAI} isHuman={isHuman} tz={tz} /></>}
-            </p>
+            <div className="relative">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.message_body}{!isScheduled && <TimeSpacer wide={isAI || isHuman} hasStatus={isOutbound} />}</p>
+              {!isScheduled && <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} />}
+            </div>
           )}
 
           {/* Standalone time for media-only messages (no caption, non-voice) */}
           {!isScheduled && isMediaType && !isVoiceType && !showCaption && hasMedia && (
-            <InlineTime message={message} isAI={isAI} isHuman={isHuman} tz={tz} standalone />
+            <InlineTime message={message} isAI={isAI} isHuman={isHuman} isOutbound={isOutbound} tz={tz} standalone />
           )}
 
         </div>

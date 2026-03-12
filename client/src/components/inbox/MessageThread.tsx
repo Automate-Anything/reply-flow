@@ -91,6 +91,7 @@ export default function MessageThread({
       </div>
 
       <MessageInput
+        key={sessionId}
         onSend={onSend}
         onSchedule={onSchedule}
         initialDraft={initialDraft}

@@ -5,7 +5,7 @@ import { checkMessageAllowance, deductOverageBalance, triggerAutoTopup } from '.
 import { extractSessionMemories } from './sessionMemory.js';
 import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
-import { downloadMediaById } from './whapi.js';
+import { downloadMediaById, fetchFullMessage } from './whapi.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -57,6 +57,7 @@ function resolveMessageRouting(
 function extractMessageBody(msg: WhapiIncomingMessage): string {
   if (msg.text?.body) return msg.text.body;
   if (msg.link_preview?.body) return msg.link_preview.body;
+  if (msg.link_preview?.url) return msg.link_preview.url;
   if (msg.image?.caption) return msg.image.caption;
   if (msg.video?.caption) return msg.video.caption;
   if (msg.document?.filename) return `[Document: ${msg.document.filename}]`;
@@ -171,6 +172,26 @@ export async function processIncomingMessage(
   // DEBUG: Log raw payload for voice/audio messages to understand Whapi's format
   if (msg.type === 'voice' || msg.type === 'ptt' || msg.type === 'audio') {
     console.log(`[webhook][DEBUG] Voice/audio message raw payload:`, JSON.stringify(msg, null, 2));
+  }
+
+  // Whapi webhook payloads for link_preview messages often omit the link_preview object.
+  // Fetch the full message from Whapi API to get the missing data.
+  if (msg.type === 'link_preview' && !msg.link_preview) {
+    try {
+      const { data: ch } = await supabaseAdmin
+        .from('whatsapp_channels')
+        .select('channel_token')
+        .eq('id', channelId)
+        .single();
+      if (ch?.channel_token) {
+        const full = await fetchFullMessage(ch.channel_token, msg.id);
+        if (full?.link_preview) {
+          msg.link_preview = full.link_preview as unknown as typeof msg.link_preview;
+        }
+      }
+    } catch (err) {
+      console.error('[webhook] Failed to enrich link_preview from Whapi API:', err);
+    }
   }
 
   // If msg.from matches the channel's own number, it's an outbound message even if from_me is missing/false.
@@ -323,8 +344,9 @@ export async function processIncomingMessage(
     metadata.link_preview = {
       title: msg.link_preview.title || null,
       description: msg.link_preview.description || null,
-      canonical_url: msg.link_preview.canonical_url || null,
-      thumbnail: msg.link_preview.thumbnail || null,
+      url: msg.link_preview.url || msg.link_preview.canonical_url || null,
+      image: msg.link_preview.preview || msg.link_preview.thumbnail || null,
+      site_name: null,
     };
   }
 

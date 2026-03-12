@@ -292,6 +292,20 @@ export async function getMessageById(channelToken: string, messageId: string): P
 }
 
 /**
+ * Fetches the full raw message object from Whapi by its WhatsApp message ID.
+ * Used to enrich webhook payloads that may be missing fields (e.g. link_preview).
+ */
+export async function fetchFullMessage(channelToken: string, messageId: string): Promise<Record<string, unknown> | null> {
+  const gate = gateApi(channelToken);
+  try {
+    const { data } = await gate.get(`/messages/${messageId}`);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @deprecated Use downloadMediaById() instead — Whapi returns binary, not a URL.
  * Kept for backward compatibility but will always return null.
  */
