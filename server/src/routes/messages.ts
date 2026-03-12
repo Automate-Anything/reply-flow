@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from '../services/whapi.js';
-import { getSignedUrl } from '../services/mediaStorage.js';
+import { getSignedUrl, downloadAndStore } from '../services/mediaStorage.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -299,27 +299,90 @@ router.delete('/scheduled/:messageId', requirePermission('messages', 'create'), 
 router.get('/:messageId/media', requirePermission('messages', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { messageId } = req.params;
+    const messageId = req.params.messageId as string;
 
     const { data: msg } = await supabaseAdmin
       .from('chat_messages')
-      .select('media_storage_path')
+      .select('media_storage_path, metadata, media_mime_type, media_filename, message_type, session_id')
       .eq('id', messageId)
       .eq('company_id', companyId)
       .single();
 
-    if (!msg?.media_storage_path) {
+    if (!msg) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+
+    // If media is already stored, return signed URL
+    if (msg.media_storage_path) {
+      const signedUrl = await getSignedUrl(msg.media_storage_path);
+      if (!signedUrl) {
+        res.status(500).json({ error: 'Failed to generate media URL' });
+        return;
+      }
+      res.json({ url: signedUrl });
+      return;
+    }
+
+    // On-demand media resolution: try to download from Whapi using metadata
+    const mediaPayload = (msg.metadata as Record<string, unknown>)?.media as Record<string, unknown> | undefined;
+    if (!mediaPayload) {
       res.status(404).json({ error: 'No media found for this message' });
       return;
     }
 
-    const signedUrl = await getSignedUrl(msg.media_storage_path);
-    if (!signedUrl) {
-      res.status(500).json({ error: 'Failed to generate media URL' });
+    let mediaLink = mediaPayload.link as string | undefined;
+    const mediaId = mediaPayload.id as string | undefined;
+    const rawMime = (mediaPayload.mime_type as string | undefined) || (typeof msg.media_mime_type === 'string' ? msg.media_mime_type : null);
+    const mimeType: string = rawMime || '';
+
+    // Look up the channel for this message's session (needed for Whapi API and storage)
+    const { data: session } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('channel_id')
+      .eq('id', msg.session_id)
+      .single();
+
+    // If no direct link, try resolving via Whapi Gate API
+    if (!mediaLink && mediaId && session) {
+      const { data: channel } = await supabaseAdmin
+        .from('whatsapp_channels')
+        .select('channel_token')
+        .eq('id', session.channel_id)
+        .single();
+
+      if (channel?.channel_token) {
+        const resolved = await whapi.getMediaUrl(channel.channel_token, mediaId);
+        if (resolved) mediaLink = resolved;
+      }
+    }
+
+    if (!mediaLink) {
+      res.status(404).json({ error: 'Could not resolve media URL' });
       return;
     }
 
-    res.json({ url: signedUrl });
+    // Try to download and store for future requests
+    if (session) {
+      const rawFilename = msg.media_filename;
+      const filename: string | undefined = typeof rawFilename === 'string' ? rawFilename : undefined;
+      const storagePath = await downloadAndStore(mediaLink, companyId, session.channel_id, messageId, mimeType, filename);
+      if (storagePath) {
+        await supabaseAdmin
+          .from('chat_messages')
+          .update({ media_storage_path: storagePath })
+          .eq('id', messageId);
+
+        const signedUrl = await getSignedUrl(storagePath);
+        if (signedUrl) {
+          res.json({ url: signedUrl });
+          return;
+        }
+      }
+    }
+
+    // Fallback: return the Whapi link directly (may expire, but better than nothing)
+    res.json({ url: mediaLink });
   } catch (err) {
     next(err);
   }

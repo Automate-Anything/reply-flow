@@ -22,6 +22,8 @@ interface MessageBubbleProps {
   isDebugMode?: boolean;
 }
 
+
+
 function groupReactions(reactions: Array<{ emoji: string; user_id: string }>): Array<{ emoji: string; count: number }> {
   const map = new Map<string, number>();
   for (const r of reactions) {
@@ -39,10 +41,12 @@ function useMediaUrl(message: Message) {
   const [loading, setLoading] = useState(false);
 
   const hasMedia = !!message.media_storage_path;
+  const isMediaMessage = ['image', 'video', 'audio', 'ptt', 'voice', 'document'].includes(message.message_type);
+  const shouldFetch = hasMedia || isMediaMessage;
   const messageId = message.id;
 
   const fetchUrl = useCallback(async () => {
-    if (!hasMedia) return;
+    if (!shouldFetch) return;
 
     // Check cache
     const cached = mediaUrlCache.get(messageId);
@@ -63,7 +67,7 @@ function useMediaUrl(message: Message) {
     } finally {
       setLoading(false);
     }
-  }, [messageId, hasMedia]);
+  }, [messageId, shouldFetch]);
 
   useEffect(() => {
     fetchUrl();
@@ -184,7 +188,7 @@ function MediaContent({ message, mediaUrl, mediaLoading, isOutbound }: { message
     // No media URL yet — show placeholder based on type
     if (type === 'image') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><ImageIcon className="h-4 w-4" /><span>Image</span></div>;
     if (type === 'video') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Play className="h-4 w-4" /><span>Video</span></div>;
-    if (type === 'audio' || type === 'ptt') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Mic className="h-4 w-4" /><span>Voice message</span></div>;
+    if (type === 'audio' || type === 'ptt' || type === 'voice') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><Mic className="h-4 w-4" /><span>Voice message</span></div>;
     if (type === 'document') return <div className="flex items-center gap-1.5 py-1 text-xs opacity-60"><FileText className="h-4 w-4" /><span>{message.media_filename || 'Document'}</span></div>;
     return null;
   }
@@ -230,7 +234,7 @@ function MediaContent({ message, mediaUrl, mediaLoading, isOutbound }: { message
     );
   }
 
-  if (type === 'audio' || type === 'ptt' || mime.startsWith('audio/')) {
+  if (type === 'audio' || type === 'ptt' || type === 'voice' || mime.startsWith('audio/')) {
     return <VoiceNotePlayer src={mediaUrl} isOutbound={isOutbound} />;
   }
 
@@ -266,7 +270,8 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
 
   const hasMedia = !!message.media_storage_path;
   const { url: mediaUrl, loading: mediaLoading } = useMediaUrl(message);
-  const isMediaType = ['image', 'video', 'audio', 'ptt', 'document'].includes(message.message_type);
+  const isMediaType = ['image', 'video', 'audio', 'ptt', 'voice', 'document'].includes(message.message_type);
+  const isVoiceType = ['audio', 'ptt', 'voice'].includes(message.message_type);
   const caption = message.message_body;
   // Don't show placeholder text as caption (e.g. "[Image]", "[Audio message]")
   const isPlaceholder = caption && /^\[.+\]$/.test(caption.trim());
@@ -348,7 +353,7 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
           )}
 
           {/* Media content */}
-          {isMediaType && hasMedia && (
+          {isMediaType && (hasMedia || isVoiceType) && (
             <div className="mb-1">
               <MediaContent message={message} mediaUrl={mediaUrl} mediaLoading={mediaLoading} isOutbound={isOutbound} />
             </div>
@@ -361,8 +366,8 @@ export default function MessageBubble({ message, onCancelScheduled, onReply, isD
             </p>
           )}
 
-          {/* Fallback: no media stored yet, show the placeholder text */}
-          {isMediaType && !hasMedia && (
+          {/* Fallback: no media stored yet, show the placeholder text (skip voice — handled above) */}
+          {isMediaType && !hasMedia && !isVoiceType && (
             <p className="whitespace-pre-wrap text-sm leading-relaxed">
               {message.message_body}
             </p>
