@@ -313,6 +313,15 @@ export async function processIncomingMessage(
     sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
   }
 
+  // 2b. Handle action messages (reactions, edits, deletes) — these are not standalone messages
+  if (msg.action) {
+    if (msg.action.type === 'reaction' && msg.action.target) {
+      await handleReaction(msg, companyId, sessionId, isOutbound);
+    }
+    // edit/delete actions are system events — skip silently
+    return;
+  }
+
   // 3. Idempotency check — skip if message already exists (by WhatsApp message ID)
   if (msg.id) {
     const { data: existing } = await supabaseAdmin
@@ -665,4 +674,50 @@ async function fetchAndStoreProfilePicture(
     .from('contacts')
     .update({ profile_picture_url: pictureUrl, updated_at: new Date().toISOString() })
     .eq('id', contactId);
+}
+
+/**
+ * Handles a reaction action message by updating the target message's reactions
+ * array instead of creating a standalone message row.
+ */
+async function handleReaction(
+  msg: WhapiIncomingMessage,
+  companyId: string,
+  _sessionId: string,
+  isOutbound: boolean
+): Promise<void> {
+  const emoji = msg.action!.emoji;
+  const targetWhapiId = msg.action!.target!;
+
+  // Find the target message
+  const { data: targetMsg } = await supabaseAdmin
+    .from('chat_messages')
+    .select('id, reactions')
+    .eq('message_id_normalized', targetWhapiId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (!targetMsg) {
+    console.log(`[webhook] Reaction target not found: ${targetWhapiId}`);
+    return;
+  }
+
+  // Build user_id from the sender — use the phone number as identifier for contact reactions
+  const userId = isOutbound ? 'self' : normalizeChatId(msg.from) || 'unknown';
+
+  // Update reactions: remove existing reaction from this user, add new one if emoji is set
+  const reactions = Array.isArray(targetMsg.reactions) ? [...targetMsg.reactions] : [];
+  const filtered = reactions.filter((r: { user_id: string }) => r.user_id !== userId);
+
+  if (emoji) {
+    filtered.push({ emoji, user_id: userId });
+  }
+  // If emoji is empty/null, it's a reaction removal — just save the filtered array
+
+  await supabaseAdmin
+    .from('chat_messages')
+    .update({ reactions: filtered })
+    .eq('id', targetMsg.id);
+
+  console.log(`[webhook] Reaction ${emoji || '(removed)'} on message ${targetMsg.id} by ${userId}`);
 }
