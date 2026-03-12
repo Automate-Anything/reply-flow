@@ -113,7 +113,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
 
     if (msgError) throw msgError;
 
-    // Update session
+    // Update session — only update last_message if this is the newest message
     await supabaseAdmin
       .from('chat_sessions')
       .update({
@@ -124,7 +124,8 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
         updated_at: now,
         draft_message: null,
       })
-      .eq('id', sessionId);
+      .eq('id', sessionId)
+      .or(`last_message_at.is.null,last_message_at.lte.${now}`);
 
     res.json({ message });
   } catch (err) {
@@ -729,7 +730,7 @@ router.post('/:messageId/forward', requirePermission('messages', 'create'), asyn
 
     if (msgError) throw msgError;
 
-    // Update target session
+    // Update target session — only update last_message if this is the newest message
     await supabaseAdmin
       .from('chat_sessions')
       .update({
@@ -739,7 +740,8 @@ router.post('/:messageId/forward', requirePermission('messages', 'create'), asyn
         last_message_sender: 'human',
         updated_at: now,
       })
-      .eq('id', targetSessionId);
+      .eq('id', targetSessionId)
+      .or(`last_message_at.is.null,last_message_at.lte.${now}`);
 
     res.json({ message: newMsg });
   } catch (err) {

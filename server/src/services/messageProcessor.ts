@@ -473,18 +473,25 @@ export async function processIncomingMessage(
   // 5b. Update session metadata
   const { data: currentSession } = await supabaseAdmin
     .from('chat_sessions')
-    .select('snoozed_until')
+    .select('snoozed_until, last_message_at')
     .eq('id', sessionId)
     .single();
 
   const sessionUpdate: Record<string, unknown> = {
     contact_id: contactId,
-    last_message: messageBody,
-    last_message_at: messageTs,
-    last_message_direction: isOutbound ? 'outbound' : 'inbound',
-    last_message_sender: isOutbound ? 'human' : 'contact',
     updated_at: new Date().toISOString(),
   };
+
+  // Only update last_message fields if this message is actually newer than what's stored.
+  // This prevents race conditions where an older message finishes processing after a newer one.
+  const isNewer = !currentSession?.last_message_at ||
+    new Date(messageTs) >= new Date(currentSession.last_message_at);
+  if (isNewer) {
+    sessionUpdate.last_message = messageBody;
+    sessionUpdate.last_message_at = messageTs;
+    sessionUpdate.last_message_direction = isOutbound ? 'outbound' : 'inbound';
+    sessionUpdate.last_message_sender = isOutbound ? 'human' : 'contact';
+  }
 
   // Only update contact_name from inbound messages — outbound msg.from_name is our own name
   if (!isOutbound && msg.from_name) {

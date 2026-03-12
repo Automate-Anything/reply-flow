@@ -71,7 +71,7 @@ async function processScheduledMessages() {
           })
           .eq('id', msg.id);
 
-        // Update session
+        // Only update last_message if this is still the newest message
         await supabaseAdmin
           .from('chat_sessions')
           .update({
@@ -81,7 +81,8 @@ async function processScheduledMessages() {
             last_message_sender: 'human',
             updated_at: now,
           })
-          .eq('id', msg.session_id);
+          .eq('id', msg.session_id)
+          .or(`last_message_at.is.null,last_message_at.lte.${now}`);
       } catch (err) {
         console.error(`Failed to send scheduled message ${msg.id}:`, err);
         await supabaseAdmin

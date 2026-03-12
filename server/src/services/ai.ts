@@ -822,6 +822,7 @@ export async function sendOutsideHoursReply(
     await supabaseAdmin.from('chat_messages').update({ message_id_normalized: whapiMessageId }).eq('id', insertedMsg.id);
   }
 
+  // Only update last_message if this is still the newest message (prevents race with incoming messages)
   await supabaseAdmin
     .from('chat_sessions')
     .update({
@@ -831,7 +832,8 @@ export async function sendOutsideHoursReply(
       last_message_sender: 'ai',
       updated_at: now,
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .or(`last_message_at.is.null,last_message_at.lte.${now}`);
 }
 
 // ── Shared helper ──────────────────────────────────
@@ -896,6 +898,7 @@ async function sendAndStoreMessage(
     await supabaseAdmin.from('chat_messages').update({ message_id_normalized: whapiMessageId }).eq('id', insertedMsg.id);
   }
 
+  // Only update last_message if this is still the newest message (prevents race with incoming messages)
   await supabaseAdmin
     .from('chat_sessions')
     .update({
@@ -905,5 +908,6 @@ async function sendAndStoreMessage(
       last_message_sender: 'ai',
       updated_at: now,
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .or(`last_message_at.is.null,last_message_at.lte.${now}`);
 }

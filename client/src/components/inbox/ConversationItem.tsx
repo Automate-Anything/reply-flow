@@ -167,7 +167,9 @@ export default function ConversationItem({
             ) : (
               <>
                 {conversation.last_message_direction === 'outbound' && (
-                  <span className="font-normal text-muted-foreground">You: </span>
+                  <span className="font-normal text-muted-foreground">
+                    {conversation.last_message_sender === 'ai' ? 'AI: ' : 'You: '}
+                  </span>
                 )}
                 {conversation.last_message ? formatLastMessage(conversation.last_message) : 'No messages yet'}
               </>
