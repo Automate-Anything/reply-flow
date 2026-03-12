@@ -48,6 +48,7 @@ import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import AIToggle from '@/components/ai/AIToggle';
 import SnoozeCustomDialog from '@/components/inbox/SnoozeCustomDialog';
 import AccessManager from '@/components/access/AccessManager';
@@ -220,18 +221,26 @@ export default function ConversationHeader({
             <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
-        <div className="min-w-0">
-          <button
-            className="group flex items-center gap-1 text-left"
-            onClick={onOpenContact}
-            title="View contact details"
-          >
+        <button
+          className="group flex items-center gap-2 text-left"
+          onClick={onOpenContact}
+          title="View contact details"
+        >
+          <Avatar className="h-9 w-9 shrink-0">
+            {conversation.profile_picture_url && (
+              <AvatarImage src={conversation.profile_picture_url} alt={conversation.contact_name || ''} />
+            )}
+            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+              {((conversation.contact_name || conversation.phone_number)[0] || '?').toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold group-hover:underline">
               {conversation.contact_name || conversation.phone_number}
             </h2>
-          </button>
-          <p className="text-xs text-muted-foreground">{conversation.phone_number}</p>
-        </div>
+            <p className="text-xs text-muted-foreground">{conversation.phone_number}</p>
+          </div>
+        </button>
         {conversation.labels.map((label) => (
           <Badge
             key={label.id}

@@ -38,6 +38,7 @@ export interface Conversation {
   unread_count: number;
   labels: ConversationLabel[];
   contact_session_count: number;
+  profile_picture_url: string | null;
   created_at: string;
 }
 

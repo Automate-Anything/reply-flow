@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { formatRelativeDate, formatSnoozeUntil } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Camera, Clock, FileText, Mic, Pin, Play, RotateCcw, Star } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
@@ -108,6 +108,9 @@ export default function ConversationItem({
           />
         )}
         <Avatar className="h-10 w-10">
+          {conversation.profile_picture_url && (
+            <AvatarImage src={conversation.profile_picture_url} alt={name} />
+          )}
           <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
             {initial}
           </AvatarFallback>

@@ -29,6 +29,7 @@ export interface Contact {
   address_state: string | null;
   address_postal_code: string | null;
   address_country: string | null;
+  profile_picture_url: string | null;
   created_at: string;
   updated_at: string;
 }

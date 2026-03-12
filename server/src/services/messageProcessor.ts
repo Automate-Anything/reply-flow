@@ -5,7 +5,7 @@ import { checkMessageAllowance, deductOverageBalance, triggerAutoTopup } from '.
 import { extractSessionMemories } from './sessionMemory.js';
 import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
-import { downloadMediaById, fetchFullMessage } from './whapi.js';
+import { downloadMediaById, fetchFullMessage, getContactProfile } from './whapi.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -251,6 +251,11 @@ export async function processIncomingMessage(
     if (contactError) throw contactError;
     contactId = newContact.id;
   }
+
+  // 1b. Fetch profile picture if not already stored (non-blocking)
+  fetchAndStoreProfilePicture(contactId, phoneNumber, channelId).catch((err) => {
+    console.error('Profile picture fetch error:', err);
+  });
 
   // 2. Find or create ACTIVE session (session boundary logic)
   let sessionId: string;
@@ -600,4 +605,45 @@ async function processMediaFromBuffer(
     .from('chat_messages')
     .update(updateFields)
     .eq('id', messageId);
+}
+
+/**
+ * Fetches a contact's WhatsApp profile picture and stores it in the contacts table.
+ * Skips if the contact already has a fresh profile picture URL (within 7 days).
+ */
+async function fetchAndStoreProfilePicture(
+  contactId: string,
+  phoneNumber: string,
+  channelId: number
+): Promise<void> {
+  const { data: contact } = await supabaseAdmin
+    .from('contacts')
+    .select('profile_picture_url, updated_at')
+    .eq('id', contactId)
+    .single();
+
+  if (contact?.profile_picture_url) {
+    const updatedAt = new Date(contact.updated_at).getTime();
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    if (updatedAt > sevenDaysAgo) return;
+  }
+
+  const { data: channel } = await supabaseAdmin
+    .from('whatsapp_channels')
+    .select('channel_token')
+    .eq('id', channelId)
+    .single();
+
+  if (!channel?.channel_token) return;
+
+  const profile = await getContactProfile(channel.channel_token, phoneNumber);
+  if (!profile) return;
+
+  const pictureUrl = profile.icon_full || profile.icon || null;
+  if (!pictureUrl) return;
+
+  await supabaseAdmin
+    .from('contacts')
+    .update({ profile_picture_url: pictureUrl, updated_at: new Date().toISOString() })
+    .eq('id', contactId);
 }

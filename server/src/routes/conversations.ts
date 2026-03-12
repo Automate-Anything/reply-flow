@@ -34,7 +34,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
     let query = supabaseAdmin
       .from('chat_sessions')
       .select(
-        '*, conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url)'
+        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url)'
       )
       .eq('company_id', companyId)
       .is('deleted_at', null);
@@ -221,6 +221,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
         ...s,
         unread_count: unreadMap[s.id] || 0,
         contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
+        profile_picture_url: (s.contact as Record<string, unknown>)?.profile_picture_url || null,
         labels:
           s.conversation_labels
             ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
@@ -462,7 +463,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       .eq('id', sessionId)
       .eq('company_id', companyId)
       .select(
-        '*, conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url)'
+        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url)'
       )
       .single();
 
@@ -479,6 +480,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
 
     const result = {
       ...data,
+      profile_picture_url: (data.contact as Record<string, unknown>)?.profile_picture_url || null,
       labels:
         data.conversation_labels
           ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
