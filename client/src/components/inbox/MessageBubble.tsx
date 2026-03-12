@@ -76,13 +76,33 @@ function useMediaUrl(message: Message) {
   return { url, loading };
 }
 
-// ── Voice note player (WhatsApp-style) ───────────────────────────────────────
+// ── Voice note player (WhatsApp-style with waveform) ─────────────────────────
+
+// Deterministic pseudo-waveform bars from audio src URL
+function generateWaveformBars(seed: string, count: number): number[] {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  const bars: number[] = [];
+  for (let i = 0; i < count; i++) {
+    hash = ((hash << 5) - hash + i * 7) | 0;
+    const normalized = (Math.abs(hash) % 100) / 100;
+    // Create a natural-looking waveform shape: low edges, higher middle
+    const position = i / count;
+    const envelope = Math.sin(position * Math.PI) * 0.4 + 0.6;
+    bars.push(Math.max(0.15, normalized * envelope));
+  }
+  return bars;
+}
 
 function VoiceNotePlayer({ src, isOutbound }: { src: string; isOutbound: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const waveformRef = useRef<number[]>(generateWaveformBars(src, 40));
+  const barsContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -127,41 +147,71 @@ function VoiceNotePlayer({ src, isOutbound }: { src: string; isOutbound: boolean
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
+  const bars = waveformRef.current;
+
   return (
-    <div className="flex items-center gap-2 py-1">
+    <div className="flex items-center gap-2.5 py-0.5" style={{ minWidth: 220 }}>
       <audio ref={audioRef} src={src} preload="metadata" />
+
+      {/* Play/Pause button */}
       <button
         onClick={toggle}
         className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors',
           isOutbound
             ? 'bg-white/20 hover:bg-white/30 text-white'
             : 'bg-primary/10 hover:bg-primary/20 text-primary'
         )}
       >
-        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+        {playing
+          ? <Pause className="h-5 w-5" />
+          : <Play className="h-5 w-5 ml-0.5" />
+        }
       </button>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+
+      {/* Waveform + time */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        {/* Waveform bars */}
         <div
-          className={cn(
-            'relative h-1.5 w-full cursor-pointer rounded-full',
-            isOutbound ? 'bg-white/20' : 'bg-muted-foreground/20'
-          )}
+          ref={barsContainerRef}
+          className="relative flex h-7 cursor-pointer items-end gap-[2px]"
           onClick={seek}
         >
+          {bars.map((height, i) => {
+            const barProgress = (i / bars.length) * 100;
+            const isPlayed = barProgress < progress;
+            return (
+              <div
+                key={i}
+                className={cn(
+                  'flex-1 rounded-full transition-colors duration-75',
+                  isPlayed
+                    ? isOutbound ? 'bg-white/80' : 'bg-primary/70'
+                    : isOutbound ? 'bg-white/25' : 'bg-muted-foreground/25'
+                )}
+                style={{
+                  height: `${Math.round(height * 100)}%`,
+                  minHeight: 3,
+                }}
+              />
+            );
+          })}
+          {/* Playback dot */}
           <div
             className={cn(
-              'absolute left-0 top-0 h-full rounded-full transition-[width] duration-100',
-              isOutbound ? 'bg-white/70' : 'bg-primary/60'
+              'absolute top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full shadow-sm transition-[left] duration-100',
+              isOutbound ? 'bg-white' : 'bg-primary'
             )}
-            style={{ width: `${progress}%` }}
+            style={{ left: `${progress}%`, marginLeft: -5 }}
           />
         </div>
-        <div className="flex items-center gap-1.5">
-          <Mic className={cn('h-3 w-3', isOutbound ? 'text-white/60' : 'text-muted-foreground')} />
-          <span className={cn('text-[10px]', isOutbound ? 'text-white/60' : 'text-muted-foreground')}>
+
+        {/* Duration / current time */}
+        <div className="flex items-center justify-between">
+          <span className={cn('text-[11px] font-medium tabular-nums', isOutbound ? 'text-white/60' : 'text-muted-foreground')}>
             {playing ? fmt(currentTime) : fmt(duration)}
           </span>
+          <Mic className={cn('h-3.5 w-3.5', isOutbound ? 'text-white/40' : 'text-emerald-500/60')} />
         </div>
       </div>
     </div>
