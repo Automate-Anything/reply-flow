@@ -106,6 +106,15 @@ export default function InboxPage() {
     }
   }, [activeConversation]);
 
+  // Keep activeConversation in sync with the conversations list (picks up fresh profile_picture_url, etc.)
+  useEffect(() => {
+    if (!activeConversation || convsLoading) return;
+    const fresh = conversations.find((c) => c.id === activeConversation.id);
+    if (fresh && fresh.profile_picture_url !== activeConversation.profile_picture_url) {
+      setActiveConversation((prev) => prev ? { ...prev, profile_picture_url: fresh.profile_picture_url } : prev);
+    }
+  }, [conversations, convsLoading, activeConversation]);
+
   // Draft save helper
   const saveDraft = useCallback(async (sessionId: string, text: string) => {
     try {
