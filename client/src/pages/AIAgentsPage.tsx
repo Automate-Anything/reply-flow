@@ -98,9 +98,18 @@ export default function AIAgentsPage() {
       )}
 
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-16 rounded-xl" />
-          <Skeleton className="h-16 rounded-xl" />
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="flex items-center gap-3 py-3 px-4">
+                <Skeleton className="h-9 w-9 rounded-lg" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-40" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : agents.length === 0 ? (
         <Card>

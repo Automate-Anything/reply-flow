@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { Clock, Loader2 } from 'lucide-react';
 import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
@@ -63,18 +64,6 @@ export default function ScheduledMessageEditDialog({
     }
   };
 
-  // Format for datetime-local input
-  const toLocalDatetime = (iso: string) => {
-    const d = new Date(iso);
-    const offset = d.getTimezoneOffset();
-    const local = new Date(d.getTime() - offset * 60_000);
-    return local.toISOString().slice(0, 16);
-  };
-
-  const fromLocalDatetime = (local: string) => {
-    return new Date(local).toISOString();
-  };
-
   const presets = getSchedulePresets(companyTimezone);
 
   return (
@@ -97,18 +86,15 @@ export default function ScheduledMessageEditDialog({
 
           <div className="space-y-2">
             <Label>Send at</Label>
-            <input
-              type="datetime-local"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={scheduledFor ? toLocalDatetime(scheduledFor) : ''}
-              onChange={(e) => setScheduledFor(e.target.value ? fromLocalDatetime(e.target.value) : '')}
-              min={toLocalDatetime(new Date().toISOString())}
-            />
-            <div className="flex flex-wrap gap-1.5 pt-1">
+            <div className="flex flex-wrap gap-1.5">
               {presets.map((preset) => (
                 <Button
                   key={preset.label}
-                  variant="outline"
+                  variant={
+                    scheduledFor && Math.abs(new Date(scheduledFor).getTime() - preset.getDate().getTime()) < 60_000
+                      ? 'default'
+                      : 'outline'
+                  }
                   size="sm"
                   className="h-7 gap-1 text-xs"
                   onClick={() => setScheduledFor(preset.getDate().toISOString())}
@@ -117,6 +103,13 @@ export default function ScheduledMessageEditDialog({
                   {preset.label}
                 </Button>
               ))}
+            </div>
+            <div className="rounded-md border">
+              <DateTimePicker
+                value={scheduledFor ? new Date(scheduledFor) : undefined}
+                minDate={new Date()}
+                onChange={(date) => setScheduledFor(date.toISOString())}
+              />
             </div>
           </div>
         </div>

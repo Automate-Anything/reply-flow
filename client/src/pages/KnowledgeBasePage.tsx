@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { useCompanyKB } from '@/hooks/useCompanyKB';
 import { usePageReady } from '@/hooks/usePageReady';
+import { Skeleton } from '@/components/ui/skeleton';
 import { PlanGate } from '@/components/auth/PlanGate';
 import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
@@ -259,9 +260,25 @@ export default function KnowledgeBasePage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-3xl space-y-6 p-6">
-        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
-        <div className="h-20 animate-pulse rounded bg-muted" />
-        <div className="h-20 animate-pulse rounded bg-muted" />
+        {/* Heading row */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-8 w-40 rounded-md" />
+        </div>
+        {/* KB items */}
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 rounded-lg border px-4 py-3">
+            <Skeleton className="h-4 w-4" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-56" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+        ))}
       </div>
     );
   }

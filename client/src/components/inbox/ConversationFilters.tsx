@@ -1,12 +1,19 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { ArrowDownUp, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-react';
+import { ArrowDownUp, ChevronRight, CircleDot, Filter, Flag, Mail, Star, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversationFilters as FilterState } from '@/hooks/useConversations';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
@@ -17,6 +24,7 @@ interface ConversationFiltersProps {
   onFiltersChange: (filters: FilterState) => void;
   statuses?: ConversationStatus[];
   priorities?: ConversationPriority[];
+  onPriorityMetadataNeeded?: () => void;
 }
 
 function toggleMultiValue(values: string[] | undefined, value: string): string[] | undefined {
@@ -39,6 +47,7 @@ export default function ConversationFilters({
   onFiltersChange,
   statuses = [],
   priorities = [],
+  onPriorityMetadataNeeded,
 }: ConversationFiltersProps) {
   const updateFilter = (key: keyof FilterState, value: unknown) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -96,7 +105,7 @@ export default function ConversationFilters({
 
   return (
     <div className="flex items-center gap-1.5">
-      <Popover>
+      <Popover onOpenChange={(open) => { if (open) onPriorityMetadataNeeded?.(); }}>
         <PopoverTrigger asChild>
           <Button
             variant={hasActiveFilters ? 'secondary' : 'ghost'}
@@ -127,8 +136,12 @@ export default function ConversationFilters({
             )}
           </div>
 
-          <div className="mt-3 space-y-3">
+          <Accordion
+            type="multiple"
+            className="mt-3 space-y-3"
+          >
             <FilterSection
+              value="status"
               icon={<CircleDot className="h-3.5 w-3.5" />}
               label="Status"
               active={isStatusActive}
@@ -145,6 +158,7 @@ export default function ConversationFilters({
             </FilterSection>
 
             <FilterSection
+              value="assignee"
               icon={<User className="h-3.5 w-3.5" />}
               label="Assignee"
               active={isAssigneeActive}
@@ -168,6 +182,7 @@ export default function ConversationFilters({
             </FilterSection>
 
             <FilterSection
+              value="priority"
               icon={<Flag className="h-3.5 w-3.5" />}
               label="Priority"
               active={isPriorityActive}
@@ -188,7 +203,9 @@ export default function ConversationFilters({
                 />
               ))}
             </FilterSection>
+          </Accordion>
 
+          <div className="mt-3 space-y-3">
             <div className="flex items-center justify-between pt-0.5">
               <div className="flex items-center gap-2">
                 <Star className="h-3.5 w-3.5 text-muted-foreground" />
@@ -259,29 +276,37 @@ export default function ConversationFilters({
 }
 
 function FilterSection({
+  value,
   icon,
   label,
   active,
   summary,
   children,
 }: {
+  value: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
   summary: string;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(active);
+
   return (
-    <div className="space-y-2 rounded-lg border bg-muted/20 p-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className={cn('text-muted-foreground', active && 'text-primary')}>{icon}</div>
-          <span className={cn('text-xs', active && 'font-medium text-primary')}>{label}</span>
+    <AccordionItem value={value}>
+      <AccordionTrigger className="py-2.5">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 pr-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className={cn('text-muted-foreground', active && 'text-primary')}>{icon}</div>
+            <span className={cn('text-xs', active && 'font-medium text-primary')}>{label}</span>
+          </div>
+          <span className="truncate text-[11px] text-muted-foreground">{summary}</span>
         </div>
-        <span className="text-[11px] text-muted-foreground">{summary}</span>
-      </div>
-      <div className="space-y-1">{children}</div>
-    </div>
+      </AccordionTrigger>
+      <AccordionContent>
+        <div className="space-y-1">{children}</div>
+      </AccordionContent>
+    </AccordionItem>
   );
 }
 

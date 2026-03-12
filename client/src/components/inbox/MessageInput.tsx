@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Send, Zap, Clock, X } from 'lucide-react';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
+import { Send, Zap, Clock, CalendarClock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
@@ -38,6 +39,7 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   const [quickReplyQuery, setQuickReplyQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { responses } = useCannedResponses();
@@ -189,9 +191,6 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   const presets = getSchedulePresets(companyTimezone);
   const hasText = text.trim().length > 0;
 
-  // Minimum datetime-local value (now + 1 min)
-  const minDateTime = new Date(Date.now() + 60_000).toISOString().slice(0, 16);
-
   return (
     <div className="border-t bg-background">
       {/* Reply banner */}
@@ -294,40 +293,71 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
             <Clock className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" side="top" sideOffset={8} className="w-56 p-2">
-          <div className="flex items-center justify-between px-2 py-1">
-            <p className="text-xs font-medium text-muted-foreground">Schedule send</p>
-            <span className="text-[10px] text-muted-foreground">{companyTimezone}</span>
-          </div>
-          {presets.map((preset) => (
-            <button
-              key={preset.label}
-              className="flex w-full rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-              onClick={() => handleSchedule(preset.getDate())}
-            >
-              {preset.label}
-            </button>
-          ))}
-          <div className="mt-1 border-t pt-1">
-            <p className="px-2 py-1 text-xs text-muted-foreground">Custom time</p>
-            <input
-              type="datetime-local"
-              min={minDateTime}
-              value={customDate}
-              onChange={(e) => setCustomDate(e.target.value)}
-              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            {customDate && (
-              <Button
-                size="sm"
-                className="mt-1 w-full h-7 text-xs"
-                onClick={handleCustomSchedule}
-                disabled={!customDate || new Date(customDate) <= new Date()}
-              >
-                Schedule
-              </Button>
-            )}
-          </div>
+        <PopoverContent
+          align="end"
+          side="top"
+          sideOffset={8}
+          className={cn('p-2', showCustomPicker ? 'w-auto' : 'w-56')}
+          onCloseAutoFocus={() => setShowCustomPicker(false)}
+        >
+          {showCustomPicker ? (
+            <div>
+              <div className="flex items-center gap-2 px-2 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomPicker(false)}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  &larr; Back
+                </button>
+                <p className="text-xs font-medium text-muted-foreground">Pick date &amp; time</p>
+              </div>
+              <DateTimePicker
+                minDate={new Date()}
+                onChange={(date) => setCustomDate(date.toISOString())}
+              />
+              {customDate && (
+                <div className="px-3 pb-2">
+                  <Button
+                    size="sm"
+                    className="h-8 w-full text-xs"
+                    onClick={handleCustomSchedule}
+                    disabled={!customDate || new Date(customDate) <= new Date()}
+                  >
+                    <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
+                    Schedule
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between px-2 py-1">
+                <p className="text-xs font-medium text-muted-foreground">Schedule send</p>
+                <span className="text-[10px] text-muted-foreground">{companyTimezone}</span>
+              </div>
+              {presets.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className="flex w-full rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
+                  onClick={() => handleSchedule(preset.getDate())}
+                >
+                  {preset.label}
+                </button>
+              ))}
+              <div className="mt-1 border-t pt-1">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
+                  onClick={() => setShowCustomPicker(true)}
+                >
+                  <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
+                  Custom date &amp; time
+                </button>
+              </div>
+            </>
+          )}
         </PopoverContent>
       </Popover>
 

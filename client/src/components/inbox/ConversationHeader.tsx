@@ -35,6 +35,7 @@ import {
   StickyNote,
   Tag,
   UserPlus,
+  CalendarClock,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -48,6 +49,7 @@ import type { ConversationStatus } from '@/hooks/useConversationStatuses';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import AIToggle from '@/components/ai/AIToggle';
+import SnoozeCustomDialog from '@/components/inbox/SnoozeCustomDialog';
 import AccessManager from '@/components/access/AccessManager';
 import { useConversationAccess } from '@/hooks/useAccessControl';
 
@@ -62,6 +64,7 @@ interface ConversationHeaderProps {
   teamMembers?: TeamMember[];
   statuses?: ConversationStatus[];
   priorities?: ConversationPriority[];
+  onPriorityMetadataNeeded?: () => void;
   notesPanelOpen?: boolean;
   onLabelsCreated?: () => void;
 }
@@ -103,6 +106,7 @@ export default function ConversationHeader({
   teamMembers = [],
   statuses = [],
   priorities = [],
+  onPriorityMetadataNeeded,
   notesPanelOpen,
   onLabelsCreated,
 }: ConversationHeaderProps) {
@@ -114,6 +118,7 @@ export default function ConversationHeader({
   const [patchLoading, setPatchLoading] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [creatingLabel, setCreatingLabel] = useState(false);
+  const [snoozeCustomOpen, setSnoozeCustomOpen] = useState(false);
   const newLabelInputRef = useRef<HTMLInputElement>(null);
 
   const fetchLabels = () => {
@@ -347,6 +352,7 @@ export default function ConversationHeader({
               className="h-8 w-8"
               disabled={patchLoading}
               title="Priority"
+              onClick={onPriorityMetadataNeeded}
             >
               <Flag className="h-4 w-4" />
             </Button>
@@ -515,6 +521,11 @@ export default function ConversationHeader({
                     {opt.label}
                   </DropdownMenuItem>
                 ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setSnoozeCustomOpen(true)}>
+                  <CalendarClock className="mr-2 h-3.5 w-3.5" />
+                  Custom date &amp; time
+                </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
 
@@ -545,6 +556,12 @@ export default function ConversationHeader({
         actionLabel="Archive"
         onConfirm={handleArchive}
         loading={archiving}
+      />
+
+      <SnoozeCustomDialog
+        open={snoozeCustomOpen}
+        onOpenChange={setSnoozeCustomOpen}
+        onSnooze={(until) => patchConversation({ snoozed_until: until })}
       />
     </div>
   );

@@ -125,6 +125,16 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       query = query.eq('is_starred', true);
     }
 
+    // Snoozed filter (at DB level for correct pagination)
+    const nowIso = new Date().toISOString();
+    if (snoozed === 'true') {
+      // Only currently-snoozed conversations (snoozed_until is in the future)
+      query = query.not('snoozed_until', 'is', null).gt('snoozed_until', nowIso);
+    } else {
+      // Exclude snoozed conversations from the normal view
+      query = query.or(`snoozed_until.is.null,snoozed_until.lte.${nowIso}`);
+    }
+
     // Label filter
     if (labelId) {
       const { data: labelSessions } = await supabaseAdmin
@@ -158,7 +168,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
     // Pagination
     query = query.range(Number(offset), Number(offset) + Number(limit) - 1);
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -181,8 +191,6 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
-    const nowIso = new Date().toISOString();
-
     // Post-filter for unread: sessions with marked_unread OR actual unread messages
     let filteredData = data || [];
     if (unread === 'true') {
@@ -190,13 +198,6 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
         (s) => s.marked_unread === true || (unreadMap[s.id] || 0) > 0
       );
     }
-
-    // Post-filter for snoozed state to avoid conflicts with other top-level OR filters
-    filteredData = filteredData.filter((session) => {
-      const isCurrentlySnoozed =
-        !!session.snoozed_until && new Date(session.snoozed_until).toISOString() > nowIso;
-      return snoozed === 'true' ? isCurrentlySnoozed : !isCurrentlySnoozed;
-    });
 
     // Get session counts per contact for "returning contact" indicators
     const contactIds = [...new Set(filteredData.map((s) => s.contact_id).filter(Boolean))];

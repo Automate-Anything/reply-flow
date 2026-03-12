@@ -41,6 +41,7 @@ interface ConversationListProps {
   onOpenInboxTools?: () => void;
   statuses?: ConversationStatus[];
   priorities?: ConversationPriority[];
+  onPriorityMetadataNeeded?: () => void;
   tabBar?: React.ReactNode;
 }
 
@@ -66,6 +67,7 @@ export default function ConversationList({
   onOpenInboxTools,
   statuses = [],
   priorities = [],
+  onPriorityMetadataNeeded,
   tabBar,
 }: ConversationListProps) {
   return (
@@ -86,6 +88,7 @@ export default function ConversationList({
             onFiltersChange={onFiltersChange}
             statuses={statuses}
             priorities={priorities}
+            onPriorityMetadataNeeded={onPriorityMetadataNeeded}
           />
           {onOpenInboxTools && (
             <Button
@@ -158,6 +161,7 @@ export default function ConversationList({
                 labels={labels}
                 statuses={statuses}
                 priorities={priorities}
+                onPriorityMetadataNeeded={onPriorityMetadataNeeded}
                 onUpdate={onRefresh}
               >
                 <ConversationItem

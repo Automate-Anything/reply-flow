@@ -252,6 +252,20 @@ export async function reactToMessage(channelToken: string, messageId: string, em
   await gate.put(`/messages/${messageId}/react`, { emoji });
 }
 
+/**
+ * Fetches the direct download URL for a media file by its Whapi media ID.
+ * Used as a fallback when the webhook doesn't include a `link` in the payload.
+ */
+export async function getMediaUrl(channelToken: string, mediaId: string): Promise<string | null> {
+  const gate = gateApi(channelToken);
+  try {
+    const { data } = await gate.get(`/media/${mediaId}`);
+    return data.link || data.url || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function forwardMessage(channelToken: string, messageId: string, to: string): Promise<unknown> {
   const gate = gateApi(channelToken);
   const { data } = await gate.post(`/messages/${messageId}`, { to });

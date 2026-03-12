@@ -38,6 +38,7 @@ export default function InboxPage() {
   const [inboxToolsOpen, setInboxToolsOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+  const [priorityMetadataNeeded, setPriorityMetadataNeeded] = useState(false);
   const needsConversationSupport = activeTab !== 'scheduled' || !!activeConversation;
   const { debugMode } = useDebugMode(needsConversationSupport);
 
@@ -65,7 +66,9 @@ export default function InboxPage() {
   } = useScheduledMessages(activeTab === 'scheduled');
   const { members: teamMembers } = useTeamMembers(needsConversationSupport);
   const { statuses: conversationStatuses } = useConversationStatuses(needsConversationSupport);
-  const { priorities: conversationPriorities } = useConversationPriorities(needsConversationSupport);
+  const { priorities: conversationPriorities } = useConversationPriorities(
+    needsConversationSupport && priorityMetadataNeeded
+  );
 
   // Fetch labels for bulk actions
   const refreshLabels = useCallback(() => {
@@ -117,6 +120,15 @@ export default function InboxPage() {
         refetchConvs();
       },
       [activeConversation, setMessages, markRead, refetchConvs]
+    ),
+    onMessageUpdate: useCallback(
+      (msg: Partial<Message> & { id: string }) => {
+        // Merge updated fields (e.g. media_storage_path after voice note processing)
+        setMessages((prev) =>
+          prev.map((m) => (m.id === msg.id ? { ...m, ...msg } : m))
+        );
+      },
+      [setMessages]
     ),
     onSessionUpdate: useCallback(
       (session: Partial<Conversation> & { id: string }) => {
@@ -296,15 +308,42 @@ export default function InboxPage() {
     return (
       <div className="flex h-full" data-component="InboxPage">
         <div className="flex h-full w-full flex-col border-r md:w-[320px]">
-          <div className="space-y-2 p-3">
-            <Skeleton className="h-8 w-full rounded-md" />
-            <Skeleton className="h-10 w-full rounded-md" />
+          <div className="border-b px-3 pt-3 pb-2 space-y-2">
+            {/* Search bar + filter buttons */}
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-9 flex-1 rounded-md" />
+              <Skeleton className="h-9 w-9 rounded-md" />
+              <Skeleton className="h-9 w-9 rounded-md" />
+            </div>
+            {/* Tab bar */}
+            <div className="flex items-center gap-1">
+              <Skeleton className="h-7 w-14 rounded-md" />
+              <Skeleton className="h-7 w-20 rounded-md" />
+              <Skeleton className="h-7 w-24 rounded-md" />
+            </div>
+          </div>
+          {/* Conversation items */}
+          <div className="flex-1 space-y-1 p-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-md" />
+              <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-3">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-40" />
+                </div>
+                <Skeleton className="h-3 w-10" />
+              </div>
             ))}
           </div>
         </div>
-        <div className="hidden flex-1 md:block" />
+        {/* Right panel placeholder */}
+        <div className="hidden flex-1 flex-col items-center justify-center gap-3 text-muted-foreground md:flex">
+          <Skeleton className="h-16 w-16 rounded-full" />
+          <div className="space-y-1.5 text-center">
+            <Skeleton className="mx-auto h-4 w-36" />
+            <Skeleton className="mx-auto h-3 w-52" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -326,6 +365,7 @@ export default function InboxPage() {
               onFiltersChange={setFilters}
               statuses={conversationStatuses}
               priorities={conversationPriorities}
+              onPriorityMetadataNeeded={() => setPriorityMetadataNeeded(true)}
               tabBar={tabBar}
             />
           ) : inboxToolsOpen ? (
@@ -354,6 +394,7 @@ export default function InboxPage() {
               onOpenInboxTools={() => setInboxToolsOpen(true)}
               statuses={conversationStatuses}
               priorities={conversationPriorities}
+              onPriorityMetadataNeeded={() => setPriorityMetadataNeeded(true)}
               tabBar={tabBar}
             />
           )}
@@ -373,6 +414,7 @@ export default function InboxPage() {
               teamMembers={teamMembers}
               statuses={conversationStatuses}
               priorities={conversationPriorities}
+              onPriorityMetadataNeeded={() => setPriorityMetadataNeeded(true)}
               onOpenContact={() => setContactPanelOpen(true)}
               onToggleNotes={() => setNotesPanelOpen((prev) => !prev)}
               notesPanelOpen={notesPanelOpen}

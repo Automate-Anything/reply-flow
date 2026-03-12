@@ -19,7 +19,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Building2, Trash2, Clock } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Loader2, Building2, Trash2, Clock, ChevronsUpDown, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
 import { PlanGate } from '@/components/auth/PlanGate';
 
@@ -63,7 +65,8 @@ export default function CompanySettingsPage() {
   const [businessType, setBusinessType] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
   const [timezone, setTimezone] = useState('UTC');
-  const [tzInput, setTzInput] = useState('UTC');
+  const [tzOpen, setTzOpen] = useState(false);
+  const [tzSearch, setTzSearch] = useState('');
   const [sessionTimeout, setSessionTimeout] = useState(24);
   const [savingTimeout, setSavingTimeout] = useState(false);
 
@@ -75,7 +78,6 @@ export default function CompanySettingsPage() {
       setBusinessType(data.company.business_type || '');
       setBusinessDescription(data.company.business_description || '');
       setTimezone(data.company.timezone || 'UTC');
-      setTzInput(data.company.timezone || 'UTC');
       setSessionTimeout(data.company.session_timeout_hours ?? 24);
     } catch {
       toast.error('Failed to load company settings');
@@ -88,15 +90,11 @@ export default function CompanySettingsPage() {
     fetchCompany();
   }, [fetchCompany]);
 
-  const handleTzBlur = () => {
-    // Validate the timezone input on blur
-    if (TIMEZONES.includes(tzInput)) {
-      setTimezone(tzInput);
-    } else {
-      // Reset to current valid value
-      setTzInput(timezone);
-    }
-  };
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch) return TIMEZONES;
+    const q = tzSearch.toLowerCase();
+    return TIMEZONES.filter((tz) => tz.toLowerCase().includes(q));
+  }, [tzSearch]);
 
   const hasChanges = useMemo(() => {
     if (!company) return false;
@@ -201,29 +199,58 @@ export default function CompanySettingsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="company-timezone">Timezone</Label>
+            <Label>Timezone</Label>
             <p className="text-xs text-muted-foreground">
               Used for business hours and scheduling across the platform.
             </p>
-            <Input
-              id="company-timezone"
-              list="tz-list"
-              value={tzInput}
-              onChange={(e) => {
-                setTzInput(e.target.value);
-                if (TIMEZONES.includes(e.target.value)) {
-                  setTimezone(e.target.value);
-                }
-              }}
-              onBlur={handleTzBlur}
-              disabled={!canEdit}
-              placeholder="e.g., America/New_York"
-            />
-            <datalist id="tz-list">
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz} />
-              ))}
-            </datalist>
+            <Popover open={tzOpen} onOpenChange={(open) => { setTzOpen(open); if (!open) setTzSearch(''); }}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={tzOpen}
+                  disabled={!canEdit}
+                  className="w-full justify-between font-normal"
+                >
+                  {timezone}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <div className="border-b px-3 py-2">
+                  <Input
+                    placeholder="Search timezones..."
+                    value={tzSearch}
+                    onChange={(e) => setTzSearch(e.target.value)}
+                    className="h-8 border-0 p-0 shadow-none focus-visible:ring-0"
+                  />
+                </div>
+                <div className="max-h-60 overflow-y-auto p-1">
+                  {filteredTimezones.length === 0 ? (
+                    <p className="px-2 py-4 text-center text-sm text-muted-foreground">No timezone found.</p>
+                  ) : (
+                    filteredTimezones.map((tz) => (
+                      <button
+                        key={tz}
+                        type="button"
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent transition-colors',
+                          tz === timezone && 'bg-accent'
+                        )}
+                        onClick={() => {
+                          setTimezone(tz);
+                          setTzOpen(false);
+                          setTzSearch('');
+                        }}
+                      >
+                        <Check className={cn('h-4 w-4 shrink-0', tz === timezone ? 'opacity-100' : 'opacity-0')} />
+                        {tz}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {canEdit && (

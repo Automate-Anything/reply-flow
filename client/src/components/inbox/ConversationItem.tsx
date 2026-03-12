@@ -18,6 +18,13 @@ interface ConversationItemProps {
   onToggleSelect?: () => void;
 }
 
+const FALLBACK_PRIORITY_COLORS: Record<string, string> = {
+  Urgent: '#EF4444',
+  High: '#F97316',
+  Medium: '#EAB308',
+  Low: '#3B82F6',
+};
+
 // Show badge for any status except the default "open"
 function getStatusLabel(status: string): string | null {
   if (status === 'open') return null;
@@ -38,7 +45,9 @@ export default function ConversationItem({
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const name = conversation.contact_name || conversation.phone_number;
   const initial = (name[0] || '?').toUpperCase();
-  const priorityColor = priorities.find((priority) => priority.name === conversation.priority)?.color;
+  const priorityColor =
+    priorities.find((priority) => priority.name === conversation.priority)?.color ||
+    FALLBACK_PRIORITY_COLORS[conversation.priority];
   const statusLabel = getStatusLabel(conversation.status);
   const isSnoozed =
     conversation.snoozed_until && new Date(conversation.snoozed_until) > new Date();

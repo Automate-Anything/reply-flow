@@ -26,7 +26,9 @@ function getExtension(mimeType: string, filename?: string): string {
     const parts = filename.split('.');
     if (parts.length > 1) return parts.pop()!;
   }
-  return MIME_TO_EXT[mimeType] || 'bin';
+  // Strip parameters like "audio/ogg; codecs=opus" → "audio/ogg"
+  const baseMime = mimeType.split(';')[0].trim();
+  return MIME_TO_EXT[baseMime] || MIME_TO_EXT[mimeType] || 'bin';
 }
 
 /**

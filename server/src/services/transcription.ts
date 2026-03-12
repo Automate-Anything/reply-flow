@@ -32,7 +32,8 @@ export async function transcribeAudio(
     const buffer = await downloadFromStorage(storagePath);
     if (!buffer) return null;
 
-    const ext = MIME_TO_EXT[mimeType] || 'ogg';
+    const baseMime = mimeType.split(';')[0].trim();
+    const ext = MIME_TO_EXT[baseMime] || MIME_TO_EXT[mimeType] || 'ogg';
     const file = new File([new Uint8Array(buffer)], `audio.${ext}`, { type: mimeType });
 
     const response = await openai.audio.transcriptions.create({

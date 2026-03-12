@@ -21,6 +21,7 @@ import {
   Star,
   Tag,
   UserPlus,
+  CalendarClock,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -30,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import SnoozeCustomDialog from '@/components/inbox/SnoozeCustomDialog';
 import type { Conversation } from '@/hooks/useConversations';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 import type { ConversationStatus } from '@/hooks/useConversationStatuses';
@@ -47,6 +49,7 @@ interface ConversationContextMenuProps {
   labels: LabelOption[];
   statuses?: ConversationStatus[];
   priorities?: ConversationPriority[];
+  onPriorityMetadataNeeded?: () => void;
   onUpdate: () => void;
   children: React.ReactNode;
 }
@@ -77,12 +80,14 @@ export default function ConversationContextMenu({
   labels,
   statuses = [],
   priorities = [],
+  onPriorityMetadataNeeded,
   onUpdate,
   children,
 }: ConversationContextMenuProps) {
   const { companyTimezone } = useSession();
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false);
   const [labelLoading, setLabelLoading] = useState<string | null>(null);
+  const [snoozeCustomOpen, setSnoozeCustomOpen] = useState(false);
 
   const statusOptions = statuses.length > 0
     ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
@@ -150,7 +155,7 @@ export default function ConversationContextMenu({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>{children}</ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={() => onPriorityMetadataNeeded?.()}>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-52">
         {/* Read / Unread */}
         {hasUnread ? (
@@ -309,6 +314,11 @@ export default function ConversationContextMenu({
                 {opt.label}
               </ContextMenuItem>
             ))}
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => setSnoozeCustomOpen(true)}>
+              <CalendarClock className="mr-2 h-3.5 w-3.5" />
+              Custom date &amp; time
+            </ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
 
@@ -337,6 +347,12 @@ export default function ConversationContextMenu({
         description="Archived conversations can be found in the archived filter."
         actionLabel="Archive"
         onConfirm={handleArchive}
+      />
+
+      <SnoozeCustomDialog
+        open={snoozeCustomOpen}
+        onOpenChange={setSnoozeCustomOpen}
+        onSnooze={(until) => patch({ snoozed_until: until })}
       />
     </ContextMenu>
   );

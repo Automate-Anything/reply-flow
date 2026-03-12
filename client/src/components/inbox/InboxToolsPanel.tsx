@@ -25,10 +25,10 @@ export default function InboxToolsPanel({ onClose }: InboxToolsPanelProps) {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="flex flex-1 flex-col overflow-hidden">
         <TabsList className="mx-3 mt-3 w-auto">
-          <TabsTrigger value="quick-replies" className="flex-1">Quick Replies</TabsTrigger>
-          <TabsTrigger value="labels" className="flex-1">Labels</TabsTrigger>
-          <TabsTrigger value="priorities" className="flex-1">Priorities</TabsTrigger>
-          <TabsTrigger value="statuses" className="flex-1">Statuses</TabsTrigger>
+          <TabsTrigger value="quick-replies" className="flex-1 text-[13px]">Quick Replies</TabsTrigger>
+          <TabsTrigger value="labels" className="flex-1 text-[13px]">Labels</TabsTrigger>
+          <TabsTrigger value="priorities" className="flex-1 text-[13px]">Priorities</TabsTrigger>
+          <TabsTrigger value="statuses" className="flex-1 text-[13px]">Statuses</TabsTrigger>
         </TabsList>
 
         <TabsContent value="quick-replies" className="flex-1 overflow-y-auto p-3">

@@ -34,6 +34,7 @@ interface ScheduledMessagesListProps {
   onFiltersChange: (filters: ConversationFilters) => void;
   statuses?: ConversationStatus[];
   priorities?: ConversationPriority[];
+  onPriorityMetadataNeeded?: () => void;
   tabBar?: React.ReactNode;
 }
 
@@ -49,6 +50,7 @@ export default function ScheduledMessagesList({
   onFiltersChange,
   statuses = [],
   priorities = [],
+  onPriorityMetadataNeeded,
   tabBar,
 }: ScheduledMessagesListProps) {
   const [editingMessage, setEditingMessage] = useState<ScheduledMessage | null>(null);
@@ -106,6 +108,7 @@ export default function ScheduledMessagesList({
               onFiltersChange={onFiltersChange}
               statuses={statuses}
               priorities={priorities}
+              onPriorityMetadataNeeded={onPriorityMetadataNeeded}
             />
           </div>
           {tabBar}
@@ -143,6 +146,7 @@ export default function ScheduledMessagesList({
             onFiltersChange={onFiltersChange}
             statuses={statuses}
             priorities={priorities}
+            onPriorityMetadataNeeded={onPriorityMetadataNeeded}
           />
         </div>
         {tabBar}
