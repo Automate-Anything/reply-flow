@@ -52,7 +52,6 @@ export default function AutoAssignSettings() {
   const [saving, setSaving] = useState<string | null>(null);
   const [mode, setMode] = useState<AutoAssignMode>('company');
   const [modeLoading, setModeLoading] = useState(true);
-  const [modeSaving, setModeSaving] = useState(false);
 
   // Fetch channels + mode
   useEffect(() => {
@@ -79,15 +78,13 @@ export default function AutoAssignSettings() {
   }, []);
 
   const handleModeChange = async (newMode: AutoAssignMode) => {
-    setModeSaving(true);
+    const prevMode = mode;
+    setMode(newMode);
     try {
       await api.put('/company', { auto_assign_mode: newMode });
-      setMode(newMode);
-      toast.success(newMode === 'company' ? 'Switched to company-wide auto-assign' : 'Switched to per-channel auto-assign');
     } catch {
+      setMode(prevMode);
       toast.error('Failed to update mode');
-    } finally {
-      setModeSaving(false);
     }
   };
 
@@ -200,7 +197,6 @@ export default function AutoAssignSettings() {
         <button
           type="button"
           onClick={() => mode !== 'company' && handleModeChange('company')}
-          disabled={modeSaving}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
             mode === 'company'
               ? 'bg-primary text-primary-foreground shadow-sm'
@@ -212,7 +208,6 @@ export default function AutoAssignSettings() {
         <button
           type="button"
           onClick={() => mode !== 'per_channel' && handleModeChange('per_channel')}
-          disabled={modeSaving}
           className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
             mode === 'per_channel'
               ? 'bg-primary text-primary-foreground shadow-sm'
