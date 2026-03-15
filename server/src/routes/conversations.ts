@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { extractSessionMemories } from '../services/sessionMemory.js';
-import { getAccessibleSessionFilter, getConversationAccess, ensureConversationAccessOnAssign } from '../services/accessControl.js';
+import { getAccessibleSessions, getConversationAccess, getOverrideMetadata, ensureConversationAccessOnAssign } from '../services/permissionResolver.js';
 import { fetchAndStoreProfilePicture } from '../services/messageProcessor.js';
 import { createNotification } from '../services/notificationService.js';
 
@@ -30,8 +30,8 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       offset = '0',
     } = req.query;
 
-    // Determine which conversations this user can access based on channel ownership + sharing
-    const accessFilter = await getAccessibleSessionFilter(req.userId!, companyId);
+    // Determine which conversations this user can access
+    const { filter } = await getAccessibleSessions(req.userId!, companyId);
 
     let query = supabaseAdmin
       .from('chat_sessions')
@@ -42,25 +42,17 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       .is('deleted_at', null);
 
     // Apply access-based filtering
-    if (accessFilter.mode === 'filtered') {
-      if (accessFilter.channelIds.length === 0 && accessFilter.extraSessionIds.length === 0) {
-        // User has no access to any conversations
+    if (filter.mode === 'filtered') {
+      if (filter.channelIds.length === 0) {
         res.json({ sessions: [], count: 0 });
         return;
       }
-
-      if (accessFilter.extraSessionIds.length > 0 && accessFilter.channelIds.length > 0) {
-        // User can see: all conversations in full-access channels OR specific granted conversations
-        query = query.or(
-          `channel_id.in.(${accessFilter.channelIds.join(',')}),id.in.(${accessFilter.extraSessionIds.join(',')})`
-        );
-      } else if (accessFilter.channelIds.length > 0) {
-        query = query.in('channel_id', accessFilter.channelIds);
-      } else {
-        query = query.in('id', accessFilter.extraSessionIds);
+      query = query.in('channel_id', filter.channelIds);
+      if (filter.excludedSessionIds.length > 0) {
+        query = query.not('id', 'in', `(${filter.excludedSessionIds.join(',')})`);
       }
     }
-    // mode === 'all' means no filtering needed (user sees everything)
+    // mode === 'all' means no filtering needed
 
     // Archived filter
     if (archived === 'true') {
@@ -219,7 +211,16 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
-    const sessions = filteredData.map((s) => ({
+    // Enrich with override metadata for shield indicators
+    const filteredSessionIds = (filteredData || []).map((s: any) => s.id);
+    const overrideMeta = await getOverrideMetadata(filteredSessionIds, companyId);
+    const metaMap = new Map(overrideMeta.map((m) => [m.sessionId, m]));
+    const enrichedSessions = (filteredData || []).map((s: any) => ({
+      ...s,
+      override_meta: metaMap.get(s.id) || null,
+    }));
+
+    const sessions = enrichedSessions.map((s: any) => ({
         ...s,
         unread_count: unreadMap[s.id] || 0,
         contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
@@ -258,7 +259,7 @@ router.get('/:sessionId/messages', requirePermission('conversations', 'view'), a
 
     // Verify user has access to this conversation
     const convAccess = await getConversationAccess(req.userId!, sessionId as string, companyId);
-    if (!convAccess) {
+    if (!convAccess || convAccess === 'no_access') {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
@@ -292,7 +293,7 @@ router.post('/:sessionId/read', requirePermission('conversations', 'edit'), asyn
 
     // Verify user has access to this conversation
     const convAccess = await getConversationAccess(req.userId!, sessionId as string, companyId);
-    if (!convAccess) {
+    if (!convAccess || convAccess === 'no_access') {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
@@ -349,7 +350,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
 
     // Verify user has edit access to this conversation
     const convAccess = await getConversationAccess(req.userId!, sessionId as string, companyId);
-    if (!convAccess) {
+    if (!convAccess || convAccess === 'no_access') {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
@@ -403,7 +404,7 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
 
       // Auto-grant conversation access when assigning someone
       if (assigned_to !== null) {
-        ensureConversationAccessOnAssign(sessionId as string, assigned_to, req.userId!).catch((err) => {
+        ensureConversationAccessOnAssign(sessionId as string, assigned_to, req.userId!, companyId).catch((err) => {
           console.error('Failed to auto-grant conversation access on assign:', err);
         });
       }
@@ -575,7 +576,7 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
     }
 
     // Verify all sessions belong to company and user has access
-    const accessFilter = await getAccessibleSessionFilter(req.userId!, companyId);
+    const { filter: accessFilter } = await getAccessibleSessions(req.userId!, companyId);
     let validQuery = supabaseAdmin
       .from('chat_sessions')
       .select('id')
@@ -583,18 +584,13 @@ router.post('/bulk', requirePermission('conversations', 'edit'), async (req, res
       .eq('company_id', companyId);
 
     if (accessFilter.mode === 'filtered') {
-      if (accessFilter.channelIds.length === 0 && accessFilter.extraSessionIds.length === 0) {
+      if (accessFilter.channelIds.length === 0) {
         res.status(404).json({ error: 'No valid sessions found' });
         return;
       }
-      if (accessFilter.extraSessionIds.length > 0 && accessFilter.channelIds.length > 0) {
-        validQuery = validQuery.or(
-          `channel_id.in.(${accessFilter.channelIds.join(',')}),id.in.(${accessFilter.extraSessionIds.join(',')})`
-        );
-      } else if (accessFilter.channelIds.length > 0) {
-        validQuery = validQuery.in('channel_id', accessFilter.channelIds);
-      } else {
-        validQuery = validQuery.in('id', accessFilter.extraSessionIds);
+      validQuery = validQuery.in('channel_id', accessFilter.channelIds);
+      if (accessFilter.excludedSessionIds.length > 0) {
+        validQuery = validQuery.not('id', 'in', `(${accessFilter.excludedSessionIds.join(',')})`);
       }
     }
 
