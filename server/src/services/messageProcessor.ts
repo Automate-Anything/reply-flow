@@ -6,6 +6,8 @@ import { extractSessionMemories } from './sessionMemory.js';
 import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 import { downloadMediaById, fetchFullMessage, getContactProfile } from './whapi.js';
+import { autoAssignConversation } from './autoAssignService.js';
+import { createNotification } from './notificationService.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -277,6 +279,7 @@ export async function processIncomingMessage(
 
   // 2. Find or create ACTIVE session (session boundary logic)
   let sessionId: string;
+  let isNewSession = false;
 
   const { data: activeSession } = await supabaseAdmin
     .from('chat_sessions')
@@ -308,11 +311,43 @@ export async function processIncomingMessage(
 
       // Create a fresh session — don't use from_name for outbound (it's the channel's name)
       sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, isOutbound ? undefined : msg.from_name);
+      isNewSession = true;
     } else {
       sessionId = activeSession.id;
     }
   } else {
     sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, isOutbound ? undefined : msg.from_name);
+    isNewSession = true;
+  }
+
+  // Auto-assign new inbound sessions
+  if (isNewSession && !isOutbound) {
+    try {
+      const { data: tagRows } = await supabaseAdmin
+        .from('contact_tag_members')
+        .select('tag_id')
+        .eq('contact_id', contactId);
+      const contactTags = (tagRows || []).map((r) => r.tag_id);
+
+      const { assignedTo } = await autoAssignConversation(companyId, channelId, contactTags);
+      if (assignedTo) {
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({ assigned_to: assignedTo })
+          .eq('id', sessionId);
+
+        createNotification({
+          companyId,
+          userId: assignedTo,
+          type: 'assignment',
+          title: 'New conversation assigned to you',
+          body: `From ${msg.from_name || phoneNumber}`,
+          data: { sessionId },
+        }).catch((err) => console.error('Auto-assign notification error:', err));
+      }
+    } catch (err) {
+      console.error('Auto-assign error:', err);
+    }
   }
 
   // 2b. Handle action messages (reactions, edits, deletes) — these are not standalone messages
@@ -511,6 +546,25 @@ export async function processIncomingMessage(
 
   // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed
   if (isOutbound) return;
+
+  // 6b. Notify assigned user about new inbound message (non-blocking)
+  if (!isNewSession) {
+    const { data: session } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('assigned_to')
+      .eq('id', sessionId)
+      .single();
+    if (session?.assigned_to) {
+      createNotification({
+        companyId,
+        userId: session.assigned_to,
+        type: 'message_assigned',
+        title: `New message from ${msg.from_name || phoneNumber}`,
+        body: messageBody.slice(0, 120),
+        data: { sessionId },
+      }).catch((err) => console.error('Message notification error:', err));
+    }
+  }
 
   // Check message allowance (billing limits + balance check) before triggering AI
   let allowance;

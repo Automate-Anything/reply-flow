@@ -29,6 +29,8 @@ import conversationPrioritiesRouter from './routes/conversationPriorities.js';
 import cannedResponsesRouter from './routes/cannedResponses.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import accessRouter from './routes/access.js';
+import autoAssignRouter from './routes/autoAssign.js';
+import notificationsRouter from './routes/notifications.js';
 import { startScheduler } from './services/scheduler.js';
 
 const app = express();
@@ -110,6 +112,8 @@ app.use('/api/conversation-priorities', conversationPrioritiesRouter);
 app.use('/api/canned-responses', cannedResponsesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/access', accessRouter);
+app.use('/api/auto-assign', autoAssignRouter);
+app.use('/api/notifications', notificationsRouter);
 
 app.use(errorHandler);
 
