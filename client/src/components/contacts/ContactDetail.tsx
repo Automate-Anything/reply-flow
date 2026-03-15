@@ -487,6 +487,7 @@ export default function ContactDetail({
             contactId={contact.id}
             sessions={sessions as ConvSession[]}
             sessionsLoading={sessionsLoading}
+            contactName={contact.first_name || contact.phone_number}
           />
         </TabsContent>
 
