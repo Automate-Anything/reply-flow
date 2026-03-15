@@ -52,7 +52,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import AIToggle from '@/components/ai/AIToggle';
 import SnoozeCustomDialog from '@/components/inbox/SnoozeCustomDialog';
 import AccessManager from '@/components/access/AccessManager';
-import { useConversationAccess } from '@/hooks/useAccessControl';
+import { useConversationPermissions } from '@/hooks/usePermissions';
 
 interface ConversationHeaderProps {
   conversation: Conversation;
@@ -191,12 +191,13 @@ export default function ConversationHeader({
     }
   };
 
-  const conversationAccess = useConversationAccess(conversation.id);
+  const { settings: permSettings, loading: permLoading, grantOverride, removeOverride } = useConversationPermissions(conversation.id);
 
-  // Determine if there's an "all" entry (user_id=null) in the access list
-  const hasAllAccess = (conversationAccess.settings?.access_list || []).some(
-    (entry) => !entry.user_id
-  );
+  // Determine if the current user has manage-level access to this conversation.
+  // We consider manage access granted when permSettings has loaded (i.e. the API
+  // did not 403 out) — the backend only returns settings to users with at least
+  // manage-level access to the conversation.
+  const canManage = !permLoading && permSettings !== null;
 
   const statusOptions = statuses.length > 0
     ? statuses.map((s) => ({ value: s.name, label: s.name, color: s.color }))
@@ -262,24 +263,20 @@ export default function ConversationHeader({
         />
 
         {/* Manage Access — controls who can see this conversation */}
-        {conversationAccess.settings && (
+        {permSettings && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
                   <AccessManager
-                    title="Manage access"
-                    description="Control who can see this conversation and its messages. This is separate from assignment — assigning determines who is responsible for responding."
-                    sharingMode="specific_users"
-                    accessList={conversationAccess.settings.access_list}
+                    mode="conversation"
+                    permissions={permSettings.permissions}
+                    inheritedPermissions={permSettings.inherited}
                     teamMembers={teamMembers}
-                    onSharingModeChange={async () => {}}
-                    onGrantAccess={conversationAccess.grantAccess}
-                    onRevokeAccess={conversationAccess.revokeAccess}
-                    showGrantToAll
-                    onGrantToAll={conversationAccess.grantAccessToAll}
-                    onRevokeFromAll={conversationAccess.revokeAccessFromAll}
-                    hasAllAccess={hasAllAccess}
+                    onGrant={grantOverride}
+                    onRevoke={removeOverride}
+                    onLevelChange={grantOverride}
+                    canManage={canManage}
                     trigger={
                       <Button variant="ghost" size="icon" className="h-8 w-8" title="Manage access">
                         <Lock className="h-4 w-4" />
