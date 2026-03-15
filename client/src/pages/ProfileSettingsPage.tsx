@@ -21,7 +21,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Camera, User, DoorOpen, KeyRound, Link, Unlink } from 'lucide-react';
+import { Loader2, Camera, User, DoorOpen, KeyRound, Link, Unlink, Bell } from 'lucide-react';
+import NotificationPreferences from '@/components/settings/NotificationPreferences';
 import type { UserIdentity } from '@supabase/supabase-js';
 
 interface Profile {
@@ -337,6 +338,20 @@ export default function ProfileSettingsPage() {
               Save Name
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Notification Preferences */}
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4" />
+            Notification Preferences
+          </CardTitle>
+          <CardDescription>Choose which notifications you want to receive.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NotificationPreferences />
         </CardContent>
       </Card>
 

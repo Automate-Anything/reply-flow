@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { CalendarClock, Clock, MessageSquare } from 'lucide-react';
+import { CalendarClock, Clock, MessageSquare, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ import ForwardMessageModal from '@/components/inbox/ForwardMessageModal';
 import ScheduledMessagesList from '@/components/inbox/ScheduledMessagesList';
 import { useDebugMode } from '@/hooks/useDebugMode';
 
-type InboxTab = 'all' | 'snoozed' | 'scheduled';
+type InboxTab = 'all' | 'assigned' | 'snoozed' | 'scheduled';
 
 export default function InboxPage() {
   const pageReady = usePageReady();
@@ -40,6 +40,7 @@ export default function InboxPage() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   const [priorityMetadataNeeded, setPriorityMetadataNeeded] = useState(false);
+  const [assignedUnreadCount, setAssignedUnreadCount] = useState(0);
   const needsConversationSupport = activeTab !== 'scheduled' || !!activeConversation;
   const { debugMode } = useDebugMode(needsConversationSupport);
 
@@ -47,9 +48,10 @@ export default function InboxPage() {
   const draftRef = useRef<string>('');
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Merge snoozed filter when on snoozed tab
+  // Merge tab-specific filters
   const effectiveFilters = useMemo(() => {
     if (activeTab === 'snoozed') return { ...filters, snoozed: true };
+    if (activeTab === 'assigned') return { ...filters, assignee: ['me'] };
     return filters;
   }, [activeTab, filters]);
 
@@ -79,6 +81,13 @@ export default function InboxPage() {
   useEffect(() => {
     refreshLabels();
   }, [refreshLabels]);
+
+  // Fetch assigned unread count for the badge
+  useEffect(() => {
+    api.get('/conversations?assignee=me&unread=true&limit=0')
+      .then(({ data }) => setAssignedUnreadCount(data.count || 0))
+      .catch(() => {});
+  }, [conversations]);
 
   // Restore active conversation from sessionStorage on first load
   useEffect(() => {
@@ -375,6 +384,7 @@ export default function InboxPage() {
     <div className="flex items-center gap-1">
       {([
         { key: 'all', label: 'All', icon: MessageSquare },
+        { key: 'assigned', label: 'Assigned to Me', icon: UserCheck },
         { key: 'snoozed', label: 'Snoozed', icon: Clock },
         { key: 'scheduled', label: 'Scheduled', icon: CalendarClock },
       ] as const).map(({ key, label, icon: Icon }) => (
@@ -393,6 +403,11 @@ export default function InboxPage() {
         >
           <Icon className="h-3.5 w-3.5" />
           {label}
+          {key === 'assigned' && assignedUnreadCount > 0 && (
+            <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-white">
+              {assignedUnreadCount > 99 ? '99+' : assignedUnreadCount}
+            </span>
+          )}
         </button>
       ))}
     </div>
