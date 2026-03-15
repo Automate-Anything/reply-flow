@@ -32,6 +32,7 @@ import accessRouter from './routes/access.js';
 import autoAssignRouter from './routes/autoAssign.js';
 import notificationsRouter from './routes/notifications.js';
 import { startScheduler } from './services/scheduler.js';
+import { startAvailabilityScheduler } from './services/availabilityScheduler.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -120,6 +121,7 @@ app.use(errorHandler);
 app.listen(env.PORT, () => {
   console.log(`Server running on port ${env.PORT} (smart-kb)`);
   startScheduler();
+  startAvailabilityScheduler();
 });
 
 export default app;

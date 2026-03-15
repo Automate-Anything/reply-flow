@@ -53,14 +53,14 @@ function getScenarioByLabel(profileData: ProfileData, label: string | null) {
   return profileData.response_flow?.scenarios.find((scenario) => scenario.label === label) ?? null;
 }
 
-interface DaySchedule {
+export interface DaySchedule {
   enabled: boolean;
   open: string;  // "HH:MM"
   close: string; // "HH:MM"
   slots?: Array<{ open: string; close: string }>;
 }
 
-interface BusinessHours {
+export interface BusinessHours {
   monday: DaySchedule;
   tuesday: DaySchedule;
   wednesday: DaySchedule;
@@ -85,7 +85,7 @@ type ChannelResponseMode = 'live' | 'test';
  * Checks whether the current moment falls within the given schedule,
  * evaluated in the specified IANA timezone.
  */
-function isWithinSchedule(schedule: BusinessHours, timezone: string): boolean {
+export function isWithinSchedule(schedule: BusinessHours, timezone: string): boolean {
   const now = new Date();
 
   // Get current day name in the target timezone
