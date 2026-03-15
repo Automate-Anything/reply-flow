@@ -360,6 +360,34 @@ export async function shouldAIRespond(
       .single();
     const timezone = company?.timezone || 'UTC';
 
+    // Check company holidays — treat as outside hours if today is a holiday
+    if (scheduleMode === 'business_hours') {
+      const todayInTz = new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date());
+      const todayMMDD = todayInTz.slice(5);
+
+      const { data: companyHolidays } = await supabaseAdmin
+        .from('holidays')
+        .select('date, recurring')
+        .eq('company_id', companyId)
+        .eq('scope', 'company');
+
+      const isHoliday = (companyHolidays || []).some(h =>
+        h.recurring ? h.date.slice(5) === todayMMDD : h.date === todayInTz
+      );
+
+      if (isHoliday) {
+        const outsideMessage = (channelSettings.outside_hours_message as string | null)?.trim();
+        if (outsideMessage) {
+          return {
+            action: 'outside_hours',
+            outsideHoursMessage: outsideMessage,
+            channelId: session.channel_id,
+          };
+        }
+        return { action: 'skip' };
+      }
+    }
+
     let schedule: BusinessHours | null = null;
 
     if (scheduleMode === 'business_hours') {
