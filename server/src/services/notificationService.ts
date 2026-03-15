@@ -19,6 +19,7 @@ const PREFERENCE_DEFAULTS: Record<string, boolean> = {
   schedule_sent: true,
   status_change: true,
   contact_note: true,
+  handoff: true,
 };
 
 /**
