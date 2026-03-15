@@ -310,7 +310,6 @@ export default function ChannelDetailPage() {
   const handleSaveSchedule = async (updates: {
     schedule_mode: ScheduleMode;
     ai_schedule: ChannelAgentSettings['ai_schedule'];
-    outside_hours_message: string | null;
   }) => {
     await updateSettings(updates);
     await refetchSettings();
@@ -740,7 +739,6 @@ export default function ChannelDetailPage() {
                       scheduleMode={settings.schedule_mode}
                       scheduleConfigured={settings.schedule_configured}
                       aiSchedule={settings.ai_schedule}
-                      outsideHoursMessage={settings.outside_hours_message}
                       companyTimezone={companyTimezone}
                       isExpanded={scheduleExpanded}
                       onToggle={() => setScheduleExpanded((prev) => !prev)}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Label } from '@/components/ui/label';
-import { Clock, Moon, Users } from 'lucide-react';
+import { Clock, Moon, Users, Zap, Building2, CalendarClock } from 'lucide-react';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
 import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
 import BusinessHoursEditor, { getDefaultBusinessHours } from '@/components/settings/BusinessHoursEditor';
@@ -43,14 +43,12 @@ interface Props {
   scheduleMode: ScheduleMode;
   scheduleConfigured: boolean;
   aiSchedule: BusinessHours | null;
-  outsideHoursMessage: string | null;
   companyTimezone: string;
   isExpanded: boolean;
   onToggle: () => void;
   onSave: (updates: {
     schedule_mode: ScheduleMode;
     ai_schedule: BusinessHours | null;
-    outside_hours_message: string | null;
   }) => Promise<void>;
   showSaveAsDefault?: boolean;
   saveAsDefault?: boolean;
@@ -58,13 +56,12 @@ interface Props {
 }
 
 export default function ScheduleSection({
-  scheduleMode, scheduleConfigured, aiSchedule, outsideHoursMessage, companyTimezone,
+  scheduleMode, scheduleConfigured, aiSchedule, companyTimezone,
   isExpanded, onToggle, onSave,
   showSaveAsDefault, saveAsDefault, onSaveAsDefaultChange,
 }: Props) {
   const [draftMode, setDraftMode] = useState<ScheduleMode>(scheduleMode);
   const [draftAiSchedule, setDraftAiSchedule] = useState<BusinessHours>(aiSchedule || getDefaultBusinessHours());
-  const [draftOutsideMsg, setDraftOutsideMsg] = useState(outsideHoursMessage || '');
   const [saving, setSaving] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -72,8 +69,7 @@ export default function ScheduleSection({
     if (isExpanded) return;
     setDraftMode(scheduleMode);
     setDraftAiSchedule(aiSchedule || getDefaultBusinessHours());
-    setDraftOutsideMsg(outsideHoursMessage || '');
-  }, [scheduleMode, aiSchedule, outsideHoursMessage, isExpanded]);
+  }, [scheduleMode, aiSchedule, isExpanded]);
 
   useEffect(() => {
     if (!isExpanded) return;
@@ -106,7 +102,6 @@ export default function ScheduleSection({
       await onSave({
         schedule_mode: draftMode,
         ai_schedule: draftMode === 'custom' ? draftAiSchedule : null,
-        outside_hours_message: draftMode !== 'always_on' ? (draftOutsideMsg.trim() || null) : null,
       });
     } finally {
       setSaving(false);
@@ -116,7 +111,6 @@ export default function ScheduleSection({
   const handleToggle = () => {
     setDraftMode(scheduleMode);
     setDraftAiSchedule(aiSchedule || getDefaultBusinessHours());
-    setDraftOutsideMsg(outsideHoursMessage || '');
     onToggle();
   };
 
@@ -165,47 +159,50 @@ export default function ScheduleSection({
               selected={draftMode === 'always_on'}
               onClick={() => setDraftMode('always_on')}
             >
+              <Zap className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
               <div>
                 <p className="text-sm font-medium">Always On</p>
-                <p className="text-xs text-muted-foreground">AI responds 24/7</p>
+                <p className="text-xs text-muted-foreground">AI responds to every message, 24/7 — no downtime</p>
               </div>
             </OptionButton>
             <OptionButton
               selected={draftMode === 'business_hours'}
               onClick={() => setDraftMode('business_hours')}
             >
+              <Building2 className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
               <div>
-                <p className="text-sm font-medium">Business Hours</p>
-                <p className="text-xs text-muted-foreground">AI follows your company's business hours</p>
-              </div>
-            </OptionButton>
-            <OptionButton
-              selected={draftMode === 'custom'}
-              onClick={() => setDraftMode('custom')}
-            >
-              <div>
-                <p className="text-sm font-medium">Custom Schedule</p>
-                <p className="text-xs text-muted-foreground">Set a separate schedule for the AI</p>
-              </div>
-            </OptionButton>
-            <OptionButton
-              selected={draftMode === 'when_away'}
-              onClick={() => setDraftMode('when_away')}
-            >
-              <Users className="h-4 w-4 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium">When Team is Away</p>
-                <p className="text-xs text-muted-foreground">AI activates when all team members are set to Away</p>
+                <p className="text-sm font-medium">During Business Hours</p>
+                <p className="text-xs text-muted-foreground">AI is active only during your company's business hours</p>
               </div>
             </OptionButton>
             <OptionButton
               selected={draftMode === 'outside_hours'}
               onClick={() => setDraftMode('outside_hours')}
             >
-              <Moon className="h-4 w-4 mt-0.5 shrink-0" />
+              <Moon className="h-4 w-4 mt-0.5 shrink-0 text-indigo-500" />
               <div>
                 <p className="text-sm font-medium">Outside Business Hours</p>
-                <p className="text-xs text-muted-foreground">AI covers nights and weekends — humans handle business hours</p>
+                <p className="text-xs text-muted-foreground">AI covers nights and weekends — your team handles business hours</p>
+              </div>
+            </OptionButton>
+            <OptionButton
+              selected={draftMode === 'when_away'}
+              onClick={() => setDraftMode('when_away')}
+            >
+              <Users className="h-4 w-4 mt-0.5 shrink-0 text-orange-500" />
+              <div>
+                <p className="text-sm font-medium">When Team is Away</p>
+                <p className="text-xs text-muted-foreground">AI steps in only when all team members are set to Away</p>
+              </div>
+            </OptionButton>
+            <OptionButton
+              selected={draftMode === 'custom'}
+              onClick={() => setDraftMode('custom')}
+            >
+              <CalendarClock className="h-4 w-4 mt-0.5 shrink-0 text-emerald-500" />
+              <div>
+                <p className="text-sm font-medium">Custom Schedule</p>
+                <p className="text-xs text-muted-foreground">Define your own active hours — independent of company business hours</p>
               </div>
             </OptionButton>
           </div>
@@ -220,21 +217,6 @@ export default function ScheduleSection({
             </div>
           )}
 
-          {draftMode !== 'always_on' && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Outside Hours Message (optional)</Label>
-              <textarea
-                value={draftOutsideMsg}
-                onChange={(e) => setDraftOutsideMsg(e.target.value)}
-                rows={2}
-                placeholder="e.g. Thanks for reaching out! Our AI agent is currently offline. We'll get back to you during business hours."
-                className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-              <p className="text-xs text-muted-foreground">
-                Sent automatically when someone messages outside the AI's active hours.
-              </p>
-            </div>
-          )}
         </div>
       </SectionCard>
     </div>
