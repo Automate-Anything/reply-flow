@@ -76,12 +76,29 @@ export function useAgents() {
     return data as { name: string; profile_data: ProfileData };
   }, []);
 
+  const generateFromWizard = useCallback(async (input: {
+    business_name: string;
+    business_type: string;
+    business_description: string;
+    common_questions: string;
+    instructions: string;
+    tone: string;
+    response_length: string;
+    emoji_usage: string;
+    escalation_triggers: string[];
+    escalation_custom?: string;
+  }) => {
+    const { data } = await api.post('/agents/generate-from-wizard', input);
+    return data as { name: string; profile_data: ProfileData };
+  }, []);
+
   return {
     agents,
     loading,
     createAgent,
     deleteAgent,
     generateFromLogs,
+    generateFromWizard,
     refetch: fetchAgents,
   };
 }

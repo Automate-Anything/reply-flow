@@ -5,6 +5,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { checkPlanLimit } from './billing.js';
 import { analyzeConversationLogs } from '../services/conversationLogAnalyzer.js';
+import { generateFromWizard } from '../services/wizardGenerator.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -39,6 +40,52 @@ router.post(
       const result = await analyzeConversationLogs(
         files.map((f) => ({ buffer: f.buffer, originalname: f.originalname, mimetype: f.mimetype })),
       );
+
+      res.json(result);
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      if (status && status >= 400 && status < 500) {
+        res.status(status).json({ error: (err as Error).message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
+// Generate agent config from wizard answers (does NOT create the agent)
+router.post(
+  '/generate-from-wizard',
+  requirePermission('ai_settings', 'create'),
+  async (req, res, next) => {
+    try {
+      const companyId = req.companyId!;
+
+      const limit = await checkPlanLimit(companyId, 'agents');
+      if (!limit.allowed) {
+        res.status(402).json({ error: 'Agent limit reached', used: limit.used, included: limit.included });
+        return;
+      }
+
+      const { business_name, business_type, business_description, common_questions, instructions, tone, response_length, emoji_usage, escalation_triggers, escalation_custom } = req.body;
+
+      if (!business_name || !business_description || !common_questions) {
+        res.status(400).json({ error: 'Business name, description, and common questions are required' });
+        return;
+      }
+
+      const result = await generateFromWizard({
+        business_name,
+        business_type: business_type || '',
+        business_description,
+        common_questions,
+        instructions: instructions || '',
+        tone: tone || 'friendly',
+        response_length: response_length || 'concise',
+        emoji_usage: emoji_usage || 'none',
+        escalation_triggers: escalation_triggers || [],
+        escalation_custom: escalation_custom || '',
+      });
 
       res.json(result);
     } catch (err: unknown) {

@@ -178,7 +178,7 @@ export async function analyzeConversationLogs(
 
 // ── Sanitization / validation ────────────────────────
 
-function sanitizeProfileData(raw: Record<string, unknown>): ProfileData {
+export function sanitizeProfileData(raw: Record<string, unknown>): ProfileData {
   const pd: ProfileData = {};
 
   // Identity

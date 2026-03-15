@@ -11,20 +11,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Bot, Plus, Smartphone, ChevronDown, FileText, PenLine } from 'lucide-react';
+import { Bot, Plus, Smartphone, ChevronDown, FileText, PenLine, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAgents } from '@/hooks/useAgents';
 import { useSubscription } from '@/hooks/useSubscription';
 import { PlanGate } from '@/components/auth/PlanGate';
 import CreateFromLogsDialog from '@/components/agents/CreateFromLogsDialog';
+import QuickSetupWizardDialog from '@/components/agents/QuickSetupWizardDialog';
 
 export default function AIAgentsPage() {
   const navigate = useNavigate();
-  const { agents, loading: agentsLoading, createAgent, generateFromLogs } = useAgents();
+  const { agents, loading: agentsLoading, createAgent, generateFromLogs, generateFromWizard } = useAgents();
   const pageReady = usePageReady();
   const loading = agentsLoading || !pageReady;
   const { subscription, loading: subLoading } = useSubscription();
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const agentLimit = subscription?.plan.agents ?? Infinity;
   const atLimit = agents.length >= agentLimit;
@@ -71,6 +73,10 @@ export default function AIAgentsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setWizardOpen(true)}>
+                <Wand2 className="mr-2 h-4 w-4" />
+                Quick setup
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleCreate}>
                 <PenLine className="mr-2 h-4 w-4" />
                 Create from scratch
@@ -120,7 +126,11 @@ export default function AIAgentsPage() {
               Create your first AI agent to get started.
             </p>
             <PlanGate>
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 flex flex-wrap gap-2 justify-center">
+                <Button size="sm" onClick={() => setWizardOpen(true)} disabled={atLimit}>
+                  <Wand2 className="mr-1.5 h-4 w-4" />
+                  Quick setup
+                </Button>
                 <Button size="sm" variant="outline" onClick={handleCreate} disabled={atLimit}>
                   <PenLine className="mr-1.5 h-4 w-4" />
                   Create from scratch
@@ -177,6 +187,17 @@ export default function AIAgentsPage() {
         open={logsDialogOpen}
         onOpenChange={setLogsDialogOpen}
         onGenerate={generateFromLogs}
+        onCreate={async (body) => {
+          const agent = await createAgent(body);
+          navigate(`/ai-agents/${agent.id}`);
+          return agent;
+        }}
+      />
+
+      <QuickSetupWizardDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onGenerate={generateFromWizard}
         onCreate={async (body) => {
           const agent = await createAgent(body);
           navigate(`/ai-agents/${agent.id}`);
