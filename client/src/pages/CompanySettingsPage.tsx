@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Loader2, Building2, Trash2, Clock, ChevronsUpDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
+import HolidayEditor from '@/components/settings/HolidayEditor';
 import { PlanGate } from '@/components/auth/PlanGate';
 
 interface Company {
@@ -267,6 +268,7 @@ export default function CompanySettingsPage() {
       </Card>
 
       <BusinessHoursSettings />
+      <HolidayEditor scope="company" canEdit={canEdit} />
 
       <Card>
         <CardHeader className="pb-4">
