@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash, Clock, Brain, X, List } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash, Clock, Brain, X, Calendar } from 'lucide-react';
 import api from '@/lib/api';
 import { useContactActivity } from '@/hooks/useContactActivity';
 import { useSingleContactDuplicates } from '@/hooks/useContactDuplicates';
@@ -166,6 +166,11 @@ export default function ContactDetail({
                   {contact.company}
                 </span>
               )}
+              <span className="text-muted-foreground/50">·</span>
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                Created {new Date(contact.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
             </div>
           </div>
         </div>
@@ -193,49 +198,6 @@ export default function ContactDetail({
           </PlanGate>
         </div>
       </div>
-
-      {/* Tags */}
-      {contact.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 border-b px-6 py-2">
-          {contact.tags.map((tagName) => {
-            const color = tagColorMap.get(tagName);
-            return (
-              <Badge
-                key={tagName}
-                variant={color ? 'default' : 'secondary'}
-                className="text-xs"
-                style={color ? { backgroundColor: color, color: 'white' } : undefined}
-              >
-                {tagName}
-              </Badge>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Lists */}
-      {contactListIds.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1 border-b px-6 py-2">
-          <List className="mr-1 h-3 w-3 text-muted-foreground" />
-          {contactListIds.map((listId) => {
-            const list = availableLists.find((l) => l.id === listId);
-            if (!list) return null;
-            return (
-              <Badge
-                key={listId}
-                variant="outline"
-                className="text-xs"
-              >
-                <span
-                  className="mr-1 inline-block h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: list.color }}
-                />
-                {list.name}
-              </Badge>
-            );
-          })}
-        </div>
-      )}
 
       {/* Duplicate warning banner */}
       {duplicates.length > 0 && (
@@ -265,7 +227,7 @@ export default function ContactDetail({
         </TabsList>
 
         <TabsContent value="details" className="flex-1 overflow-auto px-6 py-4">
-          <div className="max-w-lg space-y-5">
+          <div className="max-w-lg rounded-lg border bg-card">
             {/* Contact methods */}
             <DetailSection title="Contact">
               <DetailField icon={<Phone className="h-3.5 w-3.5" />} label="Phone" value={contact.phone_number} />
@@ -280,16 +242,63 @@ export default function ContactDetail({
               <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Company" value={contact.company} />
             </DetailSection>
 
+            {/* Tags */}
+            {contact.tags.length > 0 && (
+              <DetailSection title="Tags">
+                <div className="flex flex-wrap gap-1 px-4 py-2.5">
+                  {contact.tags.map((tagName) => {
+                    const color = tagColorMap.get(tagName);
+                    return (
+                      <Badge
+                        key={tagName}
+                        variant={color ? 'default' : 'secondary'}
+                        className="text-xs"
+                        style={color ? { backgroundColor: color, color: 'white' } : undefined}
+                      >
+                        {tagName}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </DetailSection>
+            )}
+
+            {/* Lists */}
+            {contactListIds.length > 0 && (
+              <DetailSection title="Lists">
+                <div className="flex flex-wrap gap-1 px-4 py-2.5">
+                  {contactListIds.map((listId) => {
+                    const list = availableLists.find((l) => l.id === listId);
+                    if (!list) return null;
+                    return (
+                      <Badge
+                        key={listId}
+                        variant="outline"
+                        className="text-xs"
+                      >
+                        <span
+                          className="mr-1 inline-block h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: list.color }}
+                        />
+                        {list.name}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </DetailSection>
+            )}
+
+            {/* Notes */}
             {contact.notes && (
               <DetailSection title="Notes">
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{contact.notes}</p>
+                <p className="px-4 py-2.5 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{contact.notes}</p>
               </DetailSection>
             )}
 
             {/* Address */}
             {hasAddress && (
               <DetailSection title="Address">
-                <div className="flex gap-2">
+                <div className="flex gap-2 px-4 py-2.5">
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <p className="text-sm leading-relaxed">
                     {[
@@ -458,10 +467,8 @@ export default function ContactDetail({
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border bg-card">
-      <div className="border-b px-4 py-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h4>
-      </div>
+    <div>
+      <h4 className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h4>
       <div className="divide-y">{children}</div>
     </div>
   );
@@ -488,11 +495,12 @@ function DetailField({
   label: string;
   value: string | null;
 }) {
+  if (!value) return null;
   return (
     <div className="flex items-center gap-3 px-4 py-2.5">
       <span className="text-muted-foreground">{icon}</span>
       <span className="w-24 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <span className="min-w-0 flex-1 truncate text-sm">{value || '—'}</span>
+      <span className="min-w-0 flex-1 truncate text-sm">{value}</span>
     </div>
   );
 }
