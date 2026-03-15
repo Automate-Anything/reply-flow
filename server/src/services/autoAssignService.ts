@@ -14,16 +14,30 @@ export async function autoAssignConversation(
   channelId: number,
   contactTags: string[]
 ): Promise<AutoAssignResult> {
-  // Find applicable rule: channel-specific first, then company-wide fallback
-  const { data: rule } = await supabaseAdmin
+  // Check company auto-assign mode
+  const { data: company } = await supabaseAdmin
+    .from('companies')
+    .select('auto_assign_mode')
+    .eq('id', companyId)
+    .single();
+
+  const mode = company?.auto_assign_mode || 'company';
+
+  // In 'company' mode: use company-wide rule only (channel_id IS NULL)
+  // In 'per_channel' mode: use channel-specific rule only (no fallback)
+  let ruleQuery = supabaseAdmin
     .from('auto_assign_rules')
     .select('*')
     .eq('company_id', companyId)
-    .eq('is_active', true)
-    .or(`channel_id.eq.${channelId},channel_id.is.null`)
-    .order('channel_id', { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
+    .eq('is_active', true);
+
+  if (mode === 'company') {
+    ruleQuery = ruleQuery.is('channel_id', null);
+  } else {
+    ruleQuery = ruleQuery.eq('channel_id', channelId);
+  }
+
+  const { data: rule } = await ruleQuery.limit(1).maybeSingle();
 
   if (!rule) return { assignedTo: null, ruleName: null };
 

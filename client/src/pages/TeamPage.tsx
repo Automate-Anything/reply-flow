@@ -5,6 +5,7 @@ import {
   Trash2,
   Copy,
   Clock,
+  Circle,
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -84,6 +85,13 @@ interface Invitation {
   recipient_status: 'invite_sent' | 'signed_up';
 }
 
+interface AvailabilityInfo {
+  is_available: boolean;
+  personal_hours: Record<string, { start: string; end: string } | null> | null;
+  hours_controlled: boolean;
+  timezone: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -118,6 +126,34 @@ function roleBadgeVariant(
   }
 }
 
+function summarizeHours(hours: AvailabilityInfo['personal_hours']): string {
+  if (!hours) return 'No schedule set';
+  const dayOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const dayAbbr: Record<string, string> = {
+    monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu',
+    friday: 'Fri', saturday: 'Sat', sunday: 'Sun',
+  };
+  const activeDays: { day: string; start: string; end: string }[] = [];
+  for (const day of dayOrder) {
+    const slot = hours[day];
+    if (slot && slot.start && slot.end) {
+      activeDays.push({ day, start: slot.start, end: slot.end });
+    }
+  }
+  if (activeDays.length === 0) return 'No schedule set';
+  const allSameHours = activeDays.every(
+    (d) => d.start === activeDays[0].start && d.end === activeDays[0].end
+  );
+  if (allSameHours) {
+    const dayNames = activeDays.map((d) => dayAbbr[d.day]);
+    const range = dayNames.length === 1
+      ? dayNames[0]
+      : `${dayNames[0]}-${dayNames[dayNames.length - 1]}`;
+    return `${range} ${activeDays[0].start}-${activeDays[0].end}`;
+  }
+  return `${activeDays.length} days configured`;
+}
+
 function recipientStatusConfig(status: Invitation['recipient_status']) {
   switch (status) {
     case 'invite_sent':
@@ -138,6 +174,9 @@ export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+
+  // Availability data
+  const [availability, setAvailability] = useState<Record<string, AvailabilityInfo>>({});
 
   // Loading state
   const [loadingMembers, setLoadingMembers] = useState(true);
@@ -203,11 +242,30 @@ export default function TeamPage() {
     }
   }, []);
 
+  const fetchAvailability = useCallback(async () => {
+    try {
+      const { data } = await api.get('/team/availability');
+      const map: Record<string, AvailabilityInfo> = {};
+      for (const m of data.members || []) {
+        map[m.user_id] = {
+          is_available: m.is_available,
+          personal_hours: m.personal_hours,
+          hours_controlled: m.hours_controlled,
+          timezone: m.timezone,
+        };
+      }
+      setAvailability(map);
+    } catch {
+      // non-critical
+    }
+  }, []);
+
   useEffect(() => {
     fetchMembers();
     fetchInvitations();
     fetchRoles();
-  }, [fetchMembers, fetchInvitations, fetchRoles]);
+    fetchAvailability();
+  }, [fetchMembers, fetchInvitations, fetchRoles, fetchAvailability]);
 
   // -----------------------------------------------------------------------
   // Derived values
@@ -382,6 +440,7 @@ export default function TeamPage() {
                 <TableRow>
                   <TableHead className="pl-6">Member</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead className="hidden md:table-cell">Status</TableHead>
                   <TableHead className="hidden sm:table-cell">
                     Joined
                   </TableHead>
@@ -453,6 +512,34 @@ export default function TeamPage() {
                           {member.roles.name}
                         </Badge>
                       )}
+                    </TableCell>
+
+                    {/* Status */}
+                    <TableCell className="hidden md:table-cell">
+                      {(() => {
+                        const avail = availability[member.user_id];
+                        if (!avail) return <span className="text-xs text-muted-foreground">—</span>;
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Circle
+                              className={`h-2.5 w-2.5 shrink-0 ${
+                                avail.is_available
+                                  ? 'fill-green-500 text-green-500'
+                                  : 'fill-muted-foreground/40 text-muted-foreground/40'
+                              }`}
+                            />
+                            <div className="min-w-0">
+                              <span className="text-xs font-medium">
+                                {avail.is_available ? 'Available' : 'Away'}
+                              </span>
+                              <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
+                                {summarizeHours(avail.personal_hours)}
+                                {avail.hours_controlled && <Clock className="h-3 w-3 shrink-0" />}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
 
                     {/* Joined date */}
