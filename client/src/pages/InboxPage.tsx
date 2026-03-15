@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { CalendarClock, Clock, MessageSquare, UserCheck } from 'lucide-react';
+import { CalendarClock, ChevronDown, Clock, MessageSquare, UserCheck } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -385,23 +386,18 @@ export default function InboxPage() {
       {([
         { key: 'all', label: 'All', icon: MessageSquare },
         { key: 'assigned', label: 'Assigned to Me', icon: UserCheck },
-        { key: 'snoozed', label: 'Snoozed', icon: Clock },
-        { key: 'scheduled', label: 'Scheduled', icon: CalendarClock },
       ] as const).map(({ key, label, icon: Icon }) => (
         <button
           key={key}
-          onClick={() => {
-            setActiveTab(key);
-            if (key === 'scheduled') setActiveConversation(null);
-          }}
+          onClick={() => setActiveTab(key)}
           className={cn(
-            'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+            'flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
             activeTab === key
               ? 'bg-accent text-accent-foreground'
               : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
           )}
         >
-          <Icon className="h-3.5 w-3.5" />
+          <Icon className="h-3.5 w-3.5 shrink-0" />
           {label}
           {key === 'assigned' && assignedUnreadCount > 0 && (
             <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-white">
@@ -410,6 +406,33 @@ export default function InboxPage() {
           )}
         </button>
       ))}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className={cn(
+              'flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+              activeTab === 'snoozed' || activeTab === 'scheduled'
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+            )}
+          >
+            {activeTab === 'snoozed' && <><Clock className="h-3.5 w-3.5 shrink-0" />Snoozed</>}
+            {activeTab === 'scheduled' && <><CalendarClock className="h-3.5 w-3.5 shrink-0" />Scheduled</>}
+            {activeTab !== 'snoozed' && activeTab !== 'scheduled' && 'More'}
+            <ChevronDown className="h-3 w-3" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onClick={() => setActiveTab('snoozed')}>
+            <Clock className="mr-2 h-4 w-4" />
+            Snoozed
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => { setActiveTab('scheduled'); setActiveConversation(null); }}>
+            <CalendarClock className="mr-2 h-4 w-4" />
+            Scheduled
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 
