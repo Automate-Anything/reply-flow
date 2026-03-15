@@ -81,7 +81,7 @@ export async function getConversationAccess(
     resolvedChannelId = session.channel_id;
   }
 
-  // Owner check — always manage on every conversation
+  // Owner check + channel gateway in one query (avoid double whatsapp_channels lookup)
   const { data: channel } = await supabaseAdmin
     .from('whatsapp_channels')
     .select('user_id')
@@ -92,8 +92,22 @@ export async function getConversationAccess(
   if (!channel) return null;
   if (channel.user_id === userId) return 'manage';
 
-  // Channel gateway
-  const channelAccess = await getChannelAccess(userId, resolvedChannelId, companyId);
+  // Channel gateway — inline the resolution to avoid re-querying whatsapp_channels
+  const { data: channelPerms } = await supabaseAdmin
+    .from('channel_permissions')
+    .select('user_id, access_level')
+    .eq('channel_id', resolvedChannelId)
+    .or(`user_id.eq.${userId},user_id.is.null`)
+    .order('user_id', { ascending: false, nullsFirst: false });
+
+  let channelAccess: AccessLevel | null = null;
+  if (channelPerms && channelPerms.length > 0) {
+    const specific = channelPerms.find((p) => p.user_id === userId);
+    const allMembers = channelPerms.find((p) => p.user_id === null);
+    if (specific) channelAccess = specific.access_level as AccessLevel;
+    else if (allMembers) channelAccess = allMembers.access_level as AccessLevel;
+  }
+
   if (!channelAccess) return null;
   if (channelAccess === 'no_access') return 'no_access';
 
@@ -222,6 +236,8 @@ export async function getAccessibleSessions(
       bySession.set(p.session_id, list);
     }
 
+    // Collect session IDs that have NULL-user no_access (need batch check for reinstating overrides)
+    const nullNoAccessSessionIds: string[] = [];
     for (const [sessionId, perms] of bySession) {
       const userSpecific = perms.find((p) => p.user_id === userId);
       const allUsers = perms.find((p) => p.user_id === null);
@@ -230,16 +246,22 @@ export async function getAccessibleSessions(
         // User has explicit no_access
         excludedSessionIds.push(sessionId);
       } else if (allUsers) {
-        // All-users no_access — check if user has a specific override that reinstates
-        const { data: reinstated } = await supabaseAdmin
-          .from('conversation_permissions')
-          .select('access_level')
-          .eq('session_id', sessionId)
-          .eq('user_id', userId)
-          .neq('access_level', 'no_access')
-          .limit(1);
+        nullNoAccessSessionIds.push(sessionId);
+      }
+    }
 
-        if (!reinstated || reinstated.length === 0) {
+    // Batch check: find any user-specific non-no_access overrides that reinstate access
+    if (nullNoAccessSessionIds.length > 0) {
+      const { data: reinstating } = await supabaseAdmin
+        .from('conversation_permissions')
+        .select('session_id')
+        .in('session_id', nullNoAccessSessionIds)
+        .eq('user_id', userId)
+        .neq('access_level', 'no_access');
+
+      const reinstatedSet = new Set(reinstating?.map((r) => r.session_id) || []);
+      for (const sessionId of nullNoAccessSessionIds) {
+        if (!reinstatedSet.has(sessionId)) {
           excludedSessionIds.push(sessionId);
         }
       }

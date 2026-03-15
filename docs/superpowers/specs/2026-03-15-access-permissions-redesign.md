@@ -205,6 +205,8 @@ getAccessibleSessions(userId, companyId) →
 
 The `overrideMeta` is returned alongside the conversation list so the client can render shield indicators without a separate fetch.
 
+> **Known approximation:** Escalation/restriction in shield indicators is determined by comparing each conversation override against the channel's all-members default level. Ideally we'd compare against each user's specific channel access, but that requires N user lookups per conversation. The all-members default is a reasonable approximation for the summary indicator. The full per-user comparison happens in the conversation access panel.
+
 ### Assignment Behavior
 
 When a user is assigned to a conversation via the assignment system:

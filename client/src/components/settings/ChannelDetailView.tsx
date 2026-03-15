@@ -911,6 +911,7 @@ export default function ChannelDetailPage() {
           <TabsContent value="access" className="mt-1 space-y-5">
             <AccessManager
               mode="channel"
+              variant="inline"
               channelMode={permissionSettings.mode}
               defaultLevel={permissionSettings.defaultLevel || undefined}
               onChannelModeChange={handleChannelModeChange}

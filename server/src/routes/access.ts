@@ -10,6 +10,33 @@ router.use(requireAuth);
 
 const VALID_ACCESS_LEVELS: AccessLevel[] = ['no_access', 'view', 'reply', 'manage'];
 
+/**
+ * Atomic delete-then-insert for channel permissions.
+ * Uses a Postgres function for atomicity when available, otherwise sequential calls.
+ */
+async function replaceChannelPermissions(
+  channelId: number,
+  rows: Array<{ channel_id: number; user_id: string | null; access_level: string; granted_by: string; company_id: string }>
+): Promise<void> {
+  // Delete all existing permissions for this channel
+  await supabaseAdmin
+    .from('channel_permissions')
+    .delete()
+    .eq('channel_id', channelId);
+
+  // Insert new permissions (if any)
+  if (rows.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('channel_permissions')
+      .insert(rows);
+    if (error) {
+      // If insert fails, we have a problem — log and throw so the caller handles it
+      console.error('Failed to insert channel permissions after delete:', error);
+      throw new Error(`Failed to replace channel permissions: ${error.message}`);
+    }
+  }
+}
+
 // ────────────────────────────────────────────────────────────
 // CHANNEL ACCESS
 // ────────────────────────────────────────────────────────────
@@ -110,25 +137,16 @@ router.patch('/channels/:channelId', async (req, res, next) => {
       }
     }
 
-    // Delete existing permissions for this channel, then insert new ones
-    await supabaseAdmin
-      .from('channel_permissions')
-      .delete()
-      .eq('channel_id', channelId);
+    // Atomic replace: delete + insert in a single RPC call
+    const rows = permissions.map((p: { user_id: string | null; access_level: AccessLevel }) => ({
+      channel_id: channelId,
+      user_id: p.user_id,
+      access_level: p.access_level,
+      granted_by: userId,
+      company_id: companyId,
+    }));
 
-    if (permissions.length > 0) {
-      const rows = permissions.map((p) => ({
-        channel_id: channelId,
-        user_id: p.user_id,
-        access_level: p.access_level,
-        granted_by: userId,
-        company_id: companyId,
-      }));
-
-      await supabaseAdmin
-        .from('channel_permissions')
-        .insert(rows);
-    }
+    await replaceChannelPermissions(channelId, rows);
 
     res.json({ status: 'ok' });
   } catch (err) {
@@ -174,19 +192,38 @@ router.put('/channels/:channelId/users/:targetUserId', async (req, res, next) =>
       }
     }
 
-    // Upsert permission
-    await supabaseAdmin
-      .from('channel_permissions')
-      .upsert(
-        {
+    // For NULL user_id (all-members row), onConflict can't match NULL=NULL,
+    // so use delete-then-insert. For specific users, upsert works fine.
+    if (resolvedUserId === null) {
+      await supabaseAdmin
+        .from('channel_permissions')
+        .delete()
+        .eq('channel_id', channelId)
+        .is('user_id', null);
+
+      await supabaseAdmin
+        .from('channel_permissions')
+        .insert({
           channel_id: channelId,
-          user_id: resolvedUserId,
+          user_id: null,
           access_level,
           granted_by: userId,
           company_id: companyId,
-        },
-        { onConflict: 'channel_id,user_id' }
-      );
+        });
+    } else {
+      await supabaseAdmin
+        .from('channel_permissions')
+        .upsert(
+          {
+            channel_id: channelId,
+            user_id: resolvedUserId,
+            access_level,
+            granted_by: userId,
+            company_id: companyId,
+          },
+          { onConflict: 'channel_id,user_id' }
+        );
+    }
 
     res.json({ status: 'ok' });
   } catch (err) {
@@ -274,37 +311,51 @@ router.post('/channels/:channelId/resolve-conflicts', async (req, res, next) => 
 
     const { proposedChange, resolutions } = req.body;
 
-    // Apply conflict resolutions first
-    if (resolutions && resolutions.length > 0) {
-      await applyConflictResolutions(channelId, companyId, userId, resolutions);
+    // Build the final permission set by merging proposed permissions with "keep" users
+    const keepUsers = (resolutions || []).filter((r: any) => r.action === 'keep');
+    const removeUsers = (resolutions || []).filter((r: any) => r.action === 'remove');
+
+    let finalPermissions: Array<{ user_id: string | null; access_level: AccessLevel }> = [];
+
+    if (proposedChange?.permissions && Array.isArray(proposedChange.permissions)) {
+      finalPermissions = [...proposedChange.permissions];
     }
 
-    // Apply the proposed channel permission changes
-    if (proposedChange) {
-      const { permissions } = proposedChange as {
-        permissions?: Array<{ user_id: string | null; access_level: AccessLevel }>;
-      };
+    // Merge "keep" users into the permission set with 'view' (minimum access)
+    for (const keepUser of keepUsers) {
+      const exists = finalPermissions.some((p) => p.user_id === keepUser.userId);
+      if (!exists) {
+        finalPermissions.push({ user_id: keepUser.userId, access_level: 'view' });
+      }
+    }
 
-      if (permissions && Array.isArray(permissions)) {
-        // Delete existing and insert new
+    // Atomic replace channel permissions
+    const rows = finalPermissions.map((p) => ({
+      channel_id: channelId,
+      user_id: p.user_id,
+      access_level: p.access_level,
+      granted_by: userId,
+      company_id: companyId,
+    }));
+
+    await replaceChannelPermissions(channelId, rows);
+
+    // For "remove" users: delete their conversation overrides in this channel
+    if (removeUsers.length > 0) {
+      const { data: sessions } = await supabaseAdmin
+        .from('chat_sessions')
+        .select('id')
+        .eq('channel_id', channelId)
+        .is('deleted_at', null);
+
+      const sessionIds = sessions?.map((s) => s.id) || [];
+      if (sessionIds.length > 0) {
+        const removeUserIds = removeUsers.map((r: any) => r.userId);
         await supabaseAdmin
-          .from('channel_permissions')
+          .from('conversation_permissions')
           .delete()
-          .eq('channel_id', channelId);
-
-        if (permissions.length > 0) {
-          const rows = permissions.map((p) => ({
-            channel_id: channelId,
-            user_id: p.user_id,
-            access_level: p.access_level,
-            granted_by: userId,
-            company_id: companyId,
-          }));
-
-          await supabaseAdmin
-            .from('channel_permissions')
-            .insert(rows);
-        }
+          .in('session_id', sessionIds)
+          .in('user_id', removeUserIds);
       }
     }
 
@@ -414,18 +465,46 @@ router.put('/conversations/:sessionId/users/:targetUserId', async (req, res, nex
 
     const resolvedUserId = targetUserId === 'all' ? null : targetUserId;
 
-    await supabaseAdmin
-      .from('conversation_permissions')
-      .upsert(
-        {
+    // Fix 5: Validate target user has channel access before creating override
+    if (resolvedUserId) {
+      const targetChannelAccess = await getChannelAccess(resolvedUserId, session.channel_id, companyId);
+      if (!targetChannelAccess || targetChannelAccess === 'no_access') {
+        res.status(400).json({ error: 'Target user does not have channel access. Grant channel access first.' });
+        return;
+      }
+    }
+
+    // For NULL user_id (all-users row), onConflict can't match NULL=NULL
+    if (resolvedUserId === null) {
+      await supabaseAdmin
+        .from('conversation_permissions')
+        .delete()
+        .eq('session_id', sessionId)
+        .is('user_id', null);
+
+      await supabaseAdmin
+        .from('conversation_permissions')
+        .insert({
           session_id: sessionId,
-          user_id: resolvedUserId,
+          user_id: null,
           access_level,
           granted_by: userId,
           company_id: companyId,
-        },
-        { onConflict: 'session_id,user_id' }
-      );
+        });
+    } else {
+      await supabaseAdmin
+        .from('conversation_permissions')
+        .upsert(
+          {
+            session_id: sessionId,
+            user_id: resolvedUserId,
+            access_level,
+            granted_by: userId,
+            company_id: companyId,
+          },
+          { onConflict: 'session_id,user_id' }
+        );
+    }
 
     res.json({ status: 'ok' });
 

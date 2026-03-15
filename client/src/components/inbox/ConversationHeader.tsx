@@ -272,6 +272,7 @@ export default function ConversationHeader({
                     mode="conversation"
                     permissions={permSettings.permissions}
                     inheritedPermissions={permSettings.inherited}
+                    defaultLevel={permSettings.channelDefaultLevel || undefined}
                     teamMembers={teamMembers}
                     onGrant={grantOverride}
                     onRevoke={removeOverride}
