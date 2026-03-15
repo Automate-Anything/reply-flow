@@ -280,32 +280,56 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
             <Zap className="h-3 w-3" />
             Quick Replies
           </div>
-          {filteredResponses.map((response, i) => (
-            <button
-              key={response.id}
-              className={cn(
-                'flex w-full flex-col rounded-sm px-3 py-2 text-left text-sm hover:bg-accent',
-                i === selectedIndex && 'bg-accent'
-              )}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                insertCannedResponse(response);
-              }}
-              onMouseEnter={() => setSelectedIndex(i)}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{response.title}</span>
-                {response.shortcut && (
-                  <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground">
-                    /{response.shortcut}
+          {(() => {
+            const personalReplies = filteredResponses.filter(r => r.visibility === 'personal');
+            const companyReplies = filteredResponses.filter(r => r.visibility !== 'personal');
+            let globalIndex = 0;
+            const renderItem = (response: CannedResponse) => {
+              const idx = globalIndex++;
+              return (
+                <button
+                  key={response.id}
+                  className={cn(
+                    'flex w-full flex-col rounded-sm px-3 py-2 text-left text-sm hover:bg-accent',
+                    idx === selectedIndex && 'bg-accent'
+                  )}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    insertCannedResponse(response);
+                  }}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{response.title}</span>
+                    {response.shortcut && (
+                      <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground">
+                        /{response.shortcut}
+                      </span>
+                    )}
+                  </div>
+                  <span className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {response.content}
                   </span>
+                </button>
+              );
+            };
+            return (
+              <>
+                {personalReplies.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">Your Replies</div>
+                    {personalReplies.map(renderItem)}
+                  </>
                 )}
-              </div>
-              <span className="mt-0.5 truncate text-xs text-muted-foreground">
-                {response.content}
-              </span>
-            </button>
-          ))}
+                {companyReplies.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">Company Replies</div>
+                    {companyReplies.map(renderItem)}
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
