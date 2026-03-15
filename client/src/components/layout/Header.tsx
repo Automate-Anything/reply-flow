@@ -3,6 +3,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/lib/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Moon, Sun, LogOut, Loader2, User, Building2 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import {
@@ -73,6 +74,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
         )}
       </div>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <Button
           variant="ghost"
           size="icon"
