@@ -74,6 +74,7 @@ interface LabelOption {
   id: string;
   name: string;
   color: string;
+  visibility?: 'personal' | 'company';
 }
 
 const FALLBACK_STATUSES = [
@@ -302,26 +303,46 @@ export default function ConversationHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {allLabels.map((label) => (
-              <DropdownMenuItem
-                key={label.id}
-                onClick={() => handleToggleLabel(label)}
-                disabled={labelLoading === label.id}
-              >
-                {labelLoading === label.id ? (
-                  <Loader2 className="mr-2 h-2 w-2 animate-spin" />
-                ) : (
-                  <span
-                    className="mr-2 h-2 w-2 rounded-full"
-                    style={{ backgroundColor: label.color }}
-                  />
-                )}
-                {label.name}
-                {assignedIds.has(label.id) && (
-                  <X className="ml-auto h-3 w-3 text-muted-foreground" />
-                )}
-              </DropdownMenuItem>
-            ))}
+            {(() => {
+              const personalLabels = allLabels.filter(l => l.visibility === 'personal');
+              const companyLabels = allLabels.filter(l => l.visibility !== 'personal');
+              const renderLabel = (label: LabelOption) => (
+                <DropdownMenuItem
+                  key={label.id}
+                  onClick={() => handleToggleLabel(label)}
+                  disabled={labelLoading === label.id}
+                >
+                  {labelLoading === label.id ? (
+                    <Loader2 className="mr-2 h-2 w-2 animate-spin" />
+                  ) : (
+                    <span
+                      className="mr-2 h-2 w-2 rounded-full"
+                      style={{ backgroundColor: label.color }}
+                    />
+                  )}
+                  {label.name}
+                  {assignedIds.has(label.id) && (
+                    <X className="ml-auto h-3 w-3 text-muted-foreground" />
+                  )}
+                </DropdownMenuItem>
+              );
+              return (
+                <>
+                  {personalLabels.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">Your Labels</div>
+                      {personalLabels.map(renderLabel)}
+                    </>
+                  )}
+                  {companyLabels.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">Company Labels</div>
+                      {companyLabels.map(renderLabel)}
+                    </>
+                  )}
+                </>
+              );
+            })()}
             {allLabels.length > 0 && <DropdownMenuSeparator />}
             <div className="flex items-center gap-1 px-1 py-1" onKeyDown={(e) => e.stopPropagation()}>
               <Input
