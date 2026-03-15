@@ -10,6 +10,7 @@ import { getContactContext } from './sessionMemory.js';
 import type { ContactMemory } from './sessionMemory.js';
 import { isDebugModeEnabled } from './debugMode.js';
 import { downloadFromStorage } from './mediaStorage.js';
+import { sendHandoffNotification } from './handoffNotifier.js';
 import * as whapi from './whapi.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -771,6 +772,14 @@ export async function generateAndSendAIReply(
             updated_at: new Date().toISOString(),
           })
           .eq('id', sessionId);
+
+        // Notify assignee or channel owner about the handoff
+        sendHandoffNotification(
+          companyId,
+          sessionId,
+          `Matched scenario: ${matchedScenario.label}`,
+        ).catch((err) => console.error('Handoff notification error:', err));
+
         return;
       }
       systemPrompt = await buildScenarioResponsePrompt(
