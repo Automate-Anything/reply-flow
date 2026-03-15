@@ -24,6 +24,7 @@ import { Loader2, Building2, Trash2, Clock, ChevronsUpDown, Check } from 'lucide
 import { cn } from '@/lib/utils';
 import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
 import HolidayEditor from '@/components/settings/HolidayEditor';
+import TeamAvailabilityDashboard from '@/components/settings/TeamAvailabilityDashboard';
 import { PlanGate } from '@/components/auth/PlanGate';
 
 interface Company {
@@ -269,6 +270,7 @@ export default function CompanySettingsPage() {
 
       <BusinessHoursSettings />
       <HolidayEditor scope="company" canEdit={canEdit} />
+      <TeamAvailabilityDashboard />
 
       <Card>
         <CardHeader className="pb-4">
