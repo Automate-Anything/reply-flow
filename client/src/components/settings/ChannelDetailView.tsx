@@ -26,6 +26,7 @@ import { useAgents } from '@/hooks/useAgents';
 import { useChannelAccess } from '@/hooks/useAccessControl';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ScheduleSection from './sections/ScheduleSection';
+import AutoReplySection from './sections/AutoReplySection';
 import ChannelAgentContactList from './ChannelAgentContactList';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
 import type { ChannelInfo } from './channelHelpers';
@@ -319,6 +320,20 @@ export default function ChannelDetailPage() {
 
   // Schedule section toggle
   const [scheduleExpanded, setScheduleExpanded] = useState(false);
+
+  // Auto-reply section toggle
+  const [autoReplyExpanded, setAutoReplyExpanded] = useState(false);
+
+  const handleSaveAutoReply = async (updates: {
+    auto_reply_enabled: boolean;
+    auto_reply_message: string | null;
+    auto_reply_trigger: 'outside_hours' | 'all_unavailable';
+  }) => {
+    await updateSettings(updates);
+    await refetchSettings();
+    setAutoReplyExpanded(false);
+    toast.success('Auto-reply settings saved');
+  };
 
   const handleResponseModeChange = async (mode: ChannelAgentSettings['response_mode']) => {
     setSavingMode(true);
@@ -824,6 +839,24 @@ export default function ChannelDetailPage() {
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* Auto-Reply section — shown when AI is OFF */}
+          {!settings.is_enabled && (
+            <div className="mt-3">
+              {loadingSettings ? (
+                <Skeleton className="h-16 w-full" />
+              ) : (
+                <AutoReplySection
+                  autoReplyEnabled={settings.auto_reply_enabled}
+                  autoReplyMessage={settings.auto_reply_message}
+                  autoReplyTrigger={settings.auto_reply_trigger}
+                  isExpanded={autoReplyExpanded}
+                  onToggle={() => setAutoReplyExpanded((prev) => !prev)}
+                  onSave={handleSaveAutoReply}
+                />
+              )}
             </div>
           )}
         </TabsContent>
