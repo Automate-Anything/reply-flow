@@ -83,7 +83,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
           </div>
         )}
         {!collapsed && (
-          <span className="text-lg font-semibold text-sidebar-foreground">
+          <span className="truncate text-lg font-semibold text-sidebar-foreground">
             {companyName || 'Reply Flow'}
           </span>
         )}

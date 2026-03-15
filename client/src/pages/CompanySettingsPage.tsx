@@ -118,10 +118,11 @@ export default function CompanySettingsPage() {
       name.trim() !== company.name ||
       businessType.trim() !== (company.business_type || '') ||
       businessDescription.trim() !== (company.business_description || '') ||
-      timezone !== (company.timezone || 'UTC') ||
-      brandColor !== savedBrandColor
+      timezone !== (company.timezone || 'UTC')
     );
-  }, [company, name, businessType, businessDescription, timezone, brandColor, savedBrandColor]);
+  }, [company, name, businessType, businessDescription, timezone]);
+
+  const hasBrandingChanges = brandColor !== savedBrandColor;
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -135,16 +136,30 @@ export default function CompanySettingsPage() {
         business_type: businessType.trim() || null,
         business_description: businessDescription.trim() || null,
         timezone,
-        brand_color: brandColor,
       });
       setCompany(data.company);
-      setSavedBrandColor(data.company.brand_color || null);
-      await refresh();
       toast.success('Company settings updated');
     } catch {
       toast.error('Failed to update company settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const [savingBranding, setSavingBranding] = useState(false);
+
+  const handleBrandingSave = async () => {
+    setSavingBranding(true);
+    try {
+      const { data } = await api.put('/company', { brand_color: brandColor });
+      setCompany(data.company);
+      setSavedBrandColor(data.company.brand_color || null);
+      await refresh();
+      toast.success('Branding updated');
+    } catch {
+      toast.error('Failed to update branding');
+    } finally {
+      setSavingBranding(false);
     }
   };
 
@@ -370,19 +385,19 @@ export default function CompanySettingsPage() {
           {/* Logo upload */}
           <div className="space-y-3">
             <Label>Company Logo</Label>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:gap-4">
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt={name || 'Company logo'}
-                  className="h-20 w-20 rounded-xl border object-contain p-1"
+                  className="h-16 w-16 rounded-xl border object-contain p-1"
                 />
               ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-xl border bg-muted text-2xl font-bold text-muted-foreground">
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl border bg-muted text-xl font-bold text-muted-foreground">
                   {(name || 'C').charAt(0).toUpperCase()}
                 </div>
               )}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col items-center gap-1.5 sm:items-start">
                 <input
                   ref={logoInputRef}
                   type="file"
@@ -391,39 +406,41 @@ export default function CompanySettingsPage() {
                   onChange={handleLogoUpload}
                   disabled={!canEdit}
                 />
-                <PlanGate>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!canEdit || uploadingLogo}
-                    onClick={() => logoInputRef.current?.click()}
-                  >
-                    {uploadingLogo ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Upload className="mr-1.5 h-3.5 w-3.5" />
-                    )}
-                    Upload Logo
-                  </Button>
-                </PlanGate>
-                {logoUrl && (
+                <div className="flex items-center gap-2">
                   <PlanGate>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      disabled={!canEdit || removingLogo}
-                      onClick={handleLogoRemove}
-                      className="text-destructive hover:text-destructive"
+                      disabled={!canEdit || uploadingLogo}
+                      onClick={() => logoInputRef.current?.click()}
                     >
-                      {removingLogo ? (
+                      {uploadingLogo ? (
                         <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <X className="mr-1.5 h-3.5 w-3.5" />
+                        <Upload className="mr-1.5 h-3.5 w-3.5" />
                       )}
-                      Remove
+                      {logoUrl ? 'Change' : 'Upload'}
                     </Button>
                   </PlanGate>
-                )}
+                  {logoUrl && (
+                    <PlanGate>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={!canEdit || removingLogo}
+                        onClick={handleLogoRemove}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        {removingLogo ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <X className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Remove
+                      </Button>
+                    </PlanGate>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   JPEG, PNG, or WebP. Max 2MB.
                 </p>
@@ -496,6 +513,17 @@ export default function CompanySettingsPage() {
               </div>
             )}
           </div>
+
+          {canEdit && (
+            <div className="flex justify-end border-t pt-4">
+              <PlanGate>
+                <Button onClick={handleBrandingSave} disabled={savingBranding || !hasBrandingChanges}>
+                  {savingBranding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Branding
+                </Button>
+              </PlanGate>
+            </div>
+          )}
         </CardContent>
       </Card>
 
