@@ -7,6 +7,8 @@ export interface CannedResponse {
   content: string;
   shortcut: string | null;
   category: string | null;
+  visibility: 'personal' | 'company';
+  created_by: string;
   created_at: string;
 }
 
@@ -30,7 +32,7 @@ export function useCannedResponses() {
   }, [fetchResponses]);
 
   const create = useCallback(
-    async (payload: { title: string; content: string; shortcut?: string; category?: string }) => {
+    async (payload: { title: string; content: string; shortcut?: string; category?: string; visibility?: string }) => {
       const { data } = await api.post('/canned-responses', payload);
       setResponses((prev) => [...prev, data.response].sort((a, b) => a.title.localeCompare(b.title)));
       return data.response;

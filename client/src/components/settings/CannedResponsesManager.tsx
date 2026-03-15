@@ -11,18 +11,20 @@ import {
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
-import { Loader2, Pencil, Plus, Trash2, Zap } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Pencil, Plus, Share2, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
+import api from '@/lib/api';
 import { useCannedResponses, type CannedResponse } from '@/hooks/useCannedResponses';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 
 export default function CannedResponsesManager() {
-  const { responses, loading, create, update, remove } = useCannedResponses();
+  const { responses, loading, create, update, remove, refetch } = useCannedResponses();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: '', content: '', shortcut: '', category: '' });
-  const [originalForm, setOriginalForm] = useState({ title: '', content: '', shortcut: '', category: '' });
+  const [form, setForm] = useState({ title: '', content: '', shortcut: '', category: '', visibility: 'company' as 'personal' | 'company' });
+  const [originalForm, setOriginalForm] = useState({ title: '', content: '', shortcut: '', category: '', visibility: 'company' as 'personal' | 'company' });
   const [submitting, setSubmitting] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
@@ -30,13 +32,13 @@ export default function CannedResponsesManager() {
   useFormDirtyGuard(isDirty);
 
   const resetForm = () => {
-    setForm({ title: '', content: '', shortcut: '', category: '' });
+    setForm({ title: '', content: '', shortcut: '', category: '', visibility: 'company' });
     setEditingId(null);
   };
 
   const openCreate = () => {
     resetForm();
-    const defaults = { title: '', content: '', shortcut: '', category: '' };
+    const defaults = { title: '', content: '', shortcut: '', category: '', visibility: 'company' as const };
     setOriginalForm(defaults);
     setDialogOpen(true);
   };
@@ -47,6 +49,7 @@ export default function CannedResponsesManager() {
       content: response.content,
       shortcut: response.shortcut || '',
       category: response.category || '',
+      visibility: response.visibility || 'company' as 'personal' | 'company',
     };
     setForm(values);
     setOriginalForm(values);
@@ -83,6 +86,16 @@ export default function CannedResponsesManager() {
       toast.success('Quick reply deleted');
     } catch {
       toast.error('Failed to delete quick reply');
+    }
+  };
+
+  const handleShare = async (id: string) => {
+    try {
+      await api.patch(`/canned-responses/${id}/share`);
+      toast.success('Quick reply shared with company');
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to share quick reply');
     }
   };
 
@@ -160,6 +173,27 @@ export default function CannedResponsesManager() {
                   />
                 </div>
               </div>
+              <div>
+                <Label>Visibility</Label>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    variant={form.visibility === 'personal' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setForm({ ...form, visibility: 'personal' })}
+                  >
+                    Just me
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={form.visibility === 'company' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setForm({ ...form, visibility: 'company' })}
+                  >
+                    Everyone
+                  </Button>
+                </div>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => guardedClose(() => { setDialogOpen(false); resetForm(); })}>
                   Cancel
@@ -202,12 +236,26 @@ export default function CannedResponsesManager() {
                       {response.category}
                     </span>
                   )}
+                  {response.visibility === 'personal' && (
+                    <Badge variant="outline" className="text-[10px]">Personal</Badge>
+                  )}
                 </div>
                 <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
                   {response.content}
                 </p>
               </div>
               <div className="flex shrink-0 gap-0.5">
+                {response.visibility === 'personal' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                    title="Share with company"
+                    onClick={() => handleShare(response.id)}
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
