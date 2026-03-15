@@ -1348,7 +1348,7 @@ router.post('/pause/:sessionId', requirePermission('conversations', 'edit'), asy
     // Notify assignee or channel owner (skip self-notification)
     sendHandoffNotification(
       companyId,
-      sessionId,
+      sessionId as string,
       'AI manually paused',
       req.userId,
     ).catch((err) => console.error('Handoff notification error:', err));
