@@ -274,9 +274,20 @@ export async function processIncomingMessage(
           msgFrom: msg.from,
         });
       }
+      // Also update first_name if it was auto-set from whatsapp_name (never manually edited)
+      const nameUpdate: Record<string, string> = {
+        whatsapp_name: msg.from_name,
+        updated_at: new Date().toISOString(),
+      };
+      if (
+        !existingContact.first_name ||
+        existingContact.first_name === existingContact.whatsapp_name
+      ) {
+        nameUpdate.first_name = msg.from_name;
+      }
       await supabaseAdmin
         .from('contacts')
-        .update({ whatsapp_name: msg.from_name, updated_at: new Date().toISOString() })
+        .update(nameUpdate)
         .eq('id', contactId);
     }
   } else {
