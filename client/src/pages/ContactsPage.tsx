@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Users, Settings2, Tag, ListPlus, List, Upload, Download, GitMerge } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePageReady } from '@/hooks/usePageReady';
@@ -72,6 +73,24 @@ export default function ContactsPage() {
     remove: removeDef,
     reorder: reorderDefs,
   } = useCustomFieldDefinitions();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Restore active contact from URL params (notification click)
+  useEffect(() => {
+    const contactParam = searchParams.get('contact');
+    if (!contactParam || loading) return;
+
+    // Clean up URL param after consuming (only delete the one we used)
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('contact');
+    setSearchParams(newParams, { replace: true });
+
+    const contact = contacts.find((c) => c.id === contactParam);
+    if (contact) {
+      setActiveContact(contact);
+    }
+  }, [contacts, loading, searchParams, setSearchParams]);
 
   // Sync activeListId into filters
   useEffect(() => {
