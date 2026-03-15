@@ -6,7 +6,8 @@
   Branch: feature/quick-setup-wizard.
 - **Fix self-sent messages showing as unread** — Claude — Started 2026-03-12. Files: server/src/services/messageProcessor.ts. Branch: fix-outbound-unread.
 ## Completed
-- **Contact Detail UX improvements** — Claude — Completed 2026-03-15. Branch: main. Merged: yes.
+- **Contact Detail v2 — Full Redesign** — Claude — Completed 2026-03-15. Branch: main. Merged: yes.
+  Overview tab (stats + recent activity), Conversations tab (inline message viewer), Notes tab (CRUD), Memories editing, backend extensions.
 - **Task 14: Clean up old access control code + migration 060** — Claude — Completed 2026-03-15. Branch: feature/access-permissions-redesign. Merged: no.
 - **Handoff notifications (Tasks 6-7)** — Claude — Completed 2026-03-15. Branch: main. Merged: yes.
 - **Labels & Quick Replies Visibility + Auto-Assign + Notifications** — Claude — Completed 2026-03-15. Branch: feature/labels-autoassign-notifications. Merged: yes.
