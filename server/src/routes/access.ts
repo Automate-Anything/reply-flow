@@ -2,43 +2,44 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { createNotification } from '../services/notificationService.js';
+import { getChannelAccess, getConversationAccess, isAtLeast, AccessLevel } from '../services/permissionResolver.js';
+import { detectConflicts, computeUsersLosingAccess, applyConflictResolutions } from '../services/conflictDetection.js';
 
 const router = Router();
 router.use(requireAuth);
+
+const VALID_ACCESS_LEVELS: AccessLevel[] = ['no_access', 'view', 'reply', 'manage'];
 
 // ────────────────────────────────────────────────────────────
 // CHANNEL ACCESS
 // ────────────────────────────────────────────────────────────
 
-// Get access settings for a channel (owner only)
+// Get channel permissions + derived mode
 router.get('/channels/:channelId', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const companyId = req.companyId!;
     const channelId = Number(req.params.channelId);
 
+    // Verify manage access
+    const access = await getChannelAccess(userId, channelId, companyId);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to view channel permissions' });
+      return;
+    }
+
+    // Get channel owner
     const { data: channel } = await supabaseAdmin
       .from('whatsapp_channels')
-      .select('id, user_id, sharing_mode, default_conversation_visibility, company_id')
+      .select('user_id')
       .eq('id', channelId)
-      .eq('company_id', req.companyId!)
+      .eq('company_id', companyId)
       .single();
 
     if (!channel) {
       res.status(404).json({ error: 'Channel not found' });
       return;
     }
-
-    if (channel.user_id !== userId) {
-      res.status(403).json({ error: 'Only the channel owner can manage access settings' });
-      return;
-    }
-
-    // Get access list (exclude owner — shown separately)
-    const { data: accessList } = await supabaseAdmin
-      .from('channel_access')
-      .select('id, user_id, access_level, created_at, user:user_id(id, full_name, email, avatar_url)')
-      .eq('channel_id', channelId)
-      .neq('user_id', channel.user_id);
 
     // Fetch owner profile
     const { data: ownerProfile } = await supabaseAdmin
@@ -47,66 +48,86 @@ router.get('/channels/:channelId', async (req, res, next) => {
       .eq('id', channel.user_id)
       .single();
 
+    // Get all permission rows
+    const { data: permissions } = await supabaseAdmin
+      .from('channel_permissions')
+      .select('id, user_id, access_level, created_at, user:user_id(id, full_name, email, avatar_url)')
+      .eq('channel_id', channelId);
+
+    const permList = permissions || [];
+
+    // Derive mode from data
+    const allMembersRow = permList.find((p) => p.user_id === null);
+    const specificUserRows = permList.filter((p) => p.user_id !== null);
+
+    let mode: 'private' | 'specific_users' | 'all_members';
+    if (allMembersRow) {
+      mode = 'all_members';
+    } else if (specificUserRows.length > 0) {
+      mode = 'specific_users';
+    } else {
+      mode = 'private';
+    }
+
     res.json({
-      sharing_mode: channel.sharing_mode,
-      default_conversation_visibility: channel.default_conversation_visibility,
+      mode,
+      defaultLevel: allMembersRow ? (allMembersRow.access_level as AccessLevel) : null,
       owner: ownerProfile || { id: channel.user_id, full_name: 'Owner', email: '', avatar_url: null },
-      access_list: accessList || [],
+      permissions: permList,
     });
   } catch (err) {
     next(err);
   }
 });
 
-// Update channel sharing settings (owner only)
+// Update channel permissions (bulk replace)
 router.patch('/channels/:channelId', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const companyId = req.companyId!;
     const channelId = Number(req.params.channelId);
-    const { sharing_mode, default_conversation_visibility } = req.body;
+    const { permissions } = req.body as {
+      permissions: Array<{ user_id: string | null; access_level: AccessLevel }>;
+    };
 
-    // Verify ownership
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('user_id')
-      .eq('id', channelId)
-      .eq('company_id', req.companyId!)
-      .single();
-
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
+    // Verify manage access
+    const access = await getChannelAccess(userId, channelId, companyId);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to update channel permissions' });
       return;
     }
 
-    if (channel.user_id !== userId) {
-      res.status(403).json({ error: 'Only the channel owner can manage access settings' });
+    if (!Array.isArray(permissions)) {
+      res.status(400).json({ error: 'permissions must be an array' });
       return;
     }
 
-    const updates: Record<string, unknown> = {};
-
-    if (sharing_mode !== undefined) {
-      if (!['private', 'specific_users', 'all_members'].includes(sharing_mode)) {
-        res.status(400).json({ error: 'Invalid sharing_mode' });
+    // Validate access levels
+    for (const perm of permissions) {
+      if (!VALID_ACCESS_LEVELS.includes(perm.access_level)) {
+        res.status(400).json({ error: `Invalid access_level: ${perm.access_level}` });
         return;
       }
-      updates.sharing_mode = sharing_mode;
     }
 
-    if (default_conversation_visibility !== undefined) {
-      if (!['all', 'owner_only'].includes(default_conversation_visibility)) {
-        res.status(400).json({ error: 'Invalid default_conversation_visibility' });
-        return;
-      }
-      updates.default_conversation_visibility = default_conversation_visibility;
-    }
+    // Delete existing permissions for this channel, then insert new ones
+    await supabaseAdmin
+      .from('channel_permissions')
+      .delete()
+      .eq('channel_id', channelId);
 
-    if (Object.keys(updates).length > 0) {
-      updates.updated_at = new Date().toISOString();
+    if (permissions.length > 0) {
+      const rows = permissions.map((p) => ({
+        channel_id: channelId,
+        user_id: p.user_id,
+        access_level: p.access_level,
+        granted_by: userId,
+        company_id: companyId,
+      }));
+
       await supabaseAdmin
-        .from('whatsapp_channels')
-        .update(updates)
-        .eq('id', channelId);
+        .from('channel_permissions')
+        .insert(rows);
     }
 
     res.json({ status: 'ok' });
@@ -115,59 +136,54 @@ router.patch('/channels/:channelId', async (req, res, next) => {
   }
 });
 
-// Add or update channel access for a user (owner only)
+// Grant/update individual user permission (targetUserId can be 'all' for all-members row)
 router.put('/channels/:channelId/users/:targetUserId', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const companyId = req.companyId!;
     const channelId = Number(req.params.channelId);
     const targetUserId = req.params.targetUserId;
     const { access_level } = req.body;
 
-    if (!['view', 'edit'].includes(access_level)) {
-      res.status(400).json({ error: 'access_level must be "view" or "edit"' });
+    if (!VALID_ACCESS_LEVELS.includes(access_level)) {
+      res.status(400).json({ error: `access_level must be one of: ${VALID_ACCESS_LEVELS.join(', ')}` });
       return;
     }
 
-    // Verify ownership
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('user_id')
-      .eq('id', channelId)
-      .eq('company_id', req.companyId!)
-      .single();
-
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
+    // Verify manage access
+    const access = await getChannelAccess(userId, channelId, companyId);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to manage channel permissions' });
       return;
     }
 
-    if (channel.user_id !== userId) {
-      res.status(403).json({ error: 'Only the channel owner can manage access' });
-      return;
+    const resolvedUserId = targetUserId === 'all' ? null : targetUserId;
+
+    // If granting to a specific user, verify they are a company member
+    if (resolvedUserId) {
+      const { data: member } = await supabaseAdmin
+        .from('company_members')
+        .select('user_id')
+        .eq('company_id', companyId)
+        .eq('user_id', resolvedUserId)
+        .single();
+
+      if (!member) {
+        res.status(400).json({ error: 'User is not a company member' });
+        return;
+      }
     }
 
-    // Verify target user is a company member
-    const { data: member } = await supabaseAdmin
-      .from('company_members')
-      .select('user_id')
-      .eq('company_id', req.companyId!)
-      .eq('user_id', targetUserId)
-      .single();
-
-    if (!member) {
-      res.status(400).json({ error: 'User is not a company member' });
-      return;
-    }
-
-    // Upsert access
+    // Upsert permission
     await supabaseAdmin
-      .from('channel_access')
+      .from('channel_permissions')
       .upsert(
         {
           channel_id: channelId,
-          user_id: targetUserId,
+          user_id: resolvedUserId,
           access_level,
           granted_by: userId,
+          company_id: companyId,
         },
         { onConflict: 'channel_id,user_id' }
       );
@@ -178,30 +194,119 @@ router.put('/channels/:channelId/users/:targetUserId', async (req, res, next) =>
   }
 });
 
-// Remove channel access for a user (owner only)
+// Revoke individual user permission (targetUserId can be 'all')
 router.delete('/channels/:channelId/users/:targetUserId', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const companyId = req.companyId!;
     const channelId = Number(req.params.channelId);
     const targetUserId = req.params.targetUserId;
 
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('user_id')
-      .eq('id', channelId)
-      .eq('company_id', req.companyId!)
-      .single();
-
-    if (!channel || channel.user_id !== userId) {
-      res.status(403).json({ error: 'Only the channel owner can manage access' });
+    // Verify manage access
+    const access = await getChannelAccess(userId, channelId, companyId);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to manage channel permissions' });
       return;
     }
 
-    await supabaseAdmin
-      .from('channel_access')
+    let query = supabaseAdmin
+      .from('channel_permissions')
       .delete()
-      .eq('channel_id', channelId)
-      .eq('user_id', targetUserId);
+      .eq('channel_id', channelId);
+
+    if (targetUserId === 'all') {
+      query = query.is('user_id', null);
+    } else {
+      query = query.eq('user_id', targetUserId);
+    }
+
+    await query;
+
+    res.json({ status: 'ok' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Preview conflicts before applying channel permission changes
+router.post('/channels/:channelId/check-conflicts', async (req, res, next) => {
+  try {
+    const userId = req.userId!;
+    const companyId = req.companyId!;
+    const channelId = Number(req.params.channelId);
+
+    // Verify manage access
+    const access = await getChannelAccess(userId, channelId, companyId);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to check conflicts' });
+      return;
+    }
+
+    const { removeAllMembersRow, removeUserIds, addNoAccessUserIds } = req.body;
+
+    const usersLosingAccess = await computeUsersLosingAccess(channelId, companyId, {
+      removeAllMembersRow,
+      removeUserIds,
+      addNoAccessUserIds,
+    });
+
+    const conflicts = await detectConflicts(channelId, companyId, usersLosingAccess);
+
+    res.json({ conflicts });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Apply channel changes + conflict resolutions
+router.post('/channels/:channelId/resolve-conflicts', async (req, res, next) => {
+  try {
+    const userId = req.userId!;
+    const companyId = req.companyId!;
+    const channelId = Number(req.params.channelId);
+
+    // Verify manage access
+    const access = await getChannelAccess(userId, channelId, companyId);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to resolve conflicts' });
+      return;
+    }
+
+    const { proposedChange, resolutions } = req.body;
+
+    // Apply conflict resolutions first
+    if (resolutions && resolutions.length > 0) {
+      await applyConflictResolutions(channelId, companyId, userId, resolutions);
+    }
+
+    // Apply the proposed channel permission changes
+    if (proposedChange) {
+      const { permissions } = proposedChange as {
+        permissions?: Array<{ user_id: string | null; access_level: AccessLevel }>;
+      };
+
+      if (permissions && Array.isArray(permissions)) {
+        // Delete existing and insert new
+        await supabaseAdmin
+          .from('channel_permissions')
+          .delete()
+          .eq('channel_id', channelId);
+
+        if (permissions.length > 0) {
+          const rows = permissions.map((p) => ({
+            channel_id: channelId,
+            user_id: p.user_id,
+            access_level: p.access_level,
+            granted_by: userId,
+            company_id: companyId,
+          }));
+
+          await supabaseAdmin
+            .from('channel_permissions')
+            .insert(rows);
+        }
+      }
+    }
 
     res.json({ status: 'ok' });
   } catch (err) {
@@ -213,18 +318,19 @@ router.delete('/channels/:channelId/users/:targetUserId', async (req, res, next)
 // CONVERSATION ACCESS
 // ────────────────────────────────────────────────────────────
 
-// Get access list for a conversation
+// Get conversation permissions (overrides + inherited from channel)
 router.get('/conversations/:sessionId', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId } = req.params;
 
-    // Fetch session + channel to verify ownership
+    // Fetch session to get channel_id
     const { data: session } = await supabaseAdmin
       .from('chat_sessions')
       .select('id, channel_id, company_id')
       .eq('id', sessionId)
-      .eq('company_id', req.companyId!)
+      .eq('company_id', companyId)
       .single();
 
     if (!session) {
@@ -232,55 +338,66 @@ router.get('/conversations/:sessionId', async (req, res, next) => {
       return;
     }
 
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('user_id, default_conversation_visibility')
-      .eq('id', session.channel_id)
-      .single();
-
-    if (!channel) {
-      res.status(404).json({ error: 'Channel not found' });
+    // Verify manage access on the conversation (owner or manage-level user)
+    const access = await getConversationAccess(userId, sessionId, companyId, session.channel_id);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to view conversation permissions' });
       return;
     }
 
-    // Only channel owner can manage conversation access
-    if (channel.user_id !== userId) {
-      res.status(403).json({ error: 'Only the channel owner can manage conversation access' });
-      return;
-    }
+    // Get channel default level (NULL user_id row)
+    const { data: channelDefault } = await supabaseAdmin
+      .from('channel_permissions')
+      .select('access_level')
+      .eq('channel_id', session.channel_id)
+      .is('user_id', null)
+      .maybeSingle();
 
-    const { data: accessList } = await supabaseAdmin
-      .from('conversation_access')
+    const channelDefaultLevel: AccessLevel | null = channelDefault
+      ? (channelDefault.access_level as AccessLevel)
+      : null;
+
+    // Get conversation-level overrides
+    const { data: convPerms } = await supabaseAdmin
+      .from('conversation_permissions')
       .select('id, user_id, access_level, created_at, user:user_id(id, full_name, email, avatar_url)')
       .eq('session_id', sessionId);
 
+    // Get channel-level permissions (inherited, read-only display)
+    const { data: channelPerms } = await supabaseAdmin
+      .from('channel_permissions')
+      .select('id, user_id, access_level, created_at, user:user_id(id, full_name, email, avatar_url)')
+      .eq('channel_id', session.channel_id);
+
     res.json({
-      default_conversation_visibility: channel.default_conversation_visibility,
-      access_list: accessList || [],
+      channelDefaultLevel,
+      permissions: convPerms || [],
+      inherited: channelPerms || [],
     });
   } catch (err) {
     next(err);
   }
 });
 
-// Grant conversation access to a user (or all via user_id=null)
+// Grant/update conversation override (targetUserId can be 'all')
 router.put('/conversations/:sessionId/users/:targetUserId', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId, targetUserId } = req.params;
     const { access_level } = req.body;
 
-    if (!['view', 'edit'].includes(access_level)) {
-      res.status(400).json({ error: 'access_level must be "view" or "edit"' });
+    if (!VALID_ACCESS_LEVELS.includes(access_level)) {
+      res.status(400).json({ error: `access_level must be one of: ${VALID_ACCESS_LEVELS.join(', ')}` });
       return;
     }
 
-    // Verify channel ownership
+    // Fetch session
     const { data: session } = await supabaseAdmin
       .from('chat_sessions')
       .select('channel_id, company_id')
       .eq('id', sessionId)
-      .eq('company_id', req.companyId!)
+      .eq('company_id', companyId)
       .single();
 
     if (!session) {
@@ -288,27 +405,24 @@ router.put('/conversations/:sessionId/users/:targetUserId', async (req, res, nex
       return;
     }
 
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('user_id')
-      .eq('id', session.channel_id)
-      .single();
-
-    if (!channel || channel.user_id !== userId) {
-      res.status(403).json({ error: 'Only the channel owner can manage conversation access' });
+    // Verify manage access
+    const access = await getConversationAccess(userId, sessionId, companyId, session.channel_id);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to manage conversation permissions' });
       return;
     }
 
     const resolvedUserId = targetUserId === 'all' ? null : targetUserId;
 
     await supabaseAdmin
-      .from('conversation_access')
+      .from('conversation_permissions')
       .upsert(
         {
           session_id: sessionId,
           user_id: resolvedUserId,
           access_level,
           granted_by: userId,
+          company_id: companyId,
         },
         { onConflict: 'session_id,user_id' }
       );
@@ -331,17 +445,18 @@ router.put('/conversations/:sessionId/users/:targetUserId', async (req, res, nex
   }
 });
 
-// Remove conversation access for a user
+// Remove conversation override (targetUserId can be 'all')
 router.delete('/conversations/:sessionId/users/:targetUserId', async (req, res, next) => {
   try {
     const userId = req.userId!;
+    const companyId = req.companyId!;
     const { sessionId, targetUserId } = req.params;
 
     const { data: session } = await supabaseAdmin
       .from('chat_sessions')
       .select('channel_id, company_id')
       .eq('id', sessionId)
-      .eq('company_id', req.companyId!)
+      .eq('company_id', companyId)
       .single();
 
     if (!session) {
@@ -349,19 +464,15 @@ router.delete('/conversations/:sessionId/users/:targetUserId', async (req, res, 
       return;
     }
 
-    const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('user_id')
-      .eq('id', session.channel_id)
-      .single();
-
-    if (!channel || channel.user_id !== userId) {
-      res.status(403).json({ error: 'Only the channel owner can manage conversation access' });
+    // Verify manage access
+    const access = await getConversationAccess(userId, sessionId, companyId, session.channel_id);
+    if (!access || !isAtLeast(access, 'manage')) {
+      res.status(403).json({ error: 'You need manage access to manage conversation permissions' });
       return;
     }
 
     let query = supabaseAdmin
-      .from('conversation_access')
+      .from('conversation_permissions')
       .delete()
       .eq('session_id', sessionId);
 
