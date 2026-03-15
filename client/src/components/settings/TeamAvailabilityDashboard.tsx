@@ -171,7 +171,7 @@ export default function TeamAvailabilityDashboard() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{summarizeHours(member.personal_hours as PersonalHours | null)}</span>
                       {member.hours_controlled && (
-                        <Clock className="h-3 w-3 shrink-0" title="Hours-controlled availability" />
+                        <Clock className="h-3 w-3 shrink-0" />
                       )}
                       {showTimezone && (
                         <span className="text-muted-foreground/70">{member.timezone}</span>
