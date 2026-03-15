@@ -33,6 +33,7 @@ export async function sendHandoffNotification(
       .from('whatsapp_channels')
       .select('user_id')
       .eq('id', session.channel_id)
+      .eq('company_id', companyId)
       .single();
 
     targetUserId = channel?.user_id || null;
