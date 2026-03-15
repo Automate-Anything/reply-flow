@@ -15,6 +15,12 @@ const NOTIFICATION_TYPES = [
     ],
   },
   {
+    group: 'Handoff',
+    items: [
+      { key: 'handoff', label: 'Conversation handed off to you' },
+    ],
+  },
+  {
     group: 'Messages',
     items: [
       { key: 'message_assigned', label: 'New message in assigned conversation' },
