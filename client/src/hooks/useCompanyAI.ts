@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '@/lib/api';
 import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
 
-export type ScheduleMode = 'always_on' | 'business_hours' | 'custom';
+export type ScheduleMode = 'always_on' | 'business_hours' | 'custom' | 'when_away' | 'outside_hours';
 
 export interface AudienceSegment {
   label: string;

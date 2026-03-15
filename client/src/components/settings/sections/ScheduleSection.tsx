@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Label } from '@/components/ui/label';
-import { Clock } from 'lucide-react';
+import { Clock, Moon, Users } from 'lucide-react';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
 import type { BusinessHours } from '@/components/settings/BusinessHoursEditor';
 import BusinessHoursEditor, { getDefaultBusinessHours } from '@/components/settings/BusinessHoursEditor';
@@ -126,6 +126,8 @@ export default function ScheduleSection({
     always_on: 'Always on',
     business_hours: 'Business hours',
     custom: 'Custom schedule',
+    when_away: 'When team is away',
+    outside_hours: 'Outside business hours',
   };
   const summaryText = scheduleConfigured
     ? modeLabels[scheduleMode]
@@ -184,6 +186,26 @@ export default function ScheduleSection({
               <div>
                 <p className="text-sm font-medium">Custom Schedule</p>
                 <p className="text-xs text-muted-foreground">Set a separate schedule for the AI</p>
+              </div>
+            </OptionButton>
+            <OptionButton
+              selected={draftMode === 'when_away'}
+              onClick={() => setDraftMode('when_away')}
+            >
+              <Users className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">When Team is Away</p>
+                <p className="text-xs text-muted-foreground">AI activates when all team members are set to Away</p>
+              </div>
+            </OptionButton>
+            <OptionButton
+              selected={draftMode === 'outside_hours'}
+              onClick={() => setDraftMode('outside_hours')}
+            >
+              <Moon className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Outside Business Hours</p>
+                <p className="text-xs text-muted-foreground">AI covers nights and weekends — humans handle business hours</p>
               </div>
             </OptionButton>
           </div>
