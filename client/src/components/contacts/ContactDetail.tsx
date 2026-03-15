@@ -482,7 +482,7 @@ export default function ContactDetail({
           />
         </TabsContent>
 
-        <TabsContent value="conversations" className="flex-1 overflow-auto px-6 py-4">
+        <TabsContent value="conversations" className="flex-1 overflow-hidden">
           <ContactConversations
             contactId={contact.id}
             sessions={sessions as ConvSession[]}
