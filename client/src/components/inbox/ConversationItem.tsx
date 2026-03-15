@@ -3,7 +3,7 @@ import { formatRelativeDate, formatSnoozeUntil } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Camera, Clock, FileText, Mic, Pin, Play, RotateCcw, Star, Sticker } from 'lucide-react';
+import { Camera, Clock, FileText, Mic, Pin, Play, Star, Sticker } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
@@ -186,21 +186,8 @@ export default function ConversationItem({
           )}
         </div>
 
-        {(conversation.labels.length > 0 || statusLabel || isSnoozed || conversation.contact_session_count > 1) && (
+        {(conversation.labels.length > 0 || statusLabel || isSnoozed) && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            {conversation.contact_session_count > 1 && (
-              <Badge
-                variant="secondary"
-                className="h-4 px-1.5 text-[10px] gap-0.5 text-violet-600 dark:text-violet-400"
-              >
-                <RotateCcw className="h-2.5 w-2.5" />
-                {conversation.contact_session_count === 2
-                  ? '2nd'
-                  : conversation.contact_session_count === 3
-                    ? '3rd'
-                    : `${conversation.contact_session_count}th`}
-              </Badge>
-            )}
             {isSnoozed && (
               <Badge
                 variant="secondary"
