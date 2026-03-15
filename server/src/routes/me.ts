@@ -39,7 +39,7 @@ router.get('/', async (req, res, next) => {
     // Get company membership with role
     let { data: membership } = await supabaseAdmin
       .from('company_members')
-      .select('company_id, role_id, roles(id, name, hierarchy_level), companies(id, name, slug, logo_url, timezone)')
+      .select('company_id, role_id, roles(id, name, hierarchy_level), companies(id, name, slug, logo_url, timezone, brand_color)')
       .eq('user_id', userId)
       .single();
 
@@ -87,7 +87,7 @@ router.get('/', async (req, res, next) => {
             // Re-fetch membership so the response includes the new company
             ({ data: membership } = await supabaseAdmin
               .from('company_members')
-              .select('company_id, role_id, roles(id, name, hierarchy_level), companies(id, name, slug, logo_url, timezone)')
+              .select('company_id, role_id, roles(id, name, hierarchy_level), companies(id, name, slug, logo_url, timezone, brand_color)')
               .eq('user_id', userId)
               .single());
           }
