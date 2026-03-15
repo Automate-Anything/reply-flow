@@ -27,7 +27,7 @@ router.get('/', async (req, res, next) => {
     // Get user profile
     const { data: profile } = await supabaseAdmin
       .from('users')
-      .select('id, email, full_name, avatar_url, company_id, is_super_admin')
+      .select('id, email, full_name, avatar_url, company_id, is_super_admin, timezone, personal_hours, hours_control_availability')
       .eq('id', userId)
       .single();
 
@@ -145,36 +145,68 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// PUT /api/me — update user profile (full_name)
+// PUT /api/me — update user profile
 router.put('/', async (req, res, next) => {
   try {
     const userId = req.userId!;
-    const { full_name } = req.body;
+    const { full_name, timezone, personal_hours, hours_control_availability } = req.body;
 
-    if (!full_name || typeof full_name !== 'string' || !full_name.trim()) {
-      res.status(400).json({ error: 'full_name is required' });
-      return;
+    const updates: Record<string, unknown> = {};
+    let trimmed: string | undefined;
+
+    if (full_name !== undefined) {
+      if (!full_name || typeof full_name !== 'string' || !full_name.trim()) {
+        res.status(400).json({ error: 'full_name must be a non-empty string' });
+        return;
+      }
+      trimmed = full_name.trim();
+      if (trimmed.length > 100) {
+        res.status(400).json({ error: 'Name must be 100 characters or fewer' });
+        return;
+      }
+      updates.full_name = trimmed;
     }
 
-    const trimmed = full_name.trim();
-    if (trimmed.length > 100) {
-      res.status(400).json({ error: 'Name must be 100 characters or fewer' });
+    if (timezone !== undefined) {
+      if (timezone !== null) {
+        try {
+          Intl.DateTimeFormat(undefined, { timeZone: timezone });
+        } catch {
+          res.status(400).json({ error: 'Invalid timezone' });
+          return;
+        }
+      }
+      updates.timezone = timezone;
+    }
+
+    if (personal_hours !== undefined) {
+      updates.personal_hours = personal_hours;
+    }
+
+    if (hours_control_availability !== undefined) {
+      updates.hours_control_availability = Boolean(hours_control_availability);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: 'No valid fields provided' });
       return;
     }
 
     const { data, error } = await supabaseAdmin
       .from('users')
-      .update({ full_name: trimmed })
+      .update(updates)
       .eq('id', userId)
-      .select('id, email, full_name, avatar_url')
+      .select('id, email, full_name, avatar_url, timezone, personal_hours, hours_control_availability')
       .single();
 
     if (error) throw error;
 
-    // Also update auth metadata so session reflects the new name
-    await supabaseAdmin.auth.admin.updateUserById(userId, {
-      user_metadata: { full_name: trimmed },
-    });
+    // Also update auth metadata if full_name was changed
+    if (trimmed !== undefined) {
+      await supabaseAdmin.auth.admin.updateUserById(userId, {
+        user_metadata: { full_name: trimmed },
+      });
+    }
 
     res.json({ profile: data });
   } catch (err) {
@@ -222,7 +254,7 @@ router.post('/avatar', upload.single('avatar'), async (req, res, next) => {
       .from('users')
       .update({ avatar_url: avatarUrl })
       .eq('id', userId)
-      .select('id, email, full_name, avatar_url')
+      .select('id, email, full_name, avatar_url, timezone, personal_hours, hours_control_availability')
       .single();
 
     if (error) throw error;
