@@ -11,7 +11,8 @@ import {
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
-import { Loader2, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Pencil, Plus, Share2, Tag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
@@ -21,6 +22,8 @@ interface LabelItem {
   id: string;
   name: string;
   color: string;
+  visibility: 'personal' | 'company';
+  created_by: string;
 }
 
 const PRESET_COLORS = [
@@ -41,8 +44,8 @@ export default function LabelsManager() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', color: PRESET_COLORS[5] });
-  const [originalForm, setOriginalForm] = useState({ name: '', color: PRESET_COLORS[5] });
+  const [form, setForm] = useState({ name: '', color: PRESET_COLORS[5], visibility: 'company' as 'personal' | 'company' });
+  const [originalForm, setOriginalForm] = useState({ name: '', color: PRESET_COLORS[5], visibility: 'company' as 'personal' | 'company' });
   const [submitting, setSubmitting] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
@@ -65,19 +68,19 @@ export default function LabelsManager() {
   }, []);
 
   const resetForm = () => {
-    setForm({ name: '', color: PRESET_COLORS[5] });
+    setForm({ name: '', color: PRESET_COLORS[5], visibility: 'company' });
     setEditingId(null);
   };
 
   const openCreate = () => {
     resetForm();
-    const defaults = { name: '', color: PRESET_COLORS[5] };
+    const defaults = { name: '', color: PRESET_COLORS[5], visibility: 'company' as const };
     setOriginalForm(defaults);
     setDialogOpen(true);
   };
 
   const openEdit = (label: LabelItem) => {
-    const values = { name: label.name, color: label.color };
+    const values = { name: label.name, color: label.color, visibility: label.visibility };
     setForm(values);
     setOriginalForm(values);
     setEditingId(label.id);
@@ -115,6 +118,16 @@ export default function LabelsManager() {
       fetchLabels();
     } catch {
       toast.error('Failed to delete label');
+    }
+  };
+
+  const handleShare = async (labelId: string) => {
+    try {
+      await api.patch(`/labels/${labelId}/share`);
+      toast.success('Label shared with company');
+      fetchLabels();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to share label');
     }
   };
 
@@ -178,6 +191,27 @@ export default function LabelsManager() {
                   ))}
                 </div>
               </div>
+              <div>
+                <Label>Visibility</Label>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    variant={form.visibility === 'personal' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setForm({ ...form, visibility: 'personal' })}
+                  >
+                    Just me
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={form.visibility === 'company' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setForm({ ...form, visibility: 'company' })}
+                  >
+                    Everyone
+                  </Button>
+                </div>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => guardedClose(() => { setDialogOpen(false); resetForm(); })}>
                   Cancel
@@ -211,8 +245,24 @@ export default function LabelsManager() {
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: label.color }}
               />
-              <span className="min-w-0 flex-1 text-sm">{label.name}</span>
+              <span className="min-w-0 flex-1 text-sm">
+                {label.name}
+                {label.visibility === 'personal' && (
+                  <Badge variant="outline" className="ml-2 text-[10px]">Personal</Badge>
+                )}
+              </span>
               <div className="flex shrink-0 gap-0.5">
+                {label.visibility === 'personal' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                    title="Share with company"
+                    onClick={() => handleShare(label.id)}
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
