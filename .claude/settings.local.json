@@ -12,20 +12,7 @@
       "Glob",
       "MultiEdit",
       "Task",
-      "mcp__*",
-
-      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/.env*)",
-      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/.env*)",
-      "Bash(ls c:/Users/nachm/OneDrive/Documents/GitHub/reply-flow/client/.env*)",
-      "Bash(xargs grep -l \"billing\\\\|subscription\\\\|agent\\\\|channel\")",
-      "Bash(npm install stripe)",
-      "Bash(xargs grep -l \"AIMessage\\\\|generateResponse\\\\|callClaudeAI\\\\|anthropic\")",
-      "Bash(xargs grep -l \"webhook\")",
-      "Bash(xargs grep -l \"rate.*limit\\\\|rateLimit\\\\|throttle\")",
-      "Bash(grep -n \"checkPlanLimit\\\\|resource.*limit\" /c/Users/nachm/OneDrive/Documents/GitHub/reply-flow/server/src/routes/*.ts)",
-      "Bash(npx tsc --noEmit)",
-      "Bash(npx tsc:*)",
-      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")"
+      "mcp__*"
     ],
     "deny": [
       "Bash(rm -rf:*)",
@@ -36,5 +23,19 @@
     ]
   },
   "defaultMode": "acceptEdits",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel)\" && CHANGED=$(git diff --name-only -- \"*.ts\" \"*.tsx\" 2>/dev/null); if [ -n \"$CHANGED\" ]; then echo \"Running typecheck...\"; npx tsc --noEmit 2>&1 | tail -30; fi'"
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -10,3 +10,7 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 *.tsbuildinfo
+
+# AI agent local state (not source code)
+MEMORY.md
+WORKBOARD.md
