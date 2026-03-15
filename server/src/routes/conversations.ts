@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { extractSessionMemories } from '../services/sessionMemory.js';
 import { getAccessibleSessionFilter, getConversationAccess, ensureConversationAccessOnAssign } from '../services/accessControl.js';
 import { fetchAndStoreProfilePicture } from '../services/messageProcessor.js';
+import { createNotification } from '../services/notificationService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -502,6 +503,37 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
     };
 
     res.json({ session: result });
+
+    // Trigger notifications (async, after response sent)
+    const contactName = result.contact_name || result.phone_number || 'Unknown';
+
+    // Assignment notification — notify assignee (unless self-assignment)
+    if (assigned_to && assigned_to !== req.userId) {
+      createNotification({
+        companyId,
+        userId: assigned_to,
+        type: 'assignment',
+        title: 'New assignment',
+        body: `You were assigned a conversation with ${contactName}`,
+        data: { conversation_id: sessionId, contact_name: contactName },
+      }).catch((err) => {
+        console.error('Assignment notification error:', err);
+      });
+    }
+
+    // Status change notification — notify assignee (unless changed by assignee)
+    if (status && result.assigned_to && result.assigned_to !== req.userId) {
+      createNotification({
+        companyId,
+        userId: result.assigned_to,
+        type: 'status_change',
+        title: 'Status changed',
+        body: `Conversation status changed to ${status}`,
+        data: { conversation_id: sessionId, new_status: status },
+      }).catch((err) => {
+        console.error('Status change notification error:', err);
+      });
+    }
 
     // Extract memories from the ended session (async, after response sent)
     if (sessionClosed) {
