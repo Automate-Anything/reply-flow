@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarClock, ChevronDown, Clock, MessageSquare, UserCheck } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
@@ -27,7 +28,15 @@ type InboxTab = 'all' | 'assigned' | 'snoozed' | 'scheduled';
 
 export default function InboxPage() {
   const pageReady = usePageReady();
-  const [activeTab, setActiveTab] = useState<InboxTab>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Read tab from URL params (notification deep-link) for initial state
+  const initialTab = (() => {
+    const t = searchParams.get('tab');
+    if (t === 'snoozed' || t === 'scheduled' || t === 'assigned') return t;
+    return 'all';
+  })();
+  const [activeTab, setActiveTab] = useState<InboxTab>(initialTab);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ConversationFilters>({});
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -115,6 +124,35 @@ export default function InboxPage() {
       sessionStorage.removeItem('reply-flow-active-conversation');
     }
   }, [activeConversation]);
+
+  // Sync tab from URL params (notification deep-link, works even when already mounted)
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'snoozed' || t === 'scheduled' || t === 'assigned') {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
+
+  // Select conversation from URL params (notification click deep-link)
+  useEffect(() => {
+    const convParam = searchParams.get('conversation');
+    if (!convParam || convsLoading || conversations.length === 0) return;
+
+    // Clean up URL params after consuming
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('conversation');
+    newParams.delete('tab');
+    setSearchParams(newParams, { replace: true });
+
+    const conv = conversations.find((c) => c.id === convParam);
+    if (conv) {
+      draftRef.current = conv.draft_message || '';
+      setActiveConversation(conv);
+      if (conv.unread_count > 0 || conv.marked_unread) {
+        api.post(`/conversations/${conv.id}/read`).then(() => refetchConvs());
+      }
+    }
+  }, [conversations, convsLoading, refetchConvs, searchParams, setSearchParams]);
 
   // Fetch profile picture if the active conversation has a contact but no picture yet
   const fetchedPicForRef = useRef<string | null>(null);
@@ -253,6 +291,18 @@ export default function InboxPage() {
     setActiveConversation(conv);
     setReplyingTo(null);
     if (conv.unread_count > 0 || conv.marked_unread) {
+      // Optimistically clear unread state so the badge disappears instantly,
+      // even if the user clicks away before the API responds.
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === conv.id ? { ...c, unread_count: 0, marked_unread: false } : c
+        )
+      );
+      setActiveConversation((prev) =>
+        prev && prev.id === conv.id
+          ? { ...prev, unread_count: 0, marked_unread: false }
+          : prev
+      );
       api.post(`/conversations/${conv.id}/read`).then(() => refetchConvs());
     }
   };
