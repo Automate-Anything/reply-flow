@@ -533,7 +533,7 @@ export async function processIncomingMessage(
       direction: isOutbound ? 'outbound' : 'inbound',
       sender_type: isOutbound ? 'human' : 'contact',
       status: isOutbound ? 'sent' : 'received',
-      read: false,
+      read: isOutbound,
       message_ts: messageTs,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
       media_mime_type: mediaMimeType || null,
