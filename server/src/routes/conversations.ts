@@ -521,6 +521,18 @@ router.patch('/:sessionId', requirePermission('conversations', 'edit'), async (r
       });
     }
 
+    // Snooze notification — notify the user who set the snooze
+    if (snoozed_until) {
+      createNotification({
+        companyId,
+        userId: req.userId!,
+        type: 'snooze_set',
+        title: 'Conversation snoozed',
+        body: `Snoozed until ${new Date(snoozed_until).toLocaleString()}`,
+        data: { conversation_id: sessionId },
+      }).catch((err) => console.error('Snooze notification error:', err));
+    }
+
     // Status change notification — notify assignee (unless changed by assignee)
     if (status && result.assigned_to && result.assigned_to !== req.userId) {
       createNotification({

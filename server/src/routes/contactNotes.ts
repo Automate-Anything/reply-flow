@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { createNotification } from '../services/notificationService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -81,6 +82,26 @@ router.post('/:contactId', requirePermission('contact_notes', 'create'), async (
 
     if (error) throw error;
     res.json({ note: data });
+
+    // Notify assigned user of the contact's conversation (non-blocking)
+    if (sessionId) {
+      const { data: session } = await supabaseAdmin
+        .from('chat_sessions')
+        .select('assigned_to')
+        .eq('id', sessionId)
+        .single();
+
+      if (session?.assigned_to && session.assigned_to !== req.userId) {
+        createNotification({
+          companyId,
+          userId: session.assigned_to,
+          type: 'contact_note',
+          title: 'New note on your contact',
+          body: content.slice(0, 120),
+          data: { contact_id: contactId },
+        }).catch((err) => console.error('Contact note notification error:', err));
+      }
+    }
   } catch (err) {
     next(err);
   }

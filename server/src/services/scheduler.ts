@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from './whapi.js';
+import { createNotification } from './notificationService.js';
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -8,7 +9,7 @@ async function processScheduledMessages() {
     // Find messages that are due
     const { data: messages, error } = await supabaseAdmin
       .from('chat_messages')
-      .select('id, session_id, company_id, message_body, chat_id_normalized')
+      .select('id, session_id, company_id, user_id, message_body, chat_id_normalized')
       .eq('status', 'scheduled')
       .lte('scheduled_for', new Date().toISOString())
       .order('scheduled_for', { ascending: true })
@@ -83,6 +84,18 @@ async function processScheduledMessages() {
           })
           .eq('id', msg.session_id)
           .or(`last_message_at.is.null,last_message_at.lte.${now}`);
+
+        // Notify the user that their scheduled message was sent
+        if (msg.user_id) {
+          createNotification({
+            companyId: msg.company_id,
+            userId: msg.user_id,
+            type: 'schedule_sent',
+            title: 'Scheduled message sent',
+            body: msg.message_body.slice(0, 120),
+            data: { conversation_id: msg.session_id },
+          }).catch((err) => console.error('Schedule sent notification error:', err));
+        }
       } catch (err) {
         console.error(`Failed to send scheduled message ${msg.id}:`, err);
         await supabaseAdmin

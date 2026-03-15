@@ -4,6 +4,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from '../services/whapi.js';
 import { getSignedUrl, downloadAndStore, storeBuffer } from '../services/mediaStorage.js';
+import { createNotification } from '../services/notificationService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -203,6 +204,16 @@ router.post('/schedule', requirePermission('messages', 'create'), async (req, re
     if (msgError) throw msgError;
 
     res.json({ message });
+
+    // Notify the user that a message was scheduled (non-blocking)
+    createNotification({
+      companyId,
+      userId: req.userId!,
+      type: 'schedule_set',
+      title: 'Message scheduled',
+      body: `Scheduled for ${scheduledDate.toLocaleString()}`,
+      data: { conversation_id: sessionId },
+    }).catch((err) => console.error('Schedule set notification error:', err));
   } catch (err) {
     next(err);
   }

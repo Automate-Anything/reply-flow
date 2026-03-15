@@ -7,7 +7,7 @@ import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 import { downloadMediaById, fetchFullMessage, getContactProfile } from './whapi.js';
 import { autoAssignConversation } from './autoAssignService.js';
-import { createNotification } from './notificationService.js';
+import { createNotification, createNotificationsForUsers } from './notificationService.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -563,6 +563,30 @@ export async function processIncomingMessage(
         body: messageBody.slice(0, 120),
         data: { conversation_id: sessionId },
       }).catch((err) => console.error('Message notification error:', err));
+    }
+
+    // 6c. Notify other users with conversation access (non-blocking, off by default)
+    const { data: accessRows } = await supabaseAdmin
+      .from('conversation_access')
+      .select('user_id')
+      .eq('session_id', sessionId)
+      .not('user_id', 'is', null);
+
+    if (accessRows && accessRows.length > 0) {
+      const accessibleUserIds = accessRows
+        .map((r) => r.user_id as string)
+        .filter((uid) => uid !== session?.assigned_to);
+
+      if (accessibleUserIds.length > 0) {
+        createNotificationsForUsers(
+          companyId,
+          accessibleUserIds,
+          'message_accessible',
+          `New message from ${msg.from_name || phoneNumber}`,
+          messageBody.slice(0, 120),
+          { conversation_id: sessionId },
+        ).catch((err) => console.error('Message accessible notification error:', err));
+      }
     }
   }
 

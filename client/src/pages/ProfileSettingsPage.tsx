@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Camera, User, DoorOpen, KeyRound, Link, Unlink, Bell, Clock } from 'lucide-react';
+import { Loader2, Camera, User, DoorOpen, KeyRound, Link, Unlink, Bell } from 'lucide-react';
 import NotificationPreferences from '@/components/settings/NotificationPreferences';
 import PersonalHoursSection from '@/components/settings/PersonalHoursSection';
 import HolidayEditor from '@/components/settings/HolidayEditor';

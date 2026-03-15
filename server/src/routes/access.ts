@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { createNotification } from '../services/notificationService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -313,6 +314,18 @@ router.put('/conversations/:sessionId/users/:targetUserId', async (req, res, nex
       );
 
     res.json({ status: 'ok' });
+
+    // Notify the target user that a conversation was shared with them (non-blocking)
+    if (resolvedUserId && resolvedUserId !== userId) {
+      createNotification({
+        companyId: session.company_id,
+        userId: resolvedUserId,
+        type: 'share',
+        title: 'Conversation shared with you',
+        body: `You were given ${access_level} access to a conversation`,
+        data: { conversation_id: sessionId },
+      }).catch((err) => console.error('Share notification error:', err));
+    }
   } catch (err) {
     next(err);
   }
