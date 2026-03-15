@@ -246,11 +246,28 @@ function useRealWaveform(src: string, buckets: number, fallback: number[]): numb
   return bars;
 }
 
+// ── Voice note speed persistence ──────────────────────────────────────────────
+const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2] as const;
+const SPEED_STORAGE_KEY = 'voiceNoteSpeed';
+
+function getStoredSpeed(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(SPEED_STORAGE_KEY) || '1');
+    return SPEED_OPTIONS.includes(v as typeof SPEED_OPTIONS[number]) ? v : 1;
+  } catch { return 1; }
+}
+
+function setStoredSpeed(speed: number) {
+  try { localStorage.setItem(SPEED_STORAGE_KEY, String(speed)); } catch { /* ignore */ }
+}
+
 function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutbound: boolean; timeSlot?: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(getStoredSpeed);
+  const [hasStarted, setHasStarted] = useState(() => getStoredSpeed() !== 1);
   const fakeBars = useRef<number[]>(generateWaveformBars(src, 32));
   const bars = useRealWaveform(src, 32, fakeBars.current);
   const rafRef = useRef<number>(0);
@@ -284,8 +301,22 @@ function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutboun
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) { audio.pause(); } else { audio.play(); }
+    if (playing) {
+      audio.pause();
+    } else {
+      audio.playbackRate = playbackRate;
+      audio.play();
+      setHasStarted(true);
+    }
     setPlaying(!playing);
+  };
+
+  const cycleSpeed = () => {
+    const idx = SPEED_OPTIONS.indexOf(playbackRate as typeof SPEED_OPTIONS[number]);
+    const next = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
+    setPlaybackRate(next);
+    setStoredSpeed(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
   };
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -298,6 +329,7 @@ function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutboun
   };
 
   const progress = duration ? (currentTime / duration) * 100 : 0;
+  const showSpeedBadge = hasStarted || playbackRate !== 1;
 
   const fmt = (s: number) => {
     if (!s || !isFinite(s)) return '0:00';
@@ -331,9 +363,9 @@ function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutboun
           className="flex h-6 cursor-pointer items-center gap-[2px]"
           onClick={seek}
         >
-          {bars.current.map((height, i) => {
-            const barStart = (i / bars.current.length) * 100;
-            const barEnd = ((i + 1) / bars.current.length) * 100;
+          {bars.map((height, i) => {
+            const barStart = (i / bars.length) * 100;
+            const barEnd = ((i + 1) / bars.length) * 100;
             const playedColor = isOutbound ? 'rgba(255,255,255,0.8)' : 'color-mix(in srgb, var(--color-primary) 70%, transparent)';
             const unplayedColor = isOutbound ? 'rgba(255,255,255,0.25)' : 'color-mix(in srgb, var(--color-muted-foreground) 25%, transparent)';
             const isFullyPlayed = barEnd <= progress;
@@ -362,6 +394,19 @@ function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutboun
           <span className={cn('text-[10px] tabular-nums', isOutbound ? 'text-white/60' : 'text-muted-foreground')}>
             {playing ? fmt(currentTime) : fmt(duration)}
           </span>
+          {showSpeedBadge && (
+            <button
+              onClick={cycleSpeed}
+              className={cn(
+                'rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
+                isOutbound
+                  ? 'bg-white/20 text-white hover:bg-white/30'
+                  : 'bg-primary/10 text-primary hover:bg-primary/20'
+              )}
+            >
+              {playbackRate}x
+            </button>
+          )}
           {timeSlot}
         </div>
       </div>
