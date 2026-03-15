@@ -1038,9 +1038,40 @@ router.get('/:contactId/sessions', requirePermission('contacts', 'view'), async 
       countMap[row.session_id] = (countMap[row.session_id] || 0) + 1;
     }
 
+    // Get channel names for sessions that have a channel_id
+    const channelIds = [...new Set(sessions.map((s) => s.channel_id).filter(Boolean))] as string[];
+    const channelNameMap: Record<string, string> = {};
+    if (channelIds.length > 0) {
+      const { data: channels } = await supabaseAdmin
+        .from('whatsapp_channels')
+        .select('id, display_name')
+        .in('id', channelIds);
+      for (const ch of channels || []) {
+        channelNameMap[ch.id] = ch.display_name;
+      }
+    }
+
+    // Get memory counts per session
+    const { data: memories } = await supabaseAdmin
+      .from('contact_memories')
+      .select('session_id')
+      .eq('company_id', companyId)
+      .eq('contact_id', contactId)
+      .eq('is_active', true)
+      .in('session_id', sessionIds);
+
+    const memoryCountMap: Record<string, number> = {};
+    for (const row of memories || []) {
+      if (row.session_id) {
+        memoryCountMap[row.session_id] = (memoryCountMap[row.session_id] || 0) + 1;
+      }
+    }
+
     const enriched = sessions.map((s) => ({
       ...s,
       message_count: countMap[s.id] || 0,
+      channel_name: s.channel_id ? channelNameMap[s.channel_id] || null : null,
+      memory_count: memoryCountMap[s.id] || 0,
     }));
 
     res.json({ sessions: enriched });
@@ -1070,16 +1101,24 @@ router.get('/:contactId/memories', requirePermission('contacts', 'view'), async 
   }
 });
 
-// Deactivate a contact memory
+// Update a contact memory (deactivate or edit content)
 router.patch('/:contactId/memories/:memoryId', requirePermission('contacts', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
     const { memoryId } = req.params;
-    const { is_active } = req.body;
+    const { is_active, content } = req.body;
+
+    const updates: Record<string, unknown> = {};
+    if (is_active !== undefined) updates.is_active = is_active;
+    if (content !== undefined) updates.content = content;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
 
     const { error } = await supabaseAdmin
       .from('contact_memories')
-      .update({ is_active: is_active ?? false })
+      .update(updates)
       .eq('id', memoryId)
       .eq('company_id', companyId);
 
