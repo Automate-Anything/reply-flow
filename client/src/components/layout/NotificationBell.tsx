@@ -92,13 +92,28 @@ export default function NotificationBell() {
     if (!notification.is_read) {
       await markAsRead(notification.id);
     }
-    // Navigate to conversation if data contains conversation_id
+    setOpen(false);
+
     const conversationId = notification.data?.conversation_id as string | undefined;
-    if (conversationId) {
-      setOpen(false);
+    const contactId = notification.data?.contact_id as string | undefined;
+
+    // Map notification type to target tab (only for tab-specific types)
+    const tabByType: Record<string, string> = {
+      snooze_set: 'snoozed',
+      schedule_set: 'scheduled',
+    };
+
+    if (notification.type === 'contact_note') {
+      navigate(contactId ? `/contacts?contact=${contactId}` : '/contacts');
+    } else if (conversationId) {
+      const tab = tabByType[notification.type];
+      const params = new URLSearchParams();
+      if (tab) params.set('tab', tab);
+      params.set('conversation', conversationId);
+      navigate(`/inbox?${params.toString()}`);
+    } else {
+      // Fallback: navigate to inbox without selecting a conversation
       navigate('/inbox');
-      // Store the conversation id so InboxPage can select it
-      sessionStorage.setItem('reply-flow-active-conversation', conversationId);
     }
   };
 
