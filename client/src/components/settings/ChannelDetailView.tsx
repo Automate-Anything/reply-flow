@@ -84,7 +84,6 @@ export default function ChannelDetailPage() {
   // Access control (new 4-level permissions)
   const {
     settings: permissionSettings,
-    loading: loadingPermissions,
     grantAccess,
     revokeAccess,
     checkConflicts,

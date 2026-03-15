@@ -390,7 +390,7 @@ router.get('/channels', requirePermission('channels', 'view'), async (req, res, 
     const userId = req.userId!;
 
     // Import dynamically to avoid circular deps at module load
-    const { getAccessibleChannelIds } = await import('../services/accessControl.js');
+    const { getAccessibleChannelIds } = await import('../services/permissionResolver.js');
     const accessibleIds = await getAccessibleChannelIds(userId, companyId);
 
     if (accessibleIds.length === 0) {
