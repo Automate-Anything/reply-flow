@@ -32,6 +32,7 @@ import accessRouter from './routes/access.js';
 import autoAssignRouter from './routes/autoAssign.js';
 import notificationsRouter from './routes/notifications.js';
 import holidaysRouter from './routes/holidays.js';
+import teamAvailabilityRouter from './routes/teamAvailability.js';
 import { startScheduler } from './services/scheduler.js';
 import { startAvailabilityScheduler } from './services/availabilityScheduler.js';
 
@@ -117,6 +118,7 @@ app.use('/api/access', accessRouter);
 app.use('/api/auto-assign', autoAssignRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/holidays', holidaysRouter);
+app.use('/api/team/availability', teamAvailabilityRouter);
 
 app.use(errorHandler);
 
