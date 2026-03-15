@@ -13,6 +13,7 @@ import { processAndEmbedEntry, isEmbeddingsAvailable, searchKnowledgeBase, backf
 import { classifyQuery } from '../services/queryClassifier.js';
 import { sseWrite } from '../services/pipelineEvents.js';
 import type { PipelineEvent, PipelineProgressCallback } from '../services/pipelineEvents.js';
+import { sendHandoffNotification } from '../services/handoffNotifier.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -1343,6 +1344,14 @@ router.post('/pause/:sessionId', requirePermission('conversations', 'edit'), asy
       .update(updates)
       .eq('id', sessionId)
       .eq('company_id', companyId);
+
+    // Notify assignee or channel owner (skip self-notification)
+    sendHandoffNotification(
+      companyId,
+      sessionId,
+      'AI manually paused',
+      req.userId,
+    ).catch((err) => console.error('Handoff notification error:', err));
 
     res.json({ status: 'paused' });
   } catch (err) {
