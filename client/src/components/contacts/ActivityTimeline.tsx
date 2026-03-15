@@ -24,8 +24,8 @@ interface ActivityTimelineProps {
   hasMore: boolean;
   onLoadMore: () => void;
   loadingMore: boolean;
-  onAddNote: (content: string) => Promise<void>;
-  onDeleteNote: (noteId: string) => Promise<void>;
+  onAddNote?: (content: string) => Promise<void>;
+  onDeleteNote?: (noteId: string) => Promise<void>;
 }
 
 function formatTimestamp(ts: string): string {
@@ -199,7 +199,7 @@ export default function ActivityTimeline({
   const [addingNote, setAddingNote] = useState(false);
 
   const handleAddNote = async () => {
-    if (!noteContent.trim()) return;
+    if (!noteContent.trim() || !onAddNote) return;
     setAddingNote(true);
     try {
       await onAddNote(noteContent.trim());
@@ -220,32 +220,34 @@ export default function ActivityTimeline({
   return (
     <div className="space-y-4">
       {/* Add note input */}
-      <div className="flex gap-2">
-        <Textarea
-          placeholder="Add a note..."
-          className="min-h-[60px] resize-none text-sm"
-          value={noteContent}
-          onChange={(e) => setNoteContent(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              handleAddNote();
-            }
-          }}
-        />
-        <Button
-          size="icon"
-          className="h-[60px] w-10 shrink-0"
-          disabled={!noteContent.trim() || addingNote}
-          onClick={handleAddNote}
-        >
-          {addingNote ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
+      {onAddNote && (
+        <div className="flex gap-2">
+          <Textarea
+            placeholder="Add a note..."
+            className="min-h-[60px] resize-none text-sm"
+            value={noteContent}
+            onChange={(e) => setNoteContent(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                handleAddNote();
+              }
+            }}
+          />
+          <Button
+            size="icon"
+            className="h-[60px] w-10 shrink-0"
+            disabled={!noteContent.trim() || addingNote}
+            onClick={handleAddNote}
+          >
+            {addingNote ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      )}
 
       {/* Timeline */}
       {events.length === 0 ? (
@@ -282,7 +284,7 @@ export default function ActivityTimeline({
                       <span className="text-[10px] text-muted-foreground">
                         {formatTimestamp(event.timestamp)}
                       </span>
-                      {isNote && noteId && (
+                      {isNote && noteId && onDeleteNote && (
                         <ConfirmDialog
                           title="Delete this note?"
                           description="This action cannot be undone."

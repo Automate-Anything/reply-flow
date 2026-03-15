@@ -3,17 +3,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash, Clock, Brain, X, Calendar } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash, Clock, Brain, X, Calendar, MessageSquare, Tag, UserPlus, Upload, GitMerge, List, ChevronRight } from 'lucide-react';
 import api from '@/lib/api';
 import { useContactActivity } from '@/hooks/useContactActivity';
 import { useSingleContactDuplicates } from '@/hooks/useContactDuplicates';
 import ActivityTimeline from './ActivityTimeline';
+import ContactNotes from './ContactNotes';
+import ContactConversations, { type ContactSession as ConvSession } from './ContactConversations';
 import MergeContactDialog from './MergeContactDialog';
 import type { Contact } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { CustomFieldValue } from '@/hooks/useCustomFields';
 import type { ContactList } from '@/hooks/useContactLists';
 import { PlanGate } from '@/components/auth/PlanGate';
+import type { TimelineEvent } from '@/hooks/useContactActivity';
 
 interface ContactSession {
   id: string;
@@ -23,7 +26,9 @@ interface ContactSession {
   last_message: string | null;
   last_message_at: string | null;
   channel_id: number | null;
+  channel_name: string | null;
   message_count: number;
+  memory_count: number;
 }
 
 interface ContactMemory {
@@ -48,6 +53,72 @@ interface ContactDetailProps {
   onRefresh?: () => void;
 }
 
+function getRecentEventIcon(event: TimelineEvent) {
+  switch (event.type) {
+    case 'message':
+      return event.event === 'message_received'
+        ? { icon: MessageSquare, color: 'text-blue-500' }
+        : { icon: MessageSquare, color: 'text-green-500' };
+    case 'activity':
+      switch (event.event) {
+        case 'created':
+          return { icon: UserPlus, color: 'text-green-600' };
+        case 'edited':
+          return { icon: Pencil, color: 'text-gray-500' };
+        case 'tag_added':
+        case 'tag_removed':
+          return { icon: Tag, color: 'text-purple-500' };
+        case 'list_added':
+        case 'list_removed':
+          return { icon: List, color: 'text-indigo-500' };
+        case 'imported':
+          return { icon: Upload, color: 'text-blue-500' };
+        case 'merged':
+          return { icon: GitMerge, color: 'text-orange-500' };
+        default:
+          return { icon: Pencil, color: 'text-gray-500' };
+      }
+    default:
+      return { icon: Pencil, color: 'text-gray-500' };
+  }
+}
+
+function getRecentEventDescription(event: TimelineEvent): string {
+  const data = event.data;
+  const metadata = (data.metadata || {}) as Record<string, unknown>;
+
+  switch (event.type) {
+    case 'message': {
+      const direction = event.event === 'message_received' ? 'Received' : 'Sent';
+      const body = (data.message_body as string) || '';
+      return body ? `${direction}: ${body}` : direction;
+    }
+    case 'activity':
+      switch (event.event) {
+        case 'created':
+          return 'Contact created';
+        case 'edited':
+          return 'Contact edited';
+        case 'tag_added':
+          return `Tag added: ${metadata.tag || ''}`;
+        case 'tag_removed':
+          return `Tag removed: ${metadata.tag || ''}`;
+        case 'list_added':
+          return `Added to list${metadata.list_name ? `: ${metadata.list_name}` : ''}`;
+        case 'list_removed':
+          return `Removed from list${metadata.list_name ? `: ${metadata.list_name}` : ''}`;
+        case 'imported':
+          return 'Imported from CSV';
+        case 'merged':
+          return `Merged with ${(metadata.merged_contact_name as string) || 'another contact'}`;
+        default:
+          return event.event;
+      }
+    default:
+      return event.event;
+  }
+}
+
 export default function ContactDetail({
   contact,
   onEdit,
@@ -69,9 +140,11 @@ export default function ContactDetail({
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [memories, setMemories] = useState<ContactMemory[]>([]);
   const [memoriesLoading, setMemoriesLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab, setActiveTab] = useState('overview');
   const sessionsFetched = useRef(false);
   const memoriesFetched = useRef(false);
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editingMemoryContent, setEditingMemoryContent] = useState('');
 
   // Reset fetch flags when contact changes
   useEffect(() => {
@@ -103,9 +176,9 @@ export default function ContactDetail({
     }
   }, [contact.id]);
 
-  // Lazy-load sessions and memories when their tabs are first activated
+  // Fetch sessions eagerly on mount; memories lazy on tab activation
   useEffect(() => {
-    if (activeTab === 'sessions' && !sessionsFetched.current && !sessionsLoading) fetchSessions();
+    if (!sessionsFetched.current && !sessionsLoading) fetchSessions();
     if (activeTab === 'memories' && !memoriesFetched.current && !memoriesLoading) fetchMemories();
   }, [activeTab, sessionsLoading, fetchSessions, memoriesLoading, fetchMemories]);
 
@@ -118,21 +191,27 @@ export default function ContactDetail({
   const hasAddress = contact.address_street || contact.address_city || contact.address_state
     || contact.address_postal_code || contact.address_country;
 
-  const handleAddNote = async (content: string) => {
-    await api.post(`/contact-notes/${contact.id}`, { content });
-    refetchActivity();
-  };
-
-  const handleDeleteNote = async (noteId: string) => {
-    await api.delete(`/contact-notes/${contact.id}/${noteId}`);
-    refetchActivity();
-  };
-
   const handleMergeComplete = () => {
     setMergeTarget(null);
     refetchActivity();
     onRefresh?.();
   };
+
+  const handleSaveMemory = async (memoryId: string) => {
+    try {
+      await api.patch(`/contacts/${contact.id}/memories/${memoryId}`, { content: editingMemoryContent });
+      setMemories(prev => prev.map(m => m.id === memoryId ? { ...m, content: editingMemoryContent } : m));
+      setEditingMemoryId(null);
+    } catch { /* ignore */ }
+  };
+
+  // Quick Stats computed from sessions
+  const totalMessages = sessions.reduce((sum, s) => sum + s.message_count, 0);
+  const lastActive = sessions.map(s => s.last_message_at).filter(Boolean).sort().reverse()[0];
+  const lastActiveLabel = lastActive ? formatTimeAgo(lastActive) : 'Never';
+
+  // Recent activity (non-note events, first 3)
+  const recentEvents = events.filter(e => e.type !== 'note').slice(0, 3);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -220,13 +299,42 @@ export default function ContactDetail({
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
         <TabsList className="mx-6 mt-4 w-fit">
-          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          <TabsTrigger value="conversations">Conversations</TabsTrigger>
+          <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="memories">Memories</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="details" className="flex-1 overflow-auto px-6 py-4">
+        <TabsContent value="overview" className="flex-1 overflow-auto px-6 py-4">
+          {/* Quick Stats bar */}
+          <div className="mb-4 flex items-center gap-6 rounded-lg bg-muted/50 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-lg font-semibold">{totalMessages}</p>
+                <p className="text-xs text-muted-foreground">Messages</p>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <Hash className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-lg font-semibold">{sessions.length}</p>
+                <p className="text-xs text-muted-foreground">Conversations</p>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-lg font-semibold">{lastActiveLabel}</p>
+                <p className="text-xs text-muted-foreground">Last active</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Details card */}
           <div className="max-w-lg rounded-lg border bg-card">
             {/* Contact methods */}
             <DetailSection title="Contact">
@@ -235,14 +343,12 @@ export default function ContactDetail({
               <DetailField icon={<MessageCircle className="h-3.5 w-3.5" />} label="WhatsApp" value={contact.whatsapp_name} />
             </DetailSection>
 
-            {/* Personal / work */}
-            {(contact.first_name || contact.last_name || contact.company) && (
-              <DetailSection title="Personal">
-                <DetailField icon={<User className="h-3.5 w-3.5" />} label="First Name" value={contact.first_name} />
-                <DetailField icon={<User className="h-3.5 w-3.5" />} label="Last Name" value={contact.last_name} />
-                <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Company" value={contact.company} />
-              </DetailSection>
-            )}
+            {/* Personal / work — always show */}
+            <DetailSection title="Personal">
+              <DetailField icon={<User className="h-3.5 w-3.5" />} label="First Name" value={contact.first_name} />
+              <DetailField icon={<User className="h-3.5 w-3.5" />} label="Last Name" value={contact.last_name} />
+              <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Company" value={contact.company} />
+            </DetailSection>
 
             {/* Tags */}
             {contact.tags.length > 0 && (
@@ -331,69 +437,61 @@ export default function ContactDetail({
               </DetailSection>
             )}
           </div>
+
+          {/* Recent Activity preview */}
+          {recentEvents.length > 0 && (
+            <div className="mt-4 max-w-lg rounded-lg border bg-card">
+              <div className="flex items-center justify-between border-b px-4 py-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Activity</h4>
+              </div>
+              <div className="divide-y">
+                {recentEvents.map((event, idx) => {
+                  const { icon: Icon, color } = getRecentEventIcon(event);
+                  const description = getRecentEventDescription(event);
+                  return (
+                    <div key={`${event.type}-${event.data.id || idx}`} className="flex items-center gap-3 px-4 py-2.5">
+                      <Icon className={`h-3.5 w-3.5 shrink-0 ${color}`} />
+                      <span className="min-w-0 flex-1 truncate text-sm">{description}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{formatTimeAgo(event.timestamp)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="border-t px-4 py-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto px-0 py-0 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setActiveTab('activity')}
+                >
+                  View all activity
+                  <ChevronRight className="ml-1 h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="activity" className="flex-1 overflow-auto px-6 py-4">
           <ActivityTimeline
-            events={events}
+            events={events.filter(e => e.type !== 'note')}
             loading={activityLoading}
             hasMore={hasMore}
             onLoadMore={loadMore}
             loadingMore={loadingMore}
-            onAddNote={handleAddNote}
-            onDeleteNote={handleDeleteNote}
           />
         </TabsContent>
 
-        <TabsContent value="sessions" className="flex-1 overflow-auto px-6 py-4">
-          {sessionsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : sessions.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">No sessions yet</p>
-          ) : (
-            <div className="space-y-2">
-              {sessions.map((s, i) => {
-                const started = new Date(s.created_at);
-                const ended = s.ended_at ? new Date(s.ended_at) : null;
-                const isActive = !ended;
-                const durationMs = ended ? ended.getTime() - started.getTime() : Date.now() - started.getTime();
-                const durationHours = Math.round(durationMs / (1000 * 60 * 60));
-                const durationLabel = durationHours < 1 ? '< 1h' : durationHours < 24 ? `${durationHours}h` : `${Math.round(durationHours / 24)}d`;
+        <TabsContent value="conversations" className="flex-1 overflow-auto px-6 py-4">
+          <ContactConversations
+            contactId={contact.id}
+            sessions={sessions as ConvSession[]}
+            sessionsLoading={sessionsLoading}
+          />
+        </TabsContent>
 
-                return (
-                  <div key={s.id} className="rounded-lg border bg-card p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={isActive ? 'default' : 'secondary'} className="text-xs">
-                          {isActive ? 'Active' : s.status}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          #{sessions.length - i}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>{s.message_count} msg{s.message_count !== 1 ? 's' : ''}</span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {durationLabel}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-1.5 text-xs text-muted-foreground">
-                      {started.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                      {ended && ` — ${ended.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
-                      {isActive && ' — now'}
-                    </div>
-                    {s.last_message && (
-                      <p className="mt-1 truncate text-xs text-foreground/70">{s.last_message}</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <TabsContent value="notes" className="flex-1 overflow-auto px-6 py-4">
+          <ContactNotes contactId={contact.id} />
         </TabsContent>
 
         <TabsContent value="memories" className="flex-1 overflow-auto px-6 py-4">
@@ -419,6 +517,7 @@ export default function ContactDetail({
                 };
                 const cfg = typeConfig[m.memory_type] || { label: m.memory_type, color: 'bg-gray-100 text-gray-800' };
                 const ago = formatTimeAgo(m.created_at);
+                const isEditing = editingMemoryId === m.id;
 
                 return (
                   <div key={m.id} className="group flex items-start gap-2 rounded-lg border bg-card p-3">
@@ -429,22 +528,66 @@ export default function ContactDetail({
                         </span>
                         <span className="text-[10px] text-muted-foreground">{ago}</span>
                       </div>
-                      <p className="mt-1 text-sm leading-relaxed">{m.content}</p>
+                      {isEditing ? (
+                        <div className="mt-1 space-y-2">
+                          <textarea
+                            value={editingMemoryContent}
+                            onChange={(e) => setEditingMemoryContent(e.target.value)}
+                            rows={3}
+                            className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleSaveMemory(m.id)}
+                              disabled={!editingMemoryContent.trim()}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingMemoryId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-sm leading-relaxed">{m.content}</p>
+                      )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
-                      title="Remove memory"
-                      onClick={async () => {
-                        try {
-                          await api.patch(`/contacts/${contact.id}/memories/${m.id}`, { is_active: false });
-                          setMemories((prev) => prev.filter((x) => x.id !== m.id));
-                        } catch { /* ignore */ }
-                      }}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+                    {!isEditing && (
+                      <div className="flex shrink-0 gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                          title="Edit memory"
+                          onClick={() => {
+                            setEditingMemoryId(m.id);
+                            setEditingMemoryContent(m.content);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                          title="Remove memory"
+                          onClick={async () => {
+                            try {
+                              await api.patch(`/contacts/${contact.id}/memories/${m.id}`, { is_active: false });
+                              setMemories((prev) => prev.filter((x) => x.id !== m.id));
+                            } catch { /* ignore */ }
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -497,12 +640,11 @@ function DetailField({
   label: string;
   value: string | null;
 }) {
-  if (!value) return null;
   return (
     <div className="flex items-center gap-3 px-4 py-2.5">
       <span className="text-muted-foreground">{icon}</span>
       <span className="w-24 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <span className="min-w-0 flex-1 truncate text-sm">{value}</span>
+      <span className="min-w-0 flex-1 truncate text-sm">{value || '\u2014'}</span>
     </div>
   );
 }
