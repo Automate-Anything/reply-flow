@@ -243,22 +243,24 @@ export async function processIncomingMessage(
 
   if (existingContact) {
     contactId = existingContact.id;
-    // Update whatsapp_name if provided
-    if (msg.from_name) {
+    // Update whatsapp_name only from inbound messages — outbound from_name is our own channel name
+    if (!isOutbound && msg.from_name) {
       await supabaseAdmin
         .from('contacts')
         .update({ whatsapp_name: msg.from_name, updated_at: new Date().toISOString() })
         .eq('id', contactId);
     }
   } else {
+    // For outbound-initiated contacts, don't use from_name (it's the channel's name, not the contact's)
+    const contactName = isOutbound ? null : (msg.from_name || null);
     const { data: newContact, error: contactError } = await supabaseAdmin
       .from('contacts')
       .insert({
         company_id: companyId,
         user_id: userId,
         phone_number: phoneNumber,
-        whatsapp_name: msg.from_name || null,
-        first_name: msg.from_name || null,
+        whatsapp_name: contactName,
+        first_name: contactName,
         owner_id: userId,
       })
       .select('id')
@@ -304,13 +306,13 @@ export async function processIncomingMessage(
         console.error('Memory extraction error:', err);
       });
 
-      // Create a fresh session
-      sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
+      // Create a fresh session — don't use from_name for outbound (it's the channel's name)
+      sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, isOutbound ? undefined : msg.from_name);
     } else {
       sessionId = activeSession.id;
     }
   } else {
-    sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, msg.from_name);
+    sessionId = await createNewSession(companyId, channelId, contactId, chatId, phoneNumber, userId, isOutbound ? undefined : msg.from_name);
   }
 
   // 2b. Handle action messages (reactions, edits, deletes) — these are not standalone messages
