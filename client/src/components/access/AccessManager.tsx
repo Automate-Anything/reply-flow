@@ -3,56 +3,57 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Check, Lock, Globe, Users, Trash2, Loader2 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
+import { Check, Lock, Globe, Users, UserPlus, X, Shield } from 'lucide-react';
 import { toast } from 'sonner';
-import type { AccessEntry } from '@/hooks/useAccessControl';
+import PermissionLevelSelect from '@/components/access/PermissionLevelSelect';
+import type { AccessLevel, PermissionEntry } from '@/hooks/usePermissions';
 import type { TeamMember } from '@/hooks/useTeamMembers';
 
-type SharingMode = 'private' | 'specific_users' | 'all_members';
+type ChannelMode = 'private' | 'specific_users' | 'all_members';
 
 interface AccessManagerProps {
-  /** Title shown in the dialog header */
-  title: string;
-  /** Description shown below the title */
-  description: string;
-  /** Current sharing mode */
-  sharingMode: SharingMode;
-  /** Current access list (users with explicit access) */
-  accessList: AccessEntry[];
-  /** All team members available to grant access to */
+  mode: 'channel' | 'conversation';
+  // Channel mode props
+  channelMode?: ChannelMode;
+  defaultLevel?: AccessLevel;
+  onChannelModeChange?: (mode: string, level?: AccessLevel) => void;
+  // Shared props
+  permissions: PermissionEntry[];
+  inheritedPermissions?: PermissionEntry[];
   teamMembers: TeamMember[];
-  /** Callback to update sharing mode */
-  onSharingModeChange: (mode: SharingMode) => Promise<void>;
-  /** Callback to grant access to a user */
-  onGrantAccess: (userId: string, level: 'view' | 'edit') => Promise<void>;
-  /** Callback to revoke access from a user */
-  onRevokeAccess: (userId: string) => Promise<void>;
-  /** Whether to show conversation-level "Grant to all" option */
-  showGrantToAll?: boolean;
-  /** Callback for granting to all shared users */
-  onGrantToAll?: (level: 'view' | 'edit') => Promise<void>;
-  /** Callback for revoking from all */
-  onRevokeFromAll?: () => Promise<void>;
-  /** Whether there's an "all" entry in the access list */
-  hasAllAccess?: boolean;
-  /** The trigger button (optional — defaults to a lock icon button) */
+  ownerId?: string;
+  onGrant: (userId: string | 'all', level: AccessLevel) => Promise<void>;
+  onRevoke: (userId: string | 'all') => Promise<void>;
+  onLevelChange?: (userId: string | 'all', level: AccessLevel) => Promise<void>;
   trigger?: React.ReactNode;
+  canManage: boolean;
 }
 
-const SHARING_MODE_OPTIONS = [
+const CHANNEL_MODE_OPTIONS = [
   {
     value: 'private' as const,
     label: 'Private',
-    description: 'Only you can see this',
+    description: 'Only the owner can see this channel',
     icon: Lock,
+  },
+  {
+    value: 'all_members' as const,
+    label: 'All team members',
+    description: 'Everyone on the team can access',
+    icon: Globe,
   },
   {
     value: 'specific_users' as const,
@@ -60,40 +61,65 @@ const SHARING_MODE_OPTIONS = [
     description: 'Only people you choose',
     icon: Users,
   },
-  {
-    value: 'all_members' as const,
-    label: 'All team members',
-    description: 'Everyone on the team',
-    icon: Globe,
-  },
 ];
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export default function AccessManager({
-  title,
-  description,
-  sharingMode,
-  accessList,
+  mode,
+  channelMode,
+  defaultLevel,
+  onChannelModeChange,
+  permissions,
+  inheritedPermissions,
   teamMembers,
-  onSharingModeChange,
-  onGrantAccess,
-  onRevokeAccess,
-  showGrantToAll,
-  onGrantToAll,
-  onRevokeFromAll,
-  hasAllAccess,
+  ownerId,
+  onGrant,
+  onRevoke,
+  onLevelChange,
   trigger,
+  canManage,
 }: AccessManagerProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [addingUserId, setAddingUserId] = useState<string | null>(null);
+  const [addPopoverOpen, setAddPopoverOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const accessUserIds = new Set(accessList.map((a) => a.user_id));
-  const availableMembers = teamMembers.filter((m) => !accessUserIds.has(m.user_id));
+  // Find owner from team members
+  const ownerMember = teamMembers.find((m) => m.user_id === ownerId);
 
-  const handleSharingModeChange = async (mode: SharingMode) => {
+  // Users already in the permission list (including inherited)
+  const existingUserIds = new Set([
+    ...permissions.filter((p) => p.user_id).map((p) => p.user_id!),
+    ...(inheritedPermissions || []).filter((p) => p.user_id).map((p) => p.user_id!),
+  ]);
+  if (ownerId) existingUserIds.add(ownerId);
+
+  const availableMembers = teamMembers
+    .filter((m) => !existingUserIds.has(m.user_id))
+    .filter(
+      (m) =>
+        !searchQuery ||
+        m.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+  const handleChannelModeChange = async (newMode: ChannelMode) => {
+    if (!onChannelModeChange) return;
     setLoading(true);
     try {
-      await onSharingModeChange(mode);
+      if (newMode === 'all_members') {
+        onChannelModeChange(newMode, defaultLevel || 'view');
+      } else {
+        onChannelModeChange(newMode);
+      }
     } catch {
       toast.error('Failed to update access settings');
     } finally {
@@ -101,50 +127,40 @@ export default function AccessManager({
     }
   };
 
-  const handleGrantAccess = async (userId: string, level: 'view' | 'edit') => {
-    setAddingUserId(userId);
+  const handleDefaultLevelChange = (level: AccessLevel) => {
+    if (!onChannelModeChange) return;
+    onChannelModeChange('all_members', level);
+  };
+
+  const handleLevelChange = async (userId: string | 'all', level: AccessLevel) => {
     try {
-      await onGrantAccess(userId, level);
+      if (onLevelChange) {
+        await onLevelChange(userId, level);
+      } else {
+        await onGrant(userId, level);
+      }
+    } catch {
+      toast.error('Failed to update permission level');
+    }
+  };
+
+  const handleGrant = async (userId: string, level: AccessLevel) => {
+    try {
+      await onGrant(userId, level);
+      setAddPopoverOpen(false);
+      setSearchQuery('');
       toast.success('Access granted');
     } catch {
       toast.error('Failed to grant access');
-    } finally {
-      setAddingUserId(null);
     }
   };
 
-  const handleRevokeAccess = async (userId: string) => {
+  const handleRevoke = async (userId: string | 'all') => {
     try {
-      await onRevokeAccess(userId);
+      await onRevoke(userId);
       toast.success('Access revoked');
     } catch {
       toast.error('Failed to revoke access');
-    }
-  };
-
-  const handleGrantToAll = async (level: 'view' | 'edit') => {
-    if (!onGrantToAll) return;
-    setLoading(true);
-    try {
-      await onGrantToAll(level);
-      toast.success('Access granted to all team members');
-    } catch {
-      toast.error('Failed to grant access');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRevokeFromAll = async () => {
-    if (!onRevokeFromAll) return;
-    setLoading(true);
-    try {
-      await onRevokeFromAll();
-      toast.success('Access revoked from all');
-    } catch {
-      toast.error('Failed to revoke access');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -152,176 +168,250 @@ export default function AccessManager({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Manage access">
-            <Lock className="h-4 w-4" />
+          <Button variant="outline" size="sm">
+            <Shield className="mr-1.5 h-3.5 w-3.5" />
+            Manage access
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogTitle>
+            {mode === 'channel' ? 'Channel Access' : 'Conversation Access'}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Sharing Mode */}
-          <div>
-            <label className="mb-2 block text-sm font-medium">Who has access</label>
-            <div className="space-y-2">
-              {SHARING_MODE_OPTIONS.map((option) => {
-                const Icon = option.icon;
-                const isActive = sharingMode === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    onClick={() => handleSharingModeChange(option.value)}
-                    disabled={loading}
-                    className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
-                      isActive
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-muted/50'
-                    }`}
-                  >
-                    <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">{option.label}</div>
-                      <div className="text-xs text-muted-foreground">{option.description}</div>
-                    </div>
-                    {isActive && <Check className="h-4 w-4 text-primary" />}
-                  </button>
-                );
-              })}
+          {/* Channel mode: Radio selection for access type */}
+          {mode === 'channel' && canManage && (
+            <div>
+              <label className="mb-2 block text-sm font-medium">Who has access</label>
+              <div className="space-y-2">
+                {CHANNEL_MODE_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const isActive = channelMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => handleChannelModeChange(option.value)}
+                      disabled={loading}
+                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                        isActive
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      <Icon
+                        className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium">{option.label}</div>
+                        <div className="text-xs text-muted-foreground">{option.description}</div>
+                      </div>
+                      {isActive && <Check className="h-4 w-4 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* User access list (for specific_users mode) */}
-          {sharingMode === 'specific_users' && (
-            <>
-              <Separator />
+          {/* Channel mode: Default level for all_members */}
+          {mode === 'channel' && channelMode === 'all_members' && (
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <div className="text-sm font-medium">Default permission level</div>
+                <div className="text-xs text-muted-foreground">
+                  Applies to all team members
+                </div>
+              </div>
+              {canManage ? (
+                <PermissionLevelSelect
+                  value={defaultLevel || 'view'}
+                  onChange={handleDefaultLevelChange}
+                  showNoAccess={false}
+                  size="sm"
+                />
+              ) : (
+                <Badge variant="outline" className="text-xs capitalize">
+                  {defaultLevel || 'view'}
+                </Badge>
+              )}
+            </div>
+          )}
 
-              {/* Grant to all option (for conversations) */}
-              {showGrantToAll && (
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="text-sm font-medium">All team members</div>
-                    <div className="text-xs text-muted-foreground">
-                      {hasAllAccess
-                        ? 'Everyone with channel access can see this'
-                        : 'Grant access to everyone with channel access'}
+          {/* Conversation mode: Inherited channel level */}
+          {mode === 'conversation' && defaultLevel && (
+            <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Inherits from channel</span>
+              </div>
+              <Badge variant="secondary" className="text-xs capitalize">
+                {defaultLevel}
+              </Badge>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Permission list */}
+          <div className="max-h-[300px] space-y-1.5 overflow-y-auto">
+            {/* Owner row (channel mode) */}
+            {mode === 'channel' && ownerMember && (
+              <div className="flex items-center gap-3 rounded-lg border p-2.5">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={ownerMember.avatar_url || undefined} />
+                  <AvatarFallback>{getInitials(ownerMember.full_name)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{ownerMember.full_name}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {ownerMember.email}
+                  </div>
+                </div>
+                <Badge variant="default" className="text-xs">
+                  Owner
+                </Badge>
+              </div>
+            )}
+
+            {/* Inherited permissions (conversation mode) */}
+            {mode === 'conversation' &&
+              inheritedPermissions?.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center gap-3 rounded-lg border bg-muted/20 p-2.5"
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={entry.user?.avatar_url || undefined} />
+                    <AvatarFallback>
+                      {entry.user ? getInitials(entry.user.full_name) : '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm">
+                      {entry.user?.full_name || 'All members'}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {entry.user?.email || 'Default channel access'}
                     </div>
                   </div>
-                  {hasAllAccess ? (
+                  <Badge variant="secondary" className="text-xs">
+                    from channel
+                  </Badge>
+                  <Badge variant="outline" className="text-xs capitalize">
+                    {entry.access_level}
+                  </Badge>
+                </div>
+              ))}
+
+            {/* Active permission entries */}
+            {permissions.map((entry) => (
+              <div key={entry.id} className="flex items-center gap-3 rounded-lg border p-2.5">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={entry.user?.avatar_url || undefined} />
+                  <AvatarFallback>
+                    {entry.user ? getInitials(entry.user.full_name) : '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-sm">
+                      {entry.user?.full_name || (entry.user_id === null ? 'All members' : 'Unknown')}
+                    </span>
+                    {mode === 'conversation' && (
+                      <Badge variant="outline" className="text-xs">
+                        override
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {entry.user?.email || (entry.user_id === null ? 'Team-wide override' : '')}
+                  </div>
+                </div>
+                {canManage ? (
+                  <div className="flex items-center gap-1">
+                    <PermissionLevelSelect
+                      value={entry.access_level}
+                      onChange={(level) =>
+                        handleLevelChange(entry.user_id || 'all', level)
+                      }
+                      showNoAccess={mode === 'conversation'}
+                      size="sm"
+                    />
                     <Button
                       variant="ghost"
-                      size="sm"
-                      onClick={handleRevokeFromAll}
-                      disabled={loading}
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleRevoke(entry.user_id || 'all')}
                     >
-                      <Trash2 className="mr-1 h-3 w-3" />
-                      Revoke
+                      <X className="h-3.5 w-3.5" />
                     </Button>
-                  ) : (
-                    <div className="flex gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGrantToAll('view')}
-                        disabled={loading}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGrantToAll('edit')}
-                        disabled={loading}
-                      >
-                        Edit
-                      </Button>
+                  </div>
+                ) : (
+                  <Badge variant="outline" className="text-xs capitalize">
+                    {entry.access_level}
+                  </Badge>
+                )}
+              </div>
+            ))}
+
+            {permissions.length === 0 &&
+              (!inheritedPermissions || inheritedPermissions.length === 0) &&
+              !(mode === 'channel' && ownerMember) && (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  No permissions configured
+                </div>
+              )}
+          </div>
+
+          {/* Add user */}
+          {canManage && (
+            <Popover open={addPopoverOpen} onOpenChange={setAddPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full">
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                  {mode === 'conversation' ? 'Add override' : 'Add user'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[300px] p-2" align="start">
+                <Input
+                  placeholder="Search team members..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="mb-2"
+                />
+                <div className="max-h-[200px] space-y-1 overflow-y-auto">
+                  {availableMembers.length === 0 ? (
+                    <div className="py-3 text-center text-sm text-muted-foreground">
+                      {searchQuery ? 'No matching members' : 'All members have access'}
                     </div>
+                  ) : (
+                    availableMembers.map((member) => (
+                      <button
+                        key={member.user_id}
+                        className="flex w-full items-center gap-2.5 rounded-md p-2 text-left hover:bg-muted"
+                        onClick={() => handleGrant(member.user_id, 'view')}
+                      >
+                        <Avatar className="h-7 w-7">
+                          <AvatarImage src={member.avatar_url || undefined} />
+                          <AvatarFallback className="text-xs">
+                            {getInitials(member.full_name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm">{member.full_name}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {member.email}
+                          </div>
+                        </div>
+                      </button>
+                    ))
                   )}
                 </div>
-              )}
-
-              {/* Current access entries */}
-              {accessList.length > 0 && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">People with access</label>
-                  {accessList.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between rounded-lg border p-2"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm">
-                          {entry.user?.full_name || 'Unknown'}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {entry.user?.email}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {entry.access_level === 'edit' ? 'Can edit' : 'Can view'}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => handleRevokeAccess(entry.user_id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add new user */}
-              {availableMembers.length > 0 && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Add people</label>
-                  {availableMembers.map((member) => (
-                    <div
-                      key={member.user_id}
-                      className="flex items-center justify-between rounded-lg border p-2 mb-1"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm">{member.full_name}</div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {member.email}
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        {addingUserId === member.user_id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => handleGrantAccess(member.user_id, 'view')}
-                            >
-                              View
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => handleGrantAccess(member.user_id, 'edit')}
-                            >
-                              Edit
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
+              </PopoverContent>
+            </Popover>
           )}
         </div>
       </DialogContent>
