@@ -3,7 +3,7 @@ import { formatRelativeDate, formatSnoozeUntil } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Camera, Clock, FileText, Mic, Pin, Play, Star, Sticker } from 'lucide-react';
+import { Camera, Clock, FileText, Hand, Mic, Pin, Play, Star, Sticker } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
@@ -186,8 +186,17 @@ export default function ConversationItem({
           )}
         </div>
 
-        {(conversation.labels.length > 0 || statusLabel || isSnoozed) && (
+        {(conversation.human_takeover || conversation.labels.length > 0 || statusLabel || isSnoozed) && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
+            {conversation.human_takeover && (
+              <Badge
+                variant="secondary"
+                className="h-4 px-1.5 text-[10px] gap-0.5 bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400"
+              >
+                <Hand className="h-2.5 w-2.5" />
+                Needs human
+              </Badge>
+            )}
             {isSnoozed && (
               <Badge
                 variant="secondary"
