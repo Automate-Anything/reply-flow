@@ -20,4 +20,5 @@ After completing a phase, update its status here and in `MEMORY.md`.
 | Labels/Quick Replies Visibility | TODO | `plans/2026-03-15-labels-quick-replies-visibility.md` | Per-user/per-company visibility toggle for labels and canned responses | None |
 | Auto-Assign Conversations | TODO | `plans/2026-03-15-auto-assign-conversations.md` | Round-robin, least-busy, tag-based auto-assignment per channel | None |
 | Notifications + Assigned Tab | TODO | `plans/2026-03-15-notifications-and-assigned-tab.md` | In-app notifications, preferences, "Assigned to Me" inbox tab | None (but benefits from Auto-Assign being done first) |
-| Personal Hours & Availability | TODO | `plans/2026-03-15-personal-hours-availability.md` | User timezone, personal working hours, auto-availability, company/user holidays | None (but benefits from Auto-Assign being done first) |
+| Personal Hours & Availability | DONE | `plans/2026-03-15-personal-hours-availability.md` | User timezone, personal working hours, auto-availability, company/user holidays | None (but benefits from Auto-Assign being done first) |
+| Availability Features | TODO | `plans/2026-03-15-availability-features.md` | Channel auto-reply, AI schedule new modes (When Away, Outside Hours), team availability dashboard | Personal Hours & Availability |
