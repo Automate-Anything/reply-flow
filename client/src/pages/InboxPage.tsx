@@ -30,13 +30,11 @@ export default function InboxPage() {
   const pageReady = usePageReady();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Read tab from URL params (notification deep-link) for initial state
-  const initialTab = (() => {
+  const [activeTab, setActiveTab] = useState<InboxTab>(() => {
     const t = searchParams.get('tab');
     if (t === 'snoozed' || t === 'scheduled' || t === 'assigned') return t;
     return 'all';
-  })();
-  const [activeTab, setActiveTab] = useState<InboxTab>(initialTab);
+  });
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ConversationFilters>({});
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -130,8 +128,14 @@ export default function InboxPage() {
     const t = searchParams.get('tab');
     if (t === 'snoozed' || t === 'scheduled' || t === 'assigned') {
       setActiveTab(t);
+      // Clear tab param so it doesn't go stale if user manually switches tabs
+      if (!searchParams.has('conversation')) {
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('tab');
+        setSearchParams(newParams, { replace: true });
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
   // Select conversation from URL params (notification click deep-link)
   useEffect(() => {
