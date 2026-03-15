@@ -236,11 +236,13 @@ export default function ContactDetail({
             </DetailSection>
 
             {/* Personal / work */}
-            <DetailSection title="Personal">
-              <DetailField icon={<User className="h-3.5 w-3.5" />} label="First Name" value={contact.first_name} />
-              <DetailField icon={<User className="h-3.5 w-3.5" />} label="Last Name" value={contact.last_name} />
-              <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Company" value={contact.company} />
-            </DetailSection>
+            {(contact.first_name || contact.last_name || contact.company) && (
+              <DetailSection title="Personal">
+                <DetailField icon={<User className="h-3.5 w-3.5" />} label="First Name" value={contact.first_name} />
+                <DetailField icon={<User className="h-3.5 w-3.5" />} label="Last Name" value={contact.last_name} />
+                <DetailField icon={<Building2 className="h-3.5 w-3.5" />} label="Company" value={contact.company} />
+              </DetailSection>
+            )}
 
             {/* Tags */}
             {contact.tags.length > 0 && (
