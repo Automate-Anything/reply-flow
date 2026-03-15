@@ -37,10 +37,14 @@ function resolveMessageRouting(
   const normalizedTo = normalizeChatId(msg.to);
   const normalizedChat = normalizeChatId(msg.chat_id);
 
+  // from_me is the primary signal. Fallback: if msg.from matches our channel's phone,
+  // it's an outbound echo from a linked device. Previously this also checked
+  // normalizedTo === channelPhone which incorrectly marked inbound messages as outbound
+  // when Whapi populated the 'to' field.
   const isOutbound = msg.from_me === true || (
     channelPhone !== null &&
-    (normalizedFrom === channelPhone || normalizedTo === channelPhone) &&
-    [normalizedFrom, normalizedTo, normalizedChat].some((value) => value && value !== channelPhone)
+    normalizedFrom === channelPhone &&
+    [normalizedTo, normalizedChat].some((value) => value && value !== channelPhone)
   );
 
   const counterpartyId = isOutbound
@@ -234,9 +238,21 @@ export async function processIncomingMessage(
   }
 
   // 1. Find or create contact
+  console.log('[webhook] Contact resolution:', {
+    msgId: msg.id,
+    from: msg.from,
+    to: msg.to,
+    chat_id: msg.chat_id,
+    from_me: msg.from_me,
+    from_name: msg.from_name,
+    isOutbound,
+    resolvedPhone: phoneNumber,
+    channelPhone,
+  });
+
   const { data: existingContact } = await supabaseAdmin
     .from('contacts')
-    .select('id')
+    .select('id, phone_number, first_name, whatsapp_name')
     .eq('company_id', companyId)
     .eq('phone_number', phoneNumber)
     .eq('is_deleted', false)
@@ -248,14 +264,37 @@ export async function processIncomingMessage(
     contactId = existingContact.id;
     // Update whatsapp_name only from inbound messages — outbound from_name is our own channel name
     if (!isOutbound && msg.from_name) {
+      // Log name updates to detect mismatches
+      if (existingContact.whatsapp_name && existingContact.whatsapp_name !== msg.from_name) {
+        console.warn('[webhook] Contact name change detected:', {
+          contactId,
+          phone: existingContact.phone_number,
+          oldName: existingContact.whatsapp_name,
+          newName: msg.from_name,
+          msgFrom: msg.from,
+        });
+      }
       await supabaseAdmin
         .from('contacts')
         .update({ whatsapp_name: msg.from_name, updated_at: new Date().toISOString() })
         .eq('id', contactId);
     }
   } else {
+    // Check if auto-create contacts is enabled for this company
+    const { data: companySetting } = await supabaseAdmin
+      .from('companies')
+      .select('auto_create_contacts')
+      .eq('id', companyId)
+      .single();
+
+    if (companySetting?.auto_create_contacts === false) {
+      console.log('[webhook] Skipping contact auto-creation (disabled):', { phone: phoneNumber });
+      return;
+    }
+
     // For outbound-initiated contacts, don't use from_name (it's the channel's name, not the contact's)
     const contactName = isOutbound ? null : (msg.from_name || null);
+    console.log('[webhook] Auto-creating contact:', { phone: phoneNumber, name: contactName, isOutbound });
     const { data: newContact, error: contactError } = await supabaseAdmin
       .from('contacts')
       .insert({

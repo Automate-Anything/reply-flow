@@ -120,7 +120,7 @@ router.get('/', requirePermission('company_settings', 'view'), async (req, res, 
 router.put('/', requirePermission('company_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { name, slug, logo_url, timezone, default_language, business_hours, session_timeout_hours, business_type, business_description, auto_assign_mode } = req.body;
+    const { name, slug, logo_url, timezone, default_language, business_hours, session_timeout_hours, business_type, business_description, auto_assign_mode, auto_create_contacts } = req.body;
 
     const updates: Record<string, unknown> = {};
     if (name !== undefined) updates.name = name;
@@ -145,6 +145,9 @@ router.put('/', requirePermission('company_settings', 'edit'), async (req, res, 
         return;
       }
       updates.session_timeout_hours = hours;
+    }
+    if (auto_create_contacts !== undefined) {
+      updates.auto_create_contacts = Boolean(auto_create_contacts);
     }
 
     if (Object.keys(updates).length === 0) {

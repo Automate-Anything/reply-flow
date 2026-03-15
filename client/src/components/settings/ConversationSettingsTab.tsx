@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Clock, Loader2, Shuffle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Clock, Loader2, Shuffle, UserPlus } from 'lucide-react';
 import { PlanGate } from '@/components/auth/PlanGate';
 import AutoAssignSettings from './AutoAssignSettings';
 
@@ -16,15 +17,18 @@ export default function ConversationSettingsTab() {
 
   const [sessionTimeout, setSessionTimeout] = useState(24);
   const [savedTimeout, setSavedTimeout] = useState(24);
+  const [autoCreateContacts, setAutoCreateContacts] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAutoCreate, setSavingAutoCreate] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchTimeout = useCallback(async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const { data } = await api.get('/company');
       const hours = data.company.session_timeout_hours ?? 24;
       setSessionTimeout(hours);
       setSavedTimeout(hours);
+      setAutoCreateContacts(data.company.auto_create_contacts ?? true);
     } catch {
       // ignore — AutoAssignSettings handles its own loading
     } finally {
@@ -33,8 +37,21 @@ export default function ConversationSettingsTab() {
   }, []);
 
   useEffect(() => {
-    fetchTimeout();
-  }, [fetchTimeout]);
+    fetchSettings();
+  }, [fetchSettings]);
+
+  const handleToggleAutoCreate = async (checked: boolean) => {
+    setSavingAutoCreate(true);
+    try {
+      await api.put('/company', { auto_create_contacts: checked });
+      setAutoCreateContacts(checked);
+      toast.success(checked ? 'Auto-create contacts enabled' : 'Auto-create contacts disabled');
+    } catch {
+      toast.error('Failed to update setting');
+    } finally {
+      setSavingAutoCreate(false);
+    }
+  };
 
   const handleSaveTimeout = async () => {
     if (sessionTimeout < 1 || sessionTimeout > 720) {
@@ -111,6 +128,34 @@ export default function ConversationSettingsTab() {
               </PlanGate>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <UserPlus className="h-4 w-4" />
+            Auto-Create Contacts
+          </CardTitle>
+          <CardDescription>
+            Automatically create a contact record when a message is received from an unknown phone number.
+            When disabled, messages from unknown numbers will still appear in the inbox but no contact will be created.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="auto-create-contacts" className="text-sm">
+              {autoCreateContacts ? 'Enabled' : 'Disabled'}
+            </Label>
+            <PlanGate>
+              <Switch
+                id="auto-create-contacts"
+                checked={autoCreateContacts}
+                onCheckedChange={handleToggleAutoCreate}
+                disabled={!canEdit || loading || savingAutoCreate}
+              />
+            </PlanGate>
+          </div>
         </CardContent>
       </Card>
     </div>
