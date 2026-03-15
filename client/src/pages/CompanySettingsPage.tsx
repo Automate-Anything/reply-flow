@@ -95,7 +95,7 @@ export default function CompanySettingsPage() {
         setCustomColorInput(data.company.brand_color);
         setShowCustomInput(true);
       }
-} catch {
+    } catch {
       toast.error('Failed to load company settings');
     } finally {
       setLoading(false);
