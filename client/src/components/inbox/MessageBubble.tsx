@@ -191,30 +191,95 @@ function generateWaveformBars(seed: string, count: number): number[] {
   return bars;
 }
 
+// ── Real waveform extraction via Web Audio API ───────────────────────────────
+const waveformCache = new Map<string, number[]>();
+let sharedAudioCtx: AudioContext | null = null;
+
+async function extractWaveform(url: string, buckets: number): Promise<number[]> {
+  const cached = waveformCache.get(url);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    if (!sharedAudioCtx) sharedAudioCtx = new AudioContext();
+    const audioBuffer = await sharedAudioCtx.decodeAudioData(arrayBuffer);
+
+    // Use the first channel's raw PCM samples
+    const raw = audioBuffer.getChannelData(0);
+    const bucketSize = Math.floor(raw.length / buckets);
+    const bars: number[] = [];
+
+    for (let i = 0; i < buckets; i++) {
+      const start = i * bucketSize;
+      const end = Math.min(start + bucketSize, raw.length);
+      let sum = 0;
+      for (let j = start; j < end; j++) {
+        sum += raw[j] * raw[j];
+      }
+      // RMS amplitude for this bucket
+      bars.push(Math.sqrt(sum / (end - start)));
+    }
+
+    // Normalize to 0..1 range with a minimum floor
+    const max = Math.max(...bars, 0.001);
+    const normalized = bars.map(v => Math.max(0.12, v / max));
+    waveformCache.set(url, normalized);
+    return normalized;
+  } catch {
+    // If decoding fails, return empty to keep using the fallback
+    return [];
+  }
+}
+
+function useRealWaveform(src: string, buckets: number, fallback: number[]): number[] {
+  const [bars, setBars] = useState<number[]>(() => waveformCache.get(src) || fallback);
+
+  useEffect(() => {
+    let cancelled = false;
+    extractWaveform(src, buckets).then(result => {
+      if (!cancelled && result.length > 0) setBars(result);
+    });
+    return () => { cancelled = true; };
+  }, [src, buckets]);
+
+  return bars;
+}
+
 function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutbound: boolean; timeSlot?: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const bars = useRef<number[]>(generateWaveformBars(src, 32));
+  const fakeBars = useRef<number[]>(generateWaveformBars(src, 32));
+  const bars = useRealWaveform(src, 32, fakeBars.current);
+  const rafRef = useRef<number>(0);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const onLoaded = () => setDuration(audio.duration || 0);
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onEnded = () => { setPlaying(false); setCurrentTime(0); };
 
     audio.addEventListener('loadedmetadata', onLoaded);
-    audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('ended', onEnded);
     return () => {
       audio.removeEventListener('loadedmetadata', onLoaded);
-      audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
     };
   }, []);
+
+  // Use requestAnimationFrame for smooth ~60fps progress updates while playing
+  useEffect(() => {
+    if (!playing) { cancelAnimationFrame(rafRef.current); return; }
+    const tick = () => {
+      if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [playing]);
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -267,17 +332,27 @@ function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutboun
           onClick={seek}
         >
           {bars.current.map((height, i) => {
-            const isPlayed = (i / bars.current.length) * 100 < progress;
+            const barStart = (i / bars.current.length) * 100;
+            const barEnd = ((i + 1) / bars.current.length) * 100;
+            const playedColor = isOutbound ? 'rgba(255,255,255,0.8)' : 'color-mix(in srgb, var(--color-primary) 70%, transparent)';
+            const unplayedColor = isOutbound ? 'rgba(255,255,255,0.25)' : 'color-mix(in srgb, var(--color-muted-foreground) 25%, transparent)';
+            const isFullyPlayed = barEnd <= progress;
+            const isPartial = barStart < progress && progress < barEnd;
+            const fillPct = isPartial ? ((progress - barStart) / (barEnd - barStart)) * 100 : 0;
+
             return (
               <div
                 key={i}
-                className={cn(
-                  'flex-1 rounded-full transition-colors duration-75',
-                  isPlayed
-                    ? isOutbound ? 'bg-white/80' : 'bg-primary/70'
-                    : isOutbound ? 'bg-white/25' : 'bg-muted-foreground/25'
-                )}
-                style={{ height: `${Math.max(15, Math.round(height * 100))}%`, minHeight: 3 }}
+                className="flex-1 rounded-full"
+                style={{
+                  height: `${Math.max(15, Math.round(height * 100))}%`,
+                  minHeight: 3,
+                  background: isFullyPlayed
+                    ? playedColor
+                    : isPartial
+                      ? `linear-gradient(to right, ${playedColor} ${fillPct}%, ${unplayedColor} ${fillPct}%)`
+                      : unplayedColor,
+                }}
               />
             );
           })}
