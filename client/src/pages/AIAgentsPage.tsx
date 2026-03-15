@@ -72,18 +72,27 @@ export default function AIAgentsPage() {
                 <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setWizardOpen(true)}>
-                <Wand2 className="mr-2 h-4 w-4" />
-                Quick setup
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem onClick={() => setWizardOpen(true)} className="flex flex-col items-start gap-0.5 py-2.5">
+                <span className="flex items-center font-medium">
+                  <Wand2 className="mr-2 h-4 w-4" />
+                  Quick setup
+                </span>
+                <span className="ml-6 text-xs text-muted-foreground">Answer a few questions and let AI build your agent</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleCreate}>
-                <PenLine className="mr-2 h-4 w-4" />
-                Create from scratch
+              <DropdownMenuItem onClick={handleCreate} className="flex flex-col items-start gap-0.5 py-2.5">
+                <span className="flex items-center font-medium">
+                  <PenLine className="mr-2 h-4 w-4" />
+                  Create from scratch
+                </span>
+                <span className="ml-6 text-xs text-muted-foreground">Manually configure every detail yourself</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setLogsDialogOpen(true)}>
-                <FileText className="mr-2 h-4 w-4" />
-                Create from conversations
+              <DropdownMenuItem onClick={() => setLogsDialogOpen(true)} className="flex flex-col items-start gap-0.5 py-2.5">
+                <span className="flex items-center font-medium">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Create from conversations
+                </span>
+                <span className="ml-6 text-xs text-muted-foreground">Generate an agent based on your past chat history</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
