@@ -1,0 +1,184 @@
+<h2>Conversation Access — Override Styling</h2>
+<p class="subtitle">How should inherited vs. overridden permissions look?</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>A — Subtle Labels</h3>
+      <p>Inherited entries show a small "from channel" badge. Overrides show "override" badge in accent color.</p>
+      <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin-top:12px;font-family:system-ui;font-size:13px;">
+        <div style="color:#8a8a9a;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Access (inherited from channel)</div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a3e;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#2a4a3e;display:flex;align-items:center;justify-content:center;color:#6fcf97;font-size:12px;">All</div>
+            <div>
+              <div style="color:#e0e0e0;">All team members</div>
+              <div style="color:#6a6a7a;font-size:11px;">Reply</div>
+            </div>
+          </div>
+          <span style="background:#2a2a3e;color:#6a6a7a;padding:2px 8px;border-radius:4px;font-size:10px;">from channel</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a3e;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#2a3a4e;display:flex;align-items:center;justify-content:center;color:#6fb1cf;font-size:12px;">AK</div>
+            <div>
+              <div style="color:#e0e0e0;">Adam King</div>
+              <div style="color:#6a6a7a;font-size:11px;">Manage</div>
+            </div>
+          </div>
+          <span style="background:#2a2a3e;color:#6a6a7a;padding:2px 8px;border-radius:4px;font-size:10px;">from channel</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a3e;background:rgba(79,172,254,0.05);margin:0 -16px;padding-left:16px;padding-right:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#3a2a4e;display:flex;align-items:center;justify-content:center;color:#b06fcf;font-size:12px;">CL</div>
+            <div>
+              <div style="color:#e0e0e0;">Carol Lee</div>
+              <div style="color:#4facfe;font-size:11px;">Manage</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1a2a3e;color:#4facfe;padding:2px 8px;border-radius:4px;font-size:10px;">override</span>
+            <span style="color:#6a6a7a;cursor:pointer;font-size:14px;">✕</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;background:rgba(79,172,254,0.05);margin:0 -16px;padding-left:16px;padding-right:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#4a3a2e;display:flex;align-items:center;justify-content:center;color:#cf9f6f;font-size:12px;">DS</div>
+            <div>
+              <div style="color:#e0e0e0;">Dan Smith</div>
+              <div style="color:#e06060;font-size:11px;">No Access</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="background:#1a2a3e;color:#4facfe;padding:2px 8px;border-radius:4px;font-size:10px;">override</span>
+            <span style="color:#6a6a7a;cursor:pointer;font-size:14px;">✕</span>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #2a2a3e;">
+          <span style="color:#4facfe;font-size:12px;cursor:pointer;">+ Add override</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>B — Grouped Sections</h3>
+      <p>Inherited permissions in one section, overrides in a separate section below with a divider.</p>
+      <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin-top:12px;font-family:system-ui;font-size:13px;">
+        <div style="color:#8a8a9a;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">From channel</div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a3e;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#2a4a3e;display:flex;align-items:center;justify-content:center;color:#6fcf97;font-size:12px;">All</div>
+            <div>
+              <div style="color:#e0e0e0;">All team members</div>
+              <div style="color:#6a6a7a;font-size:11px;">Reply</div>
+            </div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">inherited</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#2a3a4e;display:flex;align-items:center;justify-content:center;color:#6fb1cf;font-size:12px;">AK</div>
+            <div>
+              <div style="color:#e0e0e0;">Adam King</div>
+              <div style="color:#6a6a7a;font-size:11px;">Manage</div>
+            </div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">inherited</span>
+        </div>
+
+        <div style="margin:16px 0;border-top:2px solid #3a3a4e;position:relative;">
+          <span style="position:absolute;top:-9px;left:0;background:#1a1a2e;padding-right:8px;color:#4facfe;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Overrides</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #2a2a3e;margin-top:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#3a2a4e;display:flex;align-items:center;justify-content:center;color:#b06fcf;font-size:12px;">CL</div>
+            <div>
+              <div style="color:#e0e0e0;">Carol Lee</div>
+              <div style="color:#4facfe;font-size:11px;">Manage <span style="color:#6a6a7a;">— was Reply from channel</span></div>
+            </div>
+          </div>
+          <span style="color:#6a6a7a;cursor:pointer;font-size:14px;">✕</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#4a3a2e;display:flex;align-items:center;justify-content:center;color:#cf9f6f;font-size:12px;">DS</div>
+            <div>
+              <div style="color:#e0e0e0;">Dan Smith</div>
+              <div style="color:#e06060;font-size:11px;">No Access <span style="color:#6a6a7a;">— was Reply from channel</span></div>
+            </div>
+          </div>
+          <span style="color:#6a6a7a;cursor:pointer;font-size:14px;">✕</span>
+        </div>
+
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #2a2a3e;">
+          <span style="color:#4facfe;font-size:12px;cursor:pointer;">+ Add override</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>C — Inline with Color Coding</h3>
+      <p>Single flat list. Inherited entries are dimmed/muted. Overrides have a colored left border and are fully bright.</p>
+      <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin-top:12px;font-family:system-ui;font-size:13px;">
+        <div style="color:#8a8a9a;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Conversation access</div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-left:3px solid transparent;opacity:0.6;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#2a4a3e;display:flex;align-items:center;justify-content:center;color:#6fcf97;font-size:12px;">All</div>
+            <div>
+              <div style="color:#e0e0e0;">All team members — Reply</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-left:3px solid transparent;opacity:0.6;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#2a3a4e;display:flex;align-items:center;justify-content:center;color:#6fb1cf;font-size:12px;">AK</div>
+            <div>
+              <div style="color:#e0e0e0;">Adam King — Manage</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-left:3px solid #4facfe;background:rgba(79,172,254,0.05);border-radius:0 6px 6px 0;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#3a2a4e;display:flex;align-items:center;justify-content:center;color:#b06fcf;font-size:12px;">CL</div>
+            <div>
+              <div style="color:#e0e0e0;">Carol Lee — <span style="color:#4facfe;">Manage</span></div>
+              <div style="color:#6a6a7a;font-size:11px;">Channel: Reply → Override: Manage</div>
+            </div>
+          </div>
+          <span style="color:#6a6a7a;cursor:pointer;font-size:14px;">✕</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-left:3px solid #e06060;background:rgba(224,96,96,0.05);border-radius:0 6px 6px 0;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#4a3a2e;display:flex;align-items:center;justify-content:center;color:#cf9f6f;font-size:12px;">DS</div>
+            <div>
+              <div style="color:#e0e0e0;">Dan Smith — <span style="color:#e06060;">No Access</span></div>
+              <div style="color:#6a6a7a;font-size:11px;">Channel: Reply → Override: No Access</div>
+            </div>
+          </div>
+          <span style="color:#6a6a7a;cursor:pointer;font-size:14px;">✕</span>
+        </div>
+
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #2a2a3e;">
+          <span style="color:#4facfe;font-size:12px;cursor:pointer;">+ Add override</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

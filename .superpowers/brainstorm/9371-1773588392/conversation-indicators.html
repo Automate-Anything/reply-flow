@@ -1,0 +1,145 @@
+<h2>Conversation Override Indicators</h2>
+<p class="subtitle">How should override types appear in the conversation list? Hover over each to see the tooltip.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>A — Lock & Unlock Icons</h3>
+      <p>🔒 for restricted, 🔓 for expanded access. Simple and universally understood.</p>
+      <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin-top:12px;font-family:system-ui;font-size:13px;">
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #2a2a3e;position:relative;" title="Custom access: 2 people have additional permissions beyond channel defaults">
+          <div style="width:40px;height:40px;border-radius:50%;background:#2a4a3e;display:flex;align-items:center;justify-content:center;color:#6fcf97;font-size:14px;">JD</div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-size:14px;">John Doe</div>
+            <div style="color:#6a6a7a;font-size:12px;">Hey, can you send me the invoice?</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;position:relative;">
+            <div style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:#4facfe;font-size:13px;cursor:help;" title="Expanded: 2 people have extra permissions">🔓</div>
+            <span style="color:#6a6a7a;font-size:11px;">3:42 PM</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #2a2a3e;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#3a2a4e;display:flex;align-items:center;justify-content:center;color:#b06fcf;font-size:14px;">AS</div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-size:14px;">Amy Smith</div>
+            <div style="color:#6a6a7a;font-size:12px;">Thanks for the update!</div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">2:15 PM</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;" title="Custom access: 1 person is restricted from this conversation">
+          <div style="width:40px;height:40px;border-radius:50%;background:#4a3a2e;display:flex;align-items:center;justify-content:center;color:#cf9f6f;font-size:14px;">BJ</div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-size:14px;">Bob Jones</div>
+            <div style="color:#6a6a7a;font-size:12px;">Let me check with the team</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <div style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:#e06060;font-size:13px;cursor:help;" title="Restricted: 1 person has reduced or no access">🔒</div>
+            <span style="color:#6a6a7a;font-size:11px;">1:30 PM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>B — Shield with Arrow Direction</h3>
+      <p>Shield with ↑ for expanded, ↓ for restricted. More specific than lock/unlock.</p>
+      <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin-top:12px;font-family:system-ui;font-size:13px;">
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #2a2a3e;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#2a4a3e;display:flex;align-items:center;justify-content:center;color:#6fcf97;font-size:14px;">JD</div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-size:14px;">John Doe</div>
+            <div style="color:#6a6a7a;font-size:12px;">Hey, can you send me the invoice?</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#1a2a3e;border-radius:4px;color:#4facfe;font-size:11px;cursor:help;font-weight:bold;" title="Expanded access: 2 people have additional permissions">🛡↑</div>
+            <span style="color:#6a6a7a;font-size:11px;">3:42 PM</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #2a2a3e;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#3a2a4e;display:flex;align-items:center;justify-content:center;color:#b06fcf;font-size:14px;">AS</div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-size:14px;">Amy Smith</div>
+            <div style="color:#6a6a7a;font-size:12px;">Thanks for the update!</div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">2:15 PM</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#4a3a2e;display:flex;align-items:center;justify-content:center;color:#cf9f6f;font-size:14px;">BJ</div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-size:14px;">Bob Jones</div>
+            <div style="color:#6a6a7a;font-size:12px;">Let me check with the team</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#2a1a1e;border-radius:4px;color:#e06060;font-size:11px;cursor:help;font-weight:bold;" title="Restricted access: 1 person has reduced or no access">🛡↓</div>
+            <span style="color:#6a6a7a;font-size:11px;">1:30 PM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>C — Colored Dot with Both Indicators</h3>
+      <p>Small colored dot: blue for expanded, orange/red for restricted, both if mixed. Minimal visual footprint.</p>
+      <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin-top:12px;font-family:system-ui;font-size:13px;">
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #2a2a3e;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#2a4a3e;display:flex;align-items:center;justify-content:center;color:#6fcf97;font-size:14px;">JD</div>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:6px;color:#e0e0e0;font-size:14px;">
+              John Doe
+              <div style="width:7px;height:7px;border-radius:50%;background:#4facfe;cursor:help;" title="Expanded: 2 people have extra permissions beyond channel defaults"></div>
+            </div>
+            <div style="color:#6a6a7a;font-size:12px;">Hey, can you send me the invoice?</div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">3:42 PM</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #2a2a3e;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#3a2a4e;display:flex;align-items:center;justify-content:center;color:#b06fcf;font-size:14px;">AS</div>
+          <div style="flex:1;">
+            <div style="color:#e0e0e0;font-size:14px;">Amy Smith</div>
+            <div style="color:#6a6a7a;font-size:12px;">Thanks for the update!</div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">2:15 PM</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #2a2a3e;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#4a3a2e;display:flex;align-items:center;justify-content:center;color:#cf9f6f;font-size:14px;">BJ</div>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:6px;color:#e0e0e0;font-size:14px;">
+              Bob Jones
+              <div style="width:7px;height:7px;border-radius:50%;background:#e06060;cursor:help;" title="Restricted: 1 person has reduced or no access"></div>
+            </div>
+            <div style="color:#6a6a7a;font-size:12px;">Let me check with the team</div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">1:30 PM</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:#2a3a4e;display:flex;align-items:center;justify-content:center;color:#6fb1cf;font-size:14px;">MK</div>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:6px;color:#e0e0e0;font-size:14px;">
+              Mike Kim
+              <div style="display:flex;gap:2px;cursor:help;" title="Mixed: 1 person has extra permissions, 2 restricted">
+                <div style="width:7px;height:7px;border-radius:50%;background:#4facfe;"></div>
+                <div style="width:7px;height:7px;border-radius:50%;background:#e06060;"></div>
+              </div>
+            </div>
+            <div style="color:#6a6a7a;font-size:12px;">We should schedule a follow-up</div>
+          </div>
+          <span style="color:#6a6a7a;font-size:11px;">12:45 PM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
