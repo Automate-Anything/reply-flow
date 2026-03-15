@@ -70,7 +70,7 @@ export interface BusinessHours {
   sunday: DaySchedule;
 }
 
-type ScheduleMode = 'always_on' | 'business_hours' | 'custom';
+type ScheduleMode = 'always_on' | 'business_hours' | 'custom' | 'when_away' | 'outside_hours';
 
 export type ShouldAIRespondResult =
   | { action: 'respond'; context: AIContext }
@@ -386,6 +386,55 @@ export async function shouldAIRespond(
         }
         return { action: 'skip' };
       }
+    }
+
+    // when_away mode: AI responds only when ALL team members are Away
+    if (scheduleMode === 'when_away') {
+      const { data: rule } = await supabaseAdmin
+        .from('auto_assign_rules')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('channel_id', session.channel_id)
+        .eq('is_active', true)
+        .single();
+
+      const { data: companyRule } = !rule ? await supabaseAdmin
+        .from('auto_assign_rules')
+        .select('id')
+        .eq('company_id', companyId)
+        .is('channel_id', null)
+        .eq('is_active', true)
+        .single() : { data: null };
+
+      const ruleId = rule?.id || companyRule?.id;
+
+      if (ruleId) {
+        const { data: members } = await supabaseAdmin
+          .from('auto_assign_members')
+          .select('is_available')
+          .eq('rule_id', ruleId);
+
+        if (members && members.length > 0) {
+          const someoneAvailable = members.some(m => m.is_available);
+          if (someoneAvailable) {
+            return { action: 'skip' };
+          }
+        }
+      }
+      // Everyone is Away (or no rule/members) → AI responds, fall through
+    }
+
+    // outside_hours mode: AI responds only OUTSIDE business hours (inverse of business_hours)
+    if (scheduleMode === 'outside_hours') {
+      const bhSchedule = company?.business_hours as BusinessHours | null;
+      if (bhSchedule) {
+        if (isWithinSchedule(bhSchedule, timezone)) {
+          // WITHIN business hours → humans handle, AI skips
+          return { action: 'skip' };
+        }
+        // OUTSIDE business hours → AI responds, fall through
+      }
+      // No business hours configured → AI responds always, fall through
     }
 
     let schedule: BusinessHours | null = null;
