@@ -3,6 +3,29 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
+function getStartOfNextDayUTC(tz: string): string {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now);
+
+  const year = parseInt(parts.find(p => p.type === 'year')!.value);
+  const month = parseInt(parts.find(p => p.type === 'month')!.value);
+  const day = parseInt(parts.find(p => p.type === 'day')!.value);
+  const localHour = parseInt(parts.find(p => p.type === 'hour')!.value);
+
+  // Compute approximate UTC offset
+  const utcHour = now.getUTCHours();
+  const offsetHours = localHour - utcHour;
+
+  // Tomorrow midnight in local TZ, converted to UTC
+  const tomorrowMidnightUTC = new Date(Date.UTC(year, month - 1, day + 1, 0, 0, 0));
+  tomorrowMidnightUTC.setUTCHours(tomorrowMidnightUTC.getUTCHours() - offsetHours);
+  return tomorrowMidnightUTC.toISOString();
+}
+
 const router = Router();
 router.use(requireAuth);
 
@@ -179,6 +202,36 @@ router.patch('/my-availability', async (req, res, next) => {
       .from('auto_assign_members')
       .update({ is_available })
       .eq('user_id', req.userId);
+
+    // Fetch user's timezone and company_id
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('timezone, company_id')
+      .eq('id', req.userId)
+      .single();
+
+    let effectiveTz = 'UTC';
+    if (userData) {
+      if (userData.timezone) {
+        effectiveTz = userData.timezone;
+      } else if (userData.company_id) {
+        const { data: companyData } = await supabaseAdmin
+          .from('companies')
+          .select('timezone')
+          .eq('id', userData.company_id)
+          .single();
+        if (companyData?.timezone) {
+          effectiveTz = companyData.timezone;
+        }
+      }
+    }
+
+    const overrideUntil = getStartOfNextDayUTC(effectiveTz);
+
+    await supabaseAdmin
+      .from('users')
+      .update({ availability_override_until: overrideUntil })
+      .eq('id', req.userId);
 
     res.json({ is_available });
   } catch (err) {
