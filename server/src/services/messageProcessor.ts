@@ -342,7 +342,7 @@ export async function processIncomingMessage(
           type: 'assignment',
           title: 'New conversation assigned to you',
           body: `From ${msg.from_name || phoneNumber}`,
-          data: { sessionId },
+          data: { conversation_id: sessionId },
         }).catch((err) => console.error('Auto-assign notification error:', err));
       }
     } catch (err) {
@@ -561,7 +561,7 @@ export async function processIncomingMessage(
         type: 'message_assigned',
         title: `New message from ${msg.from_name || phoneNumber}`,
         body: messageBody.slice(0, 120),
-        data: { sessionId },
+        data: { conversation_id: sessionId },
       }).catch((err) => console.error('Message notification error:', err));
     }
   }
