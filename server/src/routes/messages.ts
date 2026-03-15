@@ -114,6 +114,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
     if (msgError) throw msgError;
 
     // Update session — only update last_message if this is the newest message
+    // Also mark conversation as read since the user is actively sending a message
     await supabaseAdmin
       .from('chat_sessions')
       .update({
@@ -123,9 +124,19 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
         last_message_sender: 'human',
         updated_at: now,
         draft_message: null,
+        marked_unread: false,
+        last_read_at: now,
       })
       .eq('id', sessionId)
       .or(`last_message_at.is.null,last_message_at.lte.${now}`);
+
+    // Mark all inbound messages in this session as read
+    await supabaseAdmin
+      .from('chat_messages')
+      .update({ read: true })
+      .eq('session_id', sessionId)
+      .eq('direction', 'inbound')
+      .eq('read', false);
 
     res.json({ message });
   } catch (err) {
