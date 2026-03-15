@@ -76,23 +76,23 @@ export default function AIAgentsPage() {
               <DropdownMenuItem onClick={() => setWizardOpen(true)} className="flex flex-col items-start gap-0.5 py-2.5">
                 <span className="flex items-center font-medium">
                   <Wand2 className="mr-2 h-4 w-4" />
-                  Quick setup
+                  Guided setup
                 </span>
-                <span className="ml-6 text-xs text-muted-foreground">Answer a few questions and let AI build your agent</span>
+                <span className="ml-6 text-xs text-muted-foreground">Answer a few questions and AI builds your agent for you</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleCreate} className="flex flex-col items-start gap-0.5 py-2.5">
                 <span className="flex items-center font-medium">
                   <PenLine className="mr-2 h-4 w-4" />
-                  Create from scratch
+                  Manual setup
                 </span>
-                <span className="ml-6 text-xs text-muted-foreground">Manually configure every detail yourself</span>
+                <span className="ml-6 text-xs text-muted-foreground">Build your agent from scratch with full control over every scenario</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setLogsDialogOpen(true)} className="flex flex-col items-start gap-0.5 py-2.5">
                 <span className="flex items-center font-medium">
                   <FileText className="mr-2 h-4 w-4" />
-                  Create from conversations
+                  Import from conversations
                 </span>
-                <span className="ml-6 text-xs text-muted-foreground">Generate an agent based on your past chat history</span>
+                <span className="ml-6 text-xs text-muted-foreground">Upload past chats and AI learns your style and responses</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -138,15 +138,15 @@ export default function AIAgentsPage() {
               <div className="mt-2 flex flex-wrap gap-2 justify-center">
                 <Button size="sm" onClick={() => setWizardOpen(true)} disabled={atLimit}>
                   <Wand2 className="mr-1.5 h-4 w-4" />
-                  Quick setup
+                  Guided setup
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleCreate} disabled={atLimit}>
                   <PenLine className="mr-1.5 h-4 w-4" />
-                  Create from scratch
+                  Manual setup
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setLogsDialogOpen(true)} disabled={atLimit}>
                   <FileText className="mr-1.5 h-4 w-4" />
-                  Create from conversations
+                  Import from conversations
                 </Button>
               </div>
             </PlanGate>

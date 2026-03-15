@@ -27,7 +27,7 @@ export default function SettingsPage() {
           <Settings className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Company Settings</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Manage your company, team, and billing.
           </p>

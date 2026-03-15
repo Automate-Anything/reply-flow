@@ -1,0 +1,146 @@
+<h2>Mobile Inbox: Message Thread Experience</h2>
+<p class="subtitle">When a user taps a conversation, how should the message thread work on mobile?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Full-Screen Takeover (WhatsApp-style)</h3>
+      <p>Tapping a conversation pushes a full-screen message view. Back button returns to the list. Contact info via a top-bar tap. Bottom tab bar hides while in a thread.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="background: #1a1a2e; border-radius: 12px; overflow: hidden; max-width: 320px;">
+          <!-- Status bar -->
+          <div style="display: flex; justify-content: space-between; padding: 6px 16px; font-size: 11px; color: #ccc;">
+            <span>9:41</span>
+            <span>📶 🔋</span>
+          </div>
+          <!-- Thread header -->
+          <div style="padding: 10px 12px; background: #16213e; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #2a2a4a;">
+            <div style="font-size: 18px; cursor: pointer;">←</div>
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+            <div style="flex: 1;">
+              <div style="font-size: 14px; font-weight: 600; color: #fff;">John Doe</div>
+              <div style="font-size: 11px; color: #4ecca3;">Online · WhatsApp</div>
+            </div>
+            <div style="display: flex; gap: 14px; font-size: 16px; color: #888;">
+              <span>📋</span>
+              <span>⋮</span>
+            </div>
+          </div>
+          <!-- Messages area -->
+          <div style="padding: 12px; min-height: 220px; display: flex; flex-direction: column; gap: 8px;">
+            <!-- Incoming message -->
+            <div style="align-self: flex-start; max-width: 75%;">
+              <div style="background: #16213e; border-radius: 12px 12px 12px 4px; padding: 10px 12px;">
+                <div style="font-size: 13px; color: #ddd;">Hey, I need help with my order #4521. It hasn't arrived yet.</div>
+                <div style="font-size: 10px; color: #666; text-align: right; margin-top: 4px;">10:23 AM</div>
+              </div>
+            </div>
+            <!-- Outgoing message -->
+            <div style="align-self: flex-end; max-width: 75%;">
+              <div style="background: #0f3460; border-radius: 12px 12px 4px 12px; padding: 10px 12px;">
+                <div style="font-size: 13px; color: #ddd;">Let me check that for you. One moment please!</div>
+                <div style="font-size: 10px; color: #888; text-align: right; margin-top: 4px;">10:24 AM ✓✓</div>
+              </div>
+            </div>
+            <!-- Incoming message -->
+            <div style="align-self: flex-start; max-width: 75%;">
+              <div style="background: #16213e; border-radius: 12px 12px 12px 4px; padding: 10px 12px;">
+                <div style="font-size: 13px; color: #ddd;">Thank you! 🙏</div>
+                <div style="font-size: 10px; color: #666; text-align: right; margin-top: 4px;">10:25 AM</div>
+              </div>
+            </div>
+          </div>
+          <!-- Message input - NO bottom tab bar -->
+          <div style="padding: 8px 12px 16px; background: #16213e; border-top: 1px solid #2a2a4a; display: flex; align-items: center; gap: 8px;">
+            <div style="font-size: 18px; color: #888;">📎</div>
+            <div style="flex: 1; background: #0d1b3e; border-radius: 20px; padding: 8px 14px; font-size: 13px; color: #666;">Type a message...</div>
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: #4ecca3; display: flex; align-items: center; justify-content: center; font-size: 16px;">➤</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Slide-Over Panel (Keep List Partially Visible)</h3>
+      <p>Thread slides in from the right covering ~90% of the screen. A sliver of the conversation list remains visible on the left. Swipe right to dismiss. Bottom tabs remain.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="background: #1a1a2e; border-radius: 12px; overflow: hidden; max-width: 320px; position: relative;">
+          <div style="display: flex; justify-content: space-between; padding: 6px 16px; font-size: 11px; color: #ccc;">
+            <span>9:41</span>
+            <span>📶 🔋</span>
+          </div>
+          <div style="display: flex; min-height: 300px;">
+            <!-- Sliver of list visible -->
+            <div style="width: 30px; background: #111; opacity: 0.5; border-right: 1px solid #2a2a4a;">
+              <div style="padding: 4px; margin-top: 50px;">
+                <div style="width: 22px; height: 22px; border-radius: 50%; background: #0f3460; margin-bottom: 6px;"></div>
+                <div style="width: 22px; height: 22px; border-radius: 50%; background: #0f3460; margin-bottom: 6px;"></div>
+                <div style="width: 22px; height: 22px; border-radius: 50%; background: #0f3460;"></div>
+              </div>
+            </div>
+            <!-- Thread panel -->
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <div style="padding: 10px 12px; background: #16213e; display: flex; align-items: center; gap: 8px;">
+                <div style="font-size: 16px;">←</div>
+                <div style="width: 30px; height: 30px; border-radius: 50%; background: #0f3460;"></div>
+                <div style="flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600; color: #fff;">John Doe</div>
+                  <div style="font-size: 10px; color: #4ecca3;">Online</div>
+                </div>
+                <span style="font-size: 14px; color: #888;">⋮</span>
+              </div>
+              <div style="flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+                <div style="align-self: flex-start; max-width: 80%;">
+                  <div style="background: #16213e; border-radius: 10px 10px 10px 4px; padding: 8px 10px; font-size: 12px; color: #ddd;">Hey, I need help with my order</div>
+                </div>
+                <div style="align-self: flex-end; max-width: 80%;">
+                  <div style="background: #0f3460; border-radius: 10px 10px 4px 10px; padding: 8px 10px; font-size: 12px; color: #ddd;">Let me check that for you!</div>
+                </div>
+              </div>
+              <div style="padding: 8px 10px; background: #16213e; border-top: 1px solid #2a2a4a; display: flex; gap: 6px; align-items: center;">
+                <div style="flex: 1; background: #0d1b3e; border-radius: 16px; padding: 6px 12px; font-size: 12px; color: #666;">Type a message...</div>
+                <div style="width: 30px; height: 30px; border-radius: 50%; background: #4ecca3; display: flex; align-items: center; justify-content: center; font-size: 14px;">➤</div>
+              </div>
+            </div>
+          </div>
+          <!-- Bottom tabs still visible -->
+          <div style="display: flex; justify-content: space-around; padding: 8px 0 12px; background: #16213e; border-top: 1px solid #2a2a4a;">
+            <div style="text-align: center;"><div style="font-size: 16px;">💬</div><div style="font-size: 8px; color: #4ecca3;">Inbox</div></div>
+            <div style="text-align: center;"><div style="font-size: 16px;">👥</div><div style="font-size: 8px; color: #888;">Contacts</div></div>
+            <div style="text-align: center;"><div style="font-size: 16px;">📊</div><div style="font-size: 8px; color: #888;">Dashboard</div></div>
+            <div style="text-align: center;"><div style="font-size: 16px;">⋯</div><div style="font-size: 8px; color: #888;">More</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>Key Consideration: Contact Panel & Actions</h3>
+  <p class="subtitle">Regardless of thread style, the contact panel (currently a right slide-over) and conversation actions (archive, assign, label, snooze) need mobile treatment too.</p>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Option A — Full Screen</h4>
+      <ul>
+        <li>Maximum space for typing and reading</li>
+        <li>Users already know this pattern (WhatsApp)</li>
+        <li>Clean, focused experience</li>
+        <li>Keyboard won't compete with bottom tabs</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Option B — Slide-Over</h4>
+      <ul>
+        <li>Quick-switch between conversations</li>
+        <li>Feels more "desktop-like"</li>
+        <li>Bottom tabs always accessible</li>
+        <li>But: less typing space, more complex gestures</li>
+      </ul>
+    </div>
+  </div>
+</div>

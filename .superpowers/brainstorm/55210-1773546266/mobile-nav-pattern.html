@@ -1,0 +1,231 @@
+<h2>Mobile Navigation Pattern</h2>
+<p class="subtitle">How should users navigate between sections (Inbox, Contacts, Dashboard, Settings) on mobile?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Bottom Tab Bar</h3>
+      <p>Fixed bottom navigation with 4-5 icons (like WhatsApp, Slack mobile). Always visible, one-tap access to main sections. Most natural for mobile users.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="background: #1a1a2e; border-radius: 12px; overflow: hidden; max-width: 320px;">
+          <!-- Status bar -->
+          <div style="display: flex; justify-content: space-between; padding: 6px 16px; font-size: 11px; color: #ccc;">
+            <span>9:41</span>
+            <span>📶 🔋</span>
+          </div>
+          <!-- Header -->
+          <div style="padding: 12px 16px; background: #16213e;">
+            <div style="font-size: 18px; font-weight: 700; color: #fff;">Inbox</div>
+            <div style="font-size: 12px; color: #888; margin-top: 2px;">12 conversations</div>
+          </div>
+          <!-- Content placeholder -->
+          <div style="padding: 8px;">
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">John Doe</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Hey, I need help with...</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">2m</div>
+            </div>
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Sarah Smith</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Thanks for the update!</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">15m</div>
+            </div>
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Mike Wilson</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Order #4521 status?</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">1h</div>
+            </div>
+          </div>
+          <!-- Bottom Tab Bar -->
+          <div style="display: flex; justify-content: space-around; padding: 10px 0 14px; background: #16213e; border-top: 1px solid #2a2a4a;">
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">💬</div>
+              <div style="font-size: 9px; color: #4ecca3; font-weight: 600; margin-top: 2px;">Inbox</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">👥</div>
+              <div style="font-size: 9px; color: #888; margin-top: 2px;">Contacts</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">📊</div>
+              <div style="font-size: 9px; color: #888; margin-top: 2px;">Dashboard</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">🤖</div>
+              <div style="font-size: 9px; color: #888; margin-top: 2px;">Agents</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">⚙️</div>
+              <div style="font-size: 9px; color: #888; margin-top: 2px;">More</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Keep Sidebar (Hamburger Menu)</h3>
+      <p>Keep the current overlay sidebar triggered by a hamburger icon. Familiar pattern, less screen real estate used, but requires 2 taps to navigate.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="background: #1a1a2e; border-radius: 12px; overflow: hidden; max-width: 320px;">
+          <div style="display: flex; justify-content: space-between; padding: 6px 16px; font-size: 11px; color: #ccc;">
+            <span>9:41</span>
+            <span>📶 🔋</span>
+          </div>
+          <!-- Header with hamburger -->
+          <div style="padding: 12px 16px; background: #16213e; display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 20px; cursor: pointer;">☰</div>
+            <div>
+              <div style="font-size: 18px; font-weight: 700; color: #fff;">Inbox</div>
+            </div>
+            <div style="margin-left: auto; display: flex; gap: 12px;">
+              <span style="font-size: 18px;">🔔</span>
+              <span style="font-size: 18px;">🌙</span>
+            </div>
+          </div>
+          <!-- Content area (taller since no bottom bar) -->
+          <div style="padding: 8px; min-height: 260px;">
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">John Doe</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Hey, I need help with...</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">2m</div>
+            </div>
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Sarah Smith</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Thanks for the update!</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">15m</div>
+            </div>
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Mike Wilson</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Order #4521 status?</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">1h</div>
+            </div>
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Ana Garcia</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">When will my order arrive?</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">3h</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid — Bottom Bar + Hamburger for Less-Used Sections</h3>
+      <p>Bottom tabs for the 3-4 most-used sections (Inbox, Contacts, Dashboard), hamburger for the rest (Settings, Channels, KB, AI Agents). Best of both worlds.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="background: #1a1a2e; border-radius: 12px; overflow: hidden; max-width: 320px;">
+          <div style="display: flex; justify-content: space-between; padding: 6px 16px; font-size: 11px; color: #ccc;">
+            <span>9:41</span>
+            <span>📶 🔋</span>
+          </div>
+          <!-- Header with hamburger for secondary nav -->
+          <div style="padding: 12px 16px; background: #16213e; display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 20px; cursor: pointer;">☰</div>
+            <div style="font-size: 18px; font-weight: 700; color: #fff;">Inbox</div>
+            <div style="margin-left: auto; display: flex; gap: 12px;">
+              <span style="font-size: 18px;">🔔</span>
+            </div>
+          </div>
+          <!-- Content -->
+          <div style="padding: 8px;">
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">John Doe</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Hey, I need help with...</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">2m</div>
+            </div>
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 6px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Sarah Smith</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Thanks for the update!</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">15m</div>
+            </div>
+            <div style="background: #16213e; border-radius: 8px; padding: 12px; display: flex; gap: 10px; align-items: center;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #0f3460; flex-shrink: 0;"></div>
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Mike Wilson</div>
+                <div style="font-size: 11px; color: #888; margin-top: 2px;">Order #4521 status?</div>
+              </div>
+              <div style="font-size: 10px; color: #666;">1h</div>
+            </div>
+          </div>
+          <!-- Bottom Tab Bar (fewer items) -->
+          <div style="display: flex; justify-content: space-around; padding: 10px 0 14px; background: #16213e; border-top: 1px solid #2a2a4a;">
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">💬</div>
+              <div style="font-size: 9px; color: #4ecca3; font-weight: 600; margin-top: 2px;">Inbox</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">👥</div>
+              <div style="font-size: 9px; color: #888; margin-top: 2px;">Contacts</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 20px;">📊</div>
+              <div style="font-size: 9px; color: #888; margin-top: 2px;">Dashboard</div>
+            </div>
+            <div style="text-align: center; position: relative;">
+              <div style="font-size: 20px;">⋯</div>
+              <div style="font-size: 9px; color: #888; margin-top: 2px;">More</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Bottom Bar Advantages</h4>
+      <ul>
+        <li>One-tap access to key sections</li>
+        <li>Thumb-friendly (bottom of screen)</li>
+        <li>Matches WhatsApp/Slack patterns users know</li>
+        <li>Shows unread badges easily</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Hamburger Advantages</h4>
+      <ul>
+        <li>More vertical screen space</li>
+        <li>Can show all nav items at once</li>
+        <li>Already implemented in your codebase</li>
+        <li>Less work to keep current approach</li>
+      </ul>
+    </div>
+  </div>
+</div>
