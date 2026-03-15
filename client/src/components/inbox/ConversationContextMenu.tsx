@@ -22,6 +22,7 @@ import {
   Tag,
   UserPlus,
   CalendarClock,
+  Shield,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -51,6 +52,7 @@ interface ConversationContextMenuProps {
   priorities?: ConversationPriority[];
   onPriorityMetadataNeeded?: () => void;
   onUpdate: () => void;
+  onManageAccess?: (sessionId: string) => void;
   children: React.ReactNode;
 }
 
@@ -82,6 +84,7 @@ export default function ConversationContextMenu({
   priorities = [],
   onPriorityMetadataNeeded,
   onUpdate,
+  onManageAccess,
   children,
 }: ConversationContextMenuProps) {
   const { companyTimezone } = useSession();
@@ -321,6 +324,12 @@ export default function ConversationContextMenu({
             </ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
+
+        {/* Manage access */}
+        <ContextMenuItem onClick={() => onManageAccess?.(conversation.id)}>
+          <Shield className="mr-2 h-3.5 w-3.5" />
+          Manage access
+        </ContextMenuItem>
 
         <ContextMenuSeparator />
 

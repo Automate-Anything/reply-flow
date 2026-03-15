@@ -7,6 +7,7 @@ import { Camera, Clock, FileText, Hand, Mic, Pin, Play, Star, Sticker } from 'lu
 import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
 import type { ConversationPriority } from '@/hooks/useConversationPriorities';
+import OverrideShieldIcon from '@/components/inbox/OverrideShieldIcon';
 
 interface ConversationItemProps {
   conversation: Conversation;
@@ -16,6 +17,7 @@ interface ConversationItemProps {
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
+  onManageAccess?: (sessionId: string) => void;
 }
 
 const FALLBACK_PRIORITY_COLORS: Record<string, string> = {
@@ -70,6 +72,7 @@ export default function ConversationItem({
   selectable,
   selected,
   onToggleSelect,
+  onManageAccess,
 }: ConversationItemProps) {
   const { companyTimezone: tz } = useSession();
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
@@ -145,6 +148,20 @@ export default function ConversationItem({
             )}
             {isSnoozed && (
               <Clock className="h-3 w-3 text-muted-foreground" />
+            )}
+            {conversation.override_meta && (
+              conversation.override_meta.escalationCount > 0 || conversation.override_meta.restrictionCount > 0
+            ) && (
+              <OverrideShieldIcon
+                escalationCount={conversation.override_meta.escalationCount}
+                restrictionCount={conversation.override_meta.restrictionCount}
+                escalationNames={conversation.override_meta.escalationNames}
+                restrictionNames={conversation.override_meta.restrictionNames}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onManageAccess?.(conversation.id);
+                }}
+              />
             )}
             <span className="text-[11px] text-muted-foreground">
               {formatRelativeDate(conversation.last_message_at, tz)}

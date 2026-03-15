@@ -40,6 +40,12 @@ export interface Conversation {
   contact_session_count: number;
   profile_picture_url: string | null;
   created_at: string;
+  override_meta?: {
+    escalationCount: number;
+    restrictionCount: number;
+    escalationNames: string[];
+    restrictionNames: string[];
+  } | null;
 }
 
 export interface ConversationFilters {
