@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash, Clock, Brain, X } from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Trash2, Phone, Mail, Building2, AlertTriangle, MapPin, MessageCircle, User, Hash, Clock, Brain, X, List } from 'lucide-react';
 import api from '@/lib/api';
 import { useContactActivity } from '@/hooks/useContactActivity';
 import { useSingleContactDuplicates } from '@/hooks/useContactDuplicates';
@@ -12,6 +12,7 @@ import MergeContactDialog from './MergeContactDialog';
 import type { Contact } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { CustomFieldValue } from '@/hooks/useCustomFields';
+import type { ContactList } from '@/hooks/useContactLists';
 import { PlanGate } from '@/components/auth/PlanGate';
 
 interface ContactSession {
@@ -41,6 +42,8 @@ interface ContactDetailProps {
   deleting?: boolean;
   onBack?: () => void;
   availableTags?: ContactTag[];
+  availableLists?: ContactList[];
+  contactListIds?: string[];
   customFieldValues?: CustomFieldValue[];
   onRefresh?: () => void;
 }
@@ -52,6 +55,8 @@ export default function ContactDetail({
   deleting,
   onBack,
   availableTags = [],
+  availableLists = [],
+  contactListIds = [],
   customFieldValues = [],
   onRefresh,
 }: ContactDetailProps) {
@@ -202,6 +207,30 @@ export default function ContactDetail({
                 style={color ? { backgroundColor: color, color: 'white' } : undefined}
               >
                 {tagName}
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Lists */}
+      {contactListIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1 border-b px-6 py-2">
+          <List className="mr-1 h-3 w-3 text-muted-foreground" />
+          {contactListIds.map((listId) => {
+            const list = availableLists.find((l) => l.id === listId);
+            if (!list) return null;
+            return (
+              <Badge
+                key={listId}
+                variant="outline"
+                className="text-xs"
+              >
+                <span
+                  className="mr-1 inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: list.color }}
+                />
+                {list.name}
               </Badge>
             );
           })}

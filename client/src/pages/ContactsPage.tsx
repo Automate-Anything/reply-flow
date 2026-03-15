@@ -43,6 +43,7 @@ export default function ContactsPage() {
   const [view, setView] = useState<View>('detail');
   const [deleting, setDeleting] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState<CustomFieldValue[]>([]);
+  const [contactListIds, setContactListIds] = useState<string[]>([]);
   const [tagsDialogOpen, setTagsDialogOpen] = useState(false);
   const [fieldsDialogOpen, setFieldsDialogOpen] = useState(false);
   const [listsDialogOpen, setListsDialogOpen] = useState(false);
@@ -85,8 +86,10 @@ export default function ContactsPage() {
     try {
       const { data } = await api.get(`/contacts/${contactId}`);
       setCustomFieldValues(data.custom_field_values || []);
+      setContactListIds(data.list_ids || []);
     } catch {
       setCustomFieldValues([]);
+      setContactListIds([]);
     }
   }, []);
 
@@ -95,6 +98,7 @@ export default function ContactsPage() {
       fetchCustomFieldValues(activeContact.id);
     } else {
       setCustomFieldValues([]);
+      setContactListIds([]);
     }
   }, [activeContact, fetchCustomFieldValues]);
 
@@ -175,10 +179,12 @@ export default function ContactsPage() {
   const handleFormSave = () => {
     setView('detail');
     refetch();
+    refetchLists();
     if (activeContact && view === 'edit') {
       api.get(`/contacts/${activeContact.id}`).then(({ data }) => {
         setActiveContact(data.contact);
         setCustomFieldValues(data.custom_field_values || []);
+        setContactListIds(data.list_ids || []);
       });
     } else {
       setActiveContact(null);
@@ -366,6 +372,8 @@ export default function ContactsPage() {
             onSave={handleFormSave}
             onCancel={handleFormCancel}
             availableTags={tags}
+            availableLists={lists}
+            existingListIds={view === 'edit' ? contactListIds : []}
             customFieldDefinitions={definitions}
             existingCustomFieldValues={view === 'edit' ? customFieldValues : []}
             onCreateTag={handleCreateTagInline}
@@ -380,6 +388,8 @@ export default function ContactsPage() {
           deleting={deleting}
           onBack={handleBack}
           availableTags={tags}
+          availableLists={lists}
+          contactListIds={contactListIds}
           customFieldValues={customFieldValues}
           onRefresh={() => { refetch(); if (activeContact) fetchCustomFieldValues(activeContact.id); }}
         />
