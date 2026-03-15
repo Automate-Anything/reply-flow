@@ -17,6 +17,9 @@ export interface ChannelAgentSettings {
   response_mode: 'live' | 'test';
   test_contact_ids: string[];
   excluded_contact_ids: string[];
+  auto_reply_enabled: boolean;
+  auto_reply_message: string | null;
+  auto_reply_trigger: 'outside_hours' | 'all_unavailable';
 }
 
 const DEFAULT_SETTINGS: ChannelAgentSettings = {
@@ -33,6 +36,9 @@ const DEFAULT_SETTINGS: ChannelAgentSettings = {
   response_mode: 'live',
   test_contact_ids: [],
   excluded_contact_ids: [],
+  auto_reply_enabled: false,
+  auto_reply_message: null,
+  auto_reply_trigger: 'outside_hours',
 };
 
 export function useChannelAgent(channelId: number | undefined) {

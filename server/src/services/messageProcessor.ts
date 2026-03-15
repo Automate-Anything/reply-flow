@@ -8,6 +8,7 @@ import { extractAudioTranscript, extractDocumentText } from './mediaContentExtra
 import { downloadMediaById, fetchFullMessage, getContactProfile } from './whapi.js';
 import { autoAssignConversation } from './autoAssignService.js';
 import { createNotification, createNotificationsForUsers } from './notificationService.js';
+import { evaluateAutoReply } from './autoReplyEvaluator.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -546,6 +547,19 @@ export async function processIncomingMessage(
 
   // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed
   if (isOutbound) return;
+
+  // 6a. Auto-reply: fires when AI is OFF but auto-reply is enabled (first message of new session only)
+  try {
+    const autoReply = await evaluateAutoReply(companyId, channelId, isNewSession);
+    if (autoReply.shouldReply && autoReply.message && autoReply.channelId) {
+      sendOutsideHoursReply(companyId, sessionId, autoReply.channelId, autoReply.message).catch((err) => {
+        console.error('Auto-reply send error:', err);
+      });
+      return;
+    }
+  } catch (err) {
+    console.error('Auto-reply evaluation error:', err);
+  }
 
   // 6b. Notify assigned user about new inbound message (non-blocking)
   if (!isNewSession) {

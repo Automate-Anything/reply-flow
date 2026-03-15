@@ -1232,6 +1232,9 @@ router.get('/channel-settings/:channelId', requirePermission('ai_settings', 'vie
       response_mode: 'live',
       test_contact_ids: [],
       excluded_contact_ids: [],
+      auto_reply_enabled: false,
+      auto_reply_message: null,
+      auto_reply_trigger: 'outside_hours',
         },
       });
       return;
@@ -1253,6 +1256,7 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
       is_enabled, custom_instructions,
       profile_data, max_tokens, schedule_mode, ai_schedule, outside_hours_message,
       default_language, agent_id, response_mode, test_contact_ids, excluded_contact_ids,
+      auto_reply_enabled, auto_reply_message, auto_reply_trigger,
     } = req.body;
 
     const { data: channel } = await supabaseAdmin
@@ -1287,6 +1291,16 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     if (response_mode !== undefined) updates.response_mode = response_mode;
     if (test_contact_ids !== undefined) updates.test_contact_ids = test_contact_ids;
     if (excluded_contact_ids !== undefined) updates.excluded_contact_ids = excluded_contact_ids;
+    if (auto_reply_enabled !== undefined) updates.auto_reply_enabled = auto_reply_enabled;
+    if (auto_reply_message !== undefined) updates.auto_reply_message = auto_reply_message;
+    if (auto_reply_trigger !== undefined) {
+      const validTriggers = ['outside_hours', 'all_unavailable'];
+      if (!validTriggers.includes(auto_reply_trigger)) {
+        res.status(400).json({ error: `Invalid auto_reply_trigger. Must be one of: ${validTriggers.join(', ')}` });
+        return;
+      }
+      updates.auto_reply_trigger = auto_reply_trigger;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('channel_agent_settings')
