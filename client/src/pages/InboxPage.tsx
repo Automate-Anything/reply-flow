@@ -258,7 +258,7 @@ export default function InboxPage() {
     }
     if (activeConversation) {
       setConversations((prev) =>
-        prev.map((c) => (c.id === activeConversation.id ? { ...c, draft_message: null } : c))
+        prev.map((c) => (c.id === activeConversation.id ? { ...c, draft_message: null, unread_count: 0, marked_unread: false } : c))
       );
     }
 

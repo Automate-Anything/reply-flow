@@ -587,7 +587,14 @@ router.get('/:contactId', requirePermission('contacts', 'view'), async (req, res
       .select('*, field_definition:field_definition_id(id, name, field_type, options)')
       .eq('contact_id', contactId);
 
-    res.json({ contact: data, custom_field_values: customValues || [] });
+    // Fetch list memberships
+    const { data: listMembers } = await supabaseAdmin
+      .from('contact_list_members')
+      .select('list_id')
+      .eq('contact_id', contactId);
+    const list_ids = (listMembers || []).map((m) => m.list_id);
+
+    res.json({ contact: data, custom_field_values: customValues || [], list_ids });
   } catch (err) {
     next(err);
   }
@@ -600,7 +607,7 @@ router.post('/', requirePermission('contacts', 'create'), async (req, res, next)
     const {
       phone_number, first_name, last_name, email, company, notes, tags,
       address_street, address_city, address_state, address_postal_code, address_country,
-      custom_field_values,
+      custom_field_values, list_ids,
     } = req.body;
 
     if (!phone_number) {
@@ -653,6 +660,16 @@ router.post('/', requirePermission('contacts', 'create'), async (req, res, next)
       }
     }
 
+    // Add to lists if provided
+    if (Array.isArray(list_ids) && list_ids.length > 0) {
+      await supabaseAdmin
+        .from('contact_list_members')
+        .upsert(
+          (list_ids as string[]).map((listId) => ({ list_id: listId, contact_id: data.id, added_by: req.userId })),
+          { onConflict: 'list_id,contact_id' }
+        );
+    }
+
     // Log activity
     await logContactActivity({
       contactId: data.id,
@@ -675,7 +692,7 @@ router.put('/:contactId', requirePermission('contacts', 'edit'), async (req, res
     const {
       first_name, last_name, email, company, notes, tags, phone_number,
       address_street, address_city, address_state, address_postal_code, address_country,
-      custom_field_values,
+      custom_field_values, list_ids,
     } = req.body;
 
     // Fetch old values for change tracking
@@ -740,6 +757,37 @@ router.put('/:contactId', requirePermission('contacts', 'edit'), async (req, res
             .eq('contact_id', contactId)
             .eq('field_definition_id', cfv.field_definition_id);
         }
+      }
+    }
+
+    // Sync list memberships if provided
+    if (Array.isArray(list_ids)) {
+      const { data: currentMembers } = await supabaseAdmin
+        .from('contact_list_members')
+        .select('list_id')
+        .eq('contact_id', contactId);
+      const currentIds = new Set((currentMembers || []).map((m) => m.list_id));
+      const desiredIds = new Set(list_ids as string[]);
+
+      // Add to new lists
+      const toAdd = [...desiredIds].filter((id) => !currentIds.has(id));
+      if (toAdd.length > 0) {
+        await supabaseAdmin
+          .from('contact_list_members')
+          .upsert(
+            toAdd.map((listId) => ({ list_id: listId, contact_id: contactId, added_by: req.userId })),
+            { onConflict: 'list_id,contact_id' }
+          );
+      }
+
+      // Remove from old lists
+      const toRemove = [...currentIds].filter((id) => !desiredIds.has(id));
+      if (toRemove.length > 0) {
+        await supabaseAdmin
+          .from('contact_list_members')
+          .delete()
+          .eq('contact_id', contactId)
+          .in('list_id', toRemove);
       }
     }
 

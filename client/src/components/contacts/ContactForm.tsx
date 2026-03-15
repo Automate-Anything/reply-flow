@@ -20,6 +20,7 @@ import api from '@/lib/api';
 import type { Contact } from '@/hooks/useContacts';
 import type { ContactTag } from '@/hooks/useContactTags';
 import type { CustomFieldDefinition, CustomFieldValue } from '@/hooks/useCustomFields';
+import type { ContactList } from '@/hooks/useContactLists';
 import TagInput from './TagInput';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
@@ -30,6 +31,8 @@ interface ContactFormProps {
   onSave: () => void;
   onCancel: () => void;
   availableTags?: ContactTag[];
+  availableLists?: ContactList[];
+  existingListIds?: string[];
   customFieldDefinitions?: CustomFieldDefinition[];
   existingCustomFieldValues?: CustomFieldValue[];
   onCreateTag?: (name: string) => Promise<void>;
@@ -41,6 +44,8 @@ export default function ContactForm({
   onSave,
   onCancel,
   availableTags = [],
+  availableLists = [],
+  existingListIds = [],
   customFieldDefinitions = [],
   existingCustomFieldValues = [],
   onCreateTag,
@@ -54,6 +59,7 @@ export default function ContactForm({
     email: '',
     company: '',
     tags: [] as string[],
+    list_ids: [] as string[],
     address_street: '',
     address_city: '',
     address_state: '',
@@ -67,6 +73,7 @@ export default function ContactForm({
     email: '',
     company: '',
     tags: [] as string[],
+    list_ids: [] as string[],
     address_street: '',
     address_city: '',
     address_state: '',
@@ -95,6 +102,7 @@ export default function ContactForm({
         email: contact.email || '',
         company: contact.company || '',
         tags: contact.tags || [],
+        list_ids: existingListIds,
         address_street: contact.address_street || '',
         address_city: contact.address_city || '',
         address_state: contact.address_state || '',
@@ -104,7 +112,7 @@ export default function ContactForm({
       setForm(values);
       setOriginalForm(values);
     }
-  }, [contact]);
+  }, [contact, existingListIds]);
 
   // Populate custom field values when editing
   useEffect(() => {
@@ -161,7 +169,7 @@ export default function ContactForm({
           return { field_definition_id: def.id, value: val || '' };
         });
 
-      const payload = { ...form, custom_field_values: cfvArray };
+      const payload = { ...form, custom_field_values: cfvArray, list_ids: form.list_ids };
 
       if (contact) {
         await api.put(`/contacts/${contact.id}`, payload);
@@ -299,6 +307,36 @@ export default function ContactForm({
               disabled={saving}
             />
           </div>
+
+          {/* Lists */}
+          {availableLists.length > 0 && (
+            <div className="space-y-2">
+              <Label>Lists</Label>
+              <div className="space-y-1 rounded-md border p-3">
+                {availableLists.map((list) => (
+                  <label key={list.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={form.list_ids.includes(list.id)}
+                      onCheckedChange={(checked) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          list_ids: checked
+                            ? [...prev.list_ids, list.id]
+                            : prev.list_ids.filter((id) => id !== list.id),
+                        }));
+                      }}
+                      disabled={saving}
+                    />
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: list.color }}
+                    />
+                    {list.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Custom Fields */}
           {customFieldDefinitions.length > 0 && (
