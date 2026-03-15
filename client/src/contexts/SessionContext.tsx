@@ -10,10 +10,11 @@ import {
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import api from '@/lib/api';
+import { setBrandColor } from '@/lib/brand-colors';
 
 interface MeResponse {
   profile: { id: string; email: string; full_name: string; avatar_url: string | null };
-  company: { id: string; name: string; slug: string | null; logo_url: string | null; timezone: string | null } | null;
+  company: { id: string; name: string; slug: string | null; logo_url: string | null; timezone: string | null; brand_color: string | null } | null;
   role: { id: string; name: string; hierarchy_level: number } | null;
   permissions: string[];
   is_super_admin?: boolean;
@@ -29,6 +30,8 @@ interface SessionContextType {
   companyId: string | null;
   companyName: string | null;
   companyTimezone: string;
+  companyLogoUrl: string | null;
+  companyBrandColor: string | null;
   role: string | null;
   permissions: Set<string>;
   hasPermission: (resource: string, action: string) => boolean;
@@ -73,11 +76,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [companyId, setCompanyId] = useState<string | null>(cachedMe?.company?.id ?? null);
   const [companyName, setCompanyName] = useState<string | null>(cachedMe?.company?.name ?? null);
   const [companyTimezone, setCompanyTimezone] = useState(cachedMe?.company?.timezone || 'UTC');
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(cachedMe?.company?.logo_url ?? null);
+  const [companyBrandColor, setCompanyBrandColor] = useState<string | null>(cachedMe?.company?.brand_color ?? null);
   const [role, setRole] = useState<string | null>(cachedMe?.role?.name ?? null);
   const [permissions, setPermissions] = useState<Set<string>>(new Set(cachedMe?.permissions));
   const [isSuperAdmin, setIsSuperAdmin] = useState(cachedMe?.is_super_admin || false);
   const hasLoadedOnceRef = useRef(hasCachedData);
   const sessionRef = useRef(session);
+
+  // Apply cached brand color on mount to prevent flash of default teal
+  useEffect(() => {
+    setBrandColor(cachedMe?.company?.brand_color ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const hasPermission = useCallback(
     (resource: string, action: string) => {
@@ -96,6 +107,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setCompanyId(data.company?.id ?? null);
       setCompanyName(data.company?.name ?? null);
       setCompanyTimezone(data.company?.timezone || 'UTC');
+      setCompanyLogoUrl(data.company?.logo_url ?? null);
+      setCompanyBrandColor(data.company?.brand_color ?? null);
+      setBrandColor(data.company?.brand_color ?? null);
       setRole(data.role?.name ?? null);
       setPermissions(new Set(data.permissions));
       setIsSuperAdmin(data.is_super_admin || false);
@@ -128,6 +142,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setCompanyId(null);
       setCompanyName(null);
       setCompanyTimezone('UTC');
+      setCompanyLogoUrl(null);
+      setCompanyBrandColor(null);
+      setBrandColor(null);
       setRole(null);
       setPermissions(new Set());
       setIsSuperAdmin(false);
@@ -224,6 +241,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     companyId,
     companyName,
     companyTimezone,
+    companyLogoUrl,
+    companyBrandColor,
     role,
     permissions,
     hasPermission,
