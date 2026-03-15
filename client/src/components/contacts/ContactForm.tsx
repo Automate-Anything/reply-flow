@@ -213,6 +213,29 @@ export default function ContactForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
+              <Label>Phone Number *</Label>
+              <PhoneInput
+                value={form.phone_number}
+                onChange={(val) => {
+                  update('phone_number', val);
+                  if (phoneError) setPhoneError('');
+                }}
+                error={phoneError}
+                disabled={saving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="john@example.com"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label>First Name</Label>
               <Input
                 value={form.first_name}
@@ -226,29 +249,6 @@ export default function ContactForm({
                 value={form.last_name}
                 onChange={(e) => update('last_name', e.target.value)}
                 placeholder="Doe"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => update('email', e.target.value)}
-                placeholder="john@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Phone Number *</Label>
-              <PhoneInput
-                value={form.phone_number}
-                onChange={(val) => {
-                  update('phone_number', val);
-                  if (phoneError) setPhoneError('');
-                }}
-                error={phoneError}
-                disabled={saving}
               />
             </div>
           </div>
