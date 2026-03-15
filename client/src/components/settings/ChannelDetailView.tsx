@@ -16,14 +16,16 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
-  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, Users, Eye, Pencil, ChevronDown,
-  Shield,
+  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanGate } from '@/components/auth/PlanGate';
 import { useChannelAgent, type ChannelAgentSettings } from '@/hooks/useChannelAgent';
 import { useAgents } from '@/hooks/useAgents';
-import { useChannelAccess } from '@/hooks/useAccessControl';
+import { useChannelPermissions } from '@/hooks/usePermissions';
+import type { AccessLevel, PermissionConflict, ConflictResolution } from '@/hooks/usePermissions';
+import ConflictResolutionModal from '@/components/access/ConflictResolutionModal';
+import AccessManager from '@/components/access/AccessManager';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ScheduleSection from './sections/ScheduleSection';
 import AutoReplySection from './sections/AutoReplySection';
@@ -79,9 +81,55 @@ export default function ChannelDetailPage() {
   // Agents list for assignment dropdown
   const { agents, loading: loadingAgents } = useAgents();
 
-  // Access control
-  const channelAccess = useChannelAccess(numericChannelId);
+  // Access control (new 4-level permissions)
+  const {
+    settings: permissionSettings,
+    loading: loadingPermissions,
+    grantAccess,
+    revokeAccess,
+    checkConflicts,
+    resolveConflicts,
+  } = useChannelPermissions(numericChannelId);
   const { members: teamMembers } = useTeamMembers();
+
+  // Conflict resolution state
+  const [conflicts, setConflicts] = useState<PermissionConflict[]>([]);
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [pendingChange, setPendingChange] = useState<Record<string, unknown> | null>(null);
+
+  const handleChannelModeChange = async (newMode: string, level?: AccessLevel) => {
+    // Determine what changes are being made
+    const proposedChange: Record<string, unknown> = {};
+    if (permissionSettings?.mode === 'all_members' && newMode !== 'all_members') {
+      proposedChange.removeAllMembersRow = true;
+    }
+
+    // Check for conflicts
+    const detected = await checkConflicts(proposedChange);
+    if (detected.length > 0) {
+      setConflicts(detected);
+      setPendingChange(proposedChange);
+      setConflictModalOpen(true);
+      return;
+    }
+
+    // No conflicts — apply directly
+    if (newMode === 'all_members') {
+      await grantAccess('all', level || 'view');
+    } else if (newMode === 'private') {
+      await revokeAccess('all');
+    }
+    // For specific_users, mode change handled by revoking 'all' if needed
+    if (newMode === 'specific_users' && permissionSettings?.mode === 'all_members') {
+      await revokeAccess('all');
+    }
+  };
+
+  const handleResolveConflicts = async (resolutions: ConflictResolution[]) => {
+    if (!pendingChange) return;
+    await resolveConflicts(pendingChange, resolutions);
+    setPendingChange(null);
+  };
 
   // Company timezone (still company-level)
   const [companyTimezone, setCompanyTimezone] = useState('UTC');
@@ -860,212 +908,28 @@ export default function ChannelDetailPage() {
         </TabsContent>
 
         {/* Access Tab — only visible to channel owner */}
-        {channel.is_owner && channelAccess.settings && (
+        {channel.is_owner && permissionSettings && (
           <TabsContent value="access" className="mt-1 space-y-5">
-            {/* Who has access */}
-            <div>
-              <h3 className="text-sm font-medium mb-1">Who has access to this channel</h3>
-              <p className="text-xs text-muted-foreground mb-3">
-                Controls who can see conversations and messages in this channel.
-                This is separate from assignment — assigning determines who is responsible for responding.
-              </p>
-              <div className="space-y-2">
-                {([
-                  { value: 'private' as const, label: 'Private', desc: 'Only you can see this channel', icon: Lock },
-                  { value: 'specific_users' as const, label: 'Specific people', desc: 'Only people you choose', icon: Users },
-                  { value: 'all_members' as const, label: 'All team members', desc: 'Everyone on the team', icon: Globe },
-                ] as const).map((option) => {
-                  const Icon = option.icon;
-                  const isActive = channelAccess.settings!.sharing_mode === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      onClick={async () => {
-                        try {
-                          await channelAccess.updateSettings({ sharing_mode: option.value });
-                          toast.success(`Access updated to: ${option.label}`);
-                        } catch {
-                          toast.error('Failed to update access');
-                        }
-                      }}
-                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
-                        isActive ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                      }`}
-                    >
-                      <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium">{option.label}</div>
-                        <div className="text-xs text-muted-foreground">{option.desc}</div>
-                      </div>
-                      {isActive && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                    </button>
-                  );
-                })}
-              </div>
+            <AccessManager
+              mode="channel"
+              channelMode={permissionSettings.mode}
+              defaultLevel={permissionSettings.defaultLevel || undefined}
+              onChannelModeChange={handleChannelModeChange}
+              permissions={permissionSettings.permissions || []}
+              teamMembers={teamMembers}
+              ownerId={permissionSettings.owner.id}
+              onGrant={grantAccess}
+              onRevoke={revokeAccess}
+              onLevelChange={grantAccess}
+              canManage={channel.is_owner}
+            />
 
-              {/* People with access — inline under sharing mode when specific_users */}
-              {channelAccess.settings!.sharing_mode === 'specific_users' && (
-                <div className="mt-3 space-y-2">
-                  <h3 className="text-sm font-medium">People with access</h3>
-
-                  {/* Owner row — always first, not editable */}
-                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{channelAccess.settings!.owner.full_name}</div>
-                      <div className="truncate text-xs text-muted-foreground">{channelAccess.settings!.owner.email}</div>
-                    </div>
-                    <Badge variant="secondary" className="text-xs shrink-0">
-                      <Shield className="mr-1 h-2.5 w-2.5" /> Owner
-                    </Badge>
-                  </div>
-
-                  {/* Other users with access */}
-                  {channelAccess.settings!.access_list.map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{entry.user?.full_name || 'Unknown'}</div>
-                        <div className="truncate text-xs text-muted-foreground">{entry.user?.email}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={entry.access_level}
-                          onValueChange={async (value) => {
-                            try {
-                              await channelAccess.grantAccess(entry.user_id, value as 'view' | 'edit');
-                              toast.success(`Access updated to ${value}`);
-                            } catch {
-                              toast.error('Failed to update access');
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-auto gap-1 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="view">
-                              <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> Can view</span>
-                            </SelectItem>
-                            <SelectItem value="edit">
-                              <span className="flex items-center gap-1"><Pencil className="h-3 w-3" /> Can edit</span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={async () => {
-                            try {
-                              await channelAccess.revokeAccess(entry.user_id);
-                              toast.success('Access revoked');
-                            } catch {
-                              toast.error('Failed to revoke access');
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Add member */}
-                  {(() => {
-                    const availableMembers = teamMembers.filter(
-                      (m) => m.user_id !== channel.user_id && !channelAccess.settings!.access_list.some((a) => a.user_id === m.user_id)
-                    );
-                    if (availableMembers.length === 0) return null;
-                    return (
-                      <div className="pt-2 border-t">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Add team members</p>
-                        <div className="space-y-1">
-                          {availableMembers.map((member) => (
-                            <div key={member.user_id} className="flex items-center justify-between rounded-lg border border-dashed p-2">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm">{member.full_name}</div>
-                                <div className="truncate text-xs text-muted-foreground">{member.email}</div>
-                              </div>
-                              <div className="flex gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={async () => {
-                                    try {
-                                      await channelAccess.grantAccess(member.user_id, 'view');
-                                      toast.success(`View access granted to ${member.full_name}`);
-                                    } catch {
-                                      toast.error('Failed to grant access');
-                                    }
-                                  }}
-                                >
-                                  <Eye className="mr-1 h-3 w-3" /> View
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={async () => {
-                                    try {
-                                      await channelAccess.grantAccess(member.user_id, 'edit');
-                                      toast.success(`Edit access granted to ${member.full_name}`);
-                                    } catch {
-                                      toast.error('Failed to grant access');
-                                    }
-                                  }}
-                                >
-                                  <Pencil className="mr-1 h-3 w-3" /> Edit
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {/* Conversation visibility default — only relevant when sharing */}
-            {channelAccess.settings.sharing_mode !== 'private' && <div>
-              <h3 className="text-sm font-medium mb-1">Default conversation visibility</h3>
-              <p className="text-xs text-muted-foreground mb-3">
-                When someone has access to this channel, can they see all conversations or only ones you specifically grant?
-              </p>
-              <div className="space-y-2">
-                {([
-                  { value: 'all' as const, label: 'All conversations', desc: 'Shared users see every conversation', icon: Eye },
-                  { value: 'owner_only' as const, label: 'Only granted conversations', desc: 'Conversations are private until you grant access to each one', icon: Lock },
-                ] as const).map((option) => {
-                  const Icon = option.icon;
-                  const isActive = channelAccess.settings!.default_conversation_visibility === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      onClick={async () => {
-                        try {
-                          await channelAccess.updateSettings({ default_conversation_visibility: option.value });
-                          toast.success(`Conversation visibility updated`);
-                        } catch {
-                          toast.error('Failed to update');
-                        }
-                      }}
-                      className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
-                        isActive ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                      }`}
-                    >
-                      <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium">{option.label}</div>
-                        <div className="text-xs text-muted-foreground">{option.desc}</div>
-                      </div>
-                      {isActive && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>}
+            <ConflictResolutionModal
+              open={conflictModalOpen}
+              onOpenChange={setConflictModalOpen}
+              conflicts={conflicts}
+              onResolve={handleResolveConflicts}
+            />
           </TabsContent>
         )}
 
