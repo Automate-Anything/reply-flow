@@ -1,0 +1,6 @@
+name = "bookingpro-affiliates"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "./dist"
+
+[vars]
+VITE_API_URL = "https://booking-pro-saas.onrender.com"
