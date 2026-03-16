@@ -54,19 +54,29 @@ function hexToOklch(hex: string): { L: number; C: number; H: number } {
 }
 
 // ── Full theme override ─────────────────────────────────────────────
-// Each entry: [css-var-name, lightness, chroma]
-// The hue is replaced with the brand color's hue.
-// Values taken directly from index.css (:root and .dark blocks).
+// Two kinds of variables:
+//   "primary" vars — use the EXACT L, C, H from the picked hex so the
+//     hero color visually matches the swatch the user clicked.
+//   "ambient" vars — keep fixed L/C from the default theme and only
+//     rotate the hue, so backgrounds/borders/cards shift subtly.
 
 type ThemeVar = [string, number, number];
 
-// Variables that use the base hue (155 in default theme)
-const LIGHT_THEME: ThemeVar[] = [
+// Variables whose L and C come from the picked hex (the "hero" color)
+const PRIMARY_VARS = new Set([
+  '--primary',
+  '--ring',
+  '--chart-1',
+  '--sidebar-primary',
+  '--sidebar-ring',
+]);
+
+// Ambient variables — fixed L/C, only hue rotated
+const LIGHT_AMBIENT: ThemeVar[] = [
   ['--background',                    0.985, 0.002],
   ['--foreground',                    0.145, 0.005],
   ['--card-foreground',               0.145, 0.005],
   ['--popover-foreground',            0.145, 0.005],
-  ['--primary',                       0.55,  0.17 ],
   ['--primary-foreground',            0.985, 0.005],
   ['--secondary',                     0.965, 0.015],
   ['--secondary-foreground',          0.205, 0.02 ],
@@ -76,26 +86,21 @@ const LIGHT_THEME: ThemeVar[] = [
   ['--accent-foreground',             0.205, 0.02 ],
   ['--border',                        0.90,  0.01 ],
   ['--input',                         0.90,  0.015],
-  ['--ring',                          0.55,  0.17 ],
-  ['--chart-1',                       0.55,  0.17 ],
   ['--sidebar',                       0.22,  0.03 ],
   ['--sidebar-foreground',            0.92,  0.01 ],
-  ['--sidebar-primary',               0.55,  0.17 ],
   ['--sidebar-primary-foreground',    0.985, 0.005],
   ['--sidebar-accent',                0.30,  0.04 ],
   ['--sidebar-accent-foreground',     0.98,  0.01 ],
   ['--sidebar-border',                0.30,  0.03 ],
-  ['--sidebar-ring',                  0.55,  0.17 ],
 ];
 
-const DARK_THEME: ThemeVar[] = [
+const DARK_AMBIENT: ThemeVar[] = [
   ['--background',                    0.145, 0.01 ],
   ['--foreground',                    0.96,  0.005],
   ['--card',                          0.20,  0.015],
   ['--card-foreground',               0.96,  0.005],
   ['--popover',                       0.20,  0.015],
   ['--popover-foreground',            0.96,  0.005],
-  ['--primary',                       0.60,  0.17 ],
   ['--primary-foreground',            0.15,  0.02 ],
   ['--secondary',                     0.25,  0.02 ],
   ['--secondary-foreground',          0.96,  0.005],
@@ -105,22 +110,19 @@ const DARK_THEME: ThemeVar[] = [
   ['--accent-foreground',             0.96,  0.005],
   ['--border',                        0.30,  0.02 ],
   ['--input',                         0.28,  0.02 ],
-  ['--ring',                          0.60,  0.17 ],
-  ['--chart-1',                       0.60,  0.17 ],
   ['--sidebar',                       0.16,  0.015],
   ['--sidebar-foreground',            0.92,  0.01 ],
-  ['--sidebar-primary',               0.60,  0.17 ],
   ['--sidebar-primary-foreground',    0.96,  0.005],
   ['--sidebar-accent',                0.24,  0.03 ],
   ['--sidebar-accent-foreground',     0.96,  0.005],
   ['--sidebar-border',                0.25,  0.02 ],
-  ['--sidebar-ring',                  0.60,  0.17 ],
 ];
 
-// All variable names that we override (union of light + dark) — used for cleanup
+// All variable names that we override (union of ambient + primary) — used for cleanup
 const ALL_VARS = [...new Set([
-  ...LIGHT_THEME.map(([v]) => v),
-  ...DARK_THEME.map(([v]) => v),
+  ...LIGHT_AMBIENT.map(([v]) => v),
+  ...DARK_AMBIENT.map(([v]) => v),
+  ...PRIMARY_VARS,
 ])];
 
 function isDark(): boolean {
@@ -129,7 +131,9 @@ function isDark(): boolean {
 
 /**
  * Apply a brand color to the document by overriding ALL theme CSS variables.
- * Replaces the default hue (155) with the brand color's hue across the entire theme.
+ * Primary vars (--primary, --ring, etc.) use the EXACT L/C/H from the hex
+ * so buttons and links match the picked swatch. Ambient vars (background,
+ * borders, sidebar, etc.) rotate only the hue to shift the overall palette.
  * Pass null to revert to CSS defaults.
  */
 export function applyBrandColor(hex: string | null): void {
@@ -141,10 +145,16 @@ export function applyBrandColor(hex: string | null): void {
     return;
   }
 
-  const { H } = hexToOklch(hex);
-  const theme = isDark() ? DARK_THEME : LIGHT_THEME;
+  const { L: brandL, C: brandC, H } = hexToOklch(hex);
+  const ambient = isDark() ? DARK_AMBIENT : LIGHT_AMBIENT;
 
-  for (const [varName, L, C] of theme) {
+  // Primary vars: exact color from the picked hex
+  for (const varName of PRIMARY_VARS) {
+    root.style.setProperty(varName, `oklch(${brandL} ${brandC} ${H.toFixed(1)})`);
+  }
+
+  // Ambient vars: fixed L/C, only hue rotated
+  for (const [varName, L, C] of ambient) {
     root.style.setProperty(varName, `oklch(${L} ${C} ${H.toFixed(1)})`);
   }
 }

@@ -452,7 +452,7 @@ export default function CompanySettingsPage() {
           <div className="space-y-3">
             <Label>Brand Color</Label>
             <p className="text-xs text-muted-foreground">
-              Applies to buttons, links, and accents across the app.
+              Changes the entire color theme across the app.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               {BRAND_PRESETS.map((preset) => (
