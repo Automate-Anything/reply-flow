@@ -5,6 +5,9 @@
   Files: server/src/services/wizardGenerator.ts, server/src/routes/agents.ts, client/src/components/agents/QuickSetupWizardDialog.tsx, client/src/hooks/useAgents.ts, client/src/pages/AIAgentsPage.tsx.
   Branch: feature/quick-setup-wizard.
 - **Fix self-sent messages showing as unread** — Claude — Started 2026-03-12. Files: server/src/services/messageProcessor.ts. Branch: fix-outbound-unread.
+- **Gmail Channel Integration — Planning** — Claude — Started 2026-03-16. Status: active.
+  Files: plans/2026-03-16-gmail-channel-integration.md. Branch: feat/gmail-channel-integration (not yet created).
+  Depends on: none.
 ## Completed
 - **Company Branding (logo + color scheme)** — Claude — Completed 2026-03-16. Branch: feat/company-branding. Merged: yes.
   Logo upload to Supabase Storage, brand color picker (presets + custom hex), full-theme OKLCH hue rotation (all CSS variables), sidebar dynamic logo/name. Migration: 062_company_branding.sql.

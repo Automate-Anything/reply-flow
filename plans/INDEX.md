@@ -24,3 +24,4 @@ After completing a phase, update its status here and in `MEMORY.md`.
 | Availability Features | DONE | `plans/2026-03-15-availability-features.md` | Channel auto-reply, AI schedule new modes (When Away, Outside Hours), team availability dashboard | Personal Hours & Availability |
 | Handoff Notifications & Inbox Badge | TODO | `docs/superpowers/plans/2026-03-15-handoff-notifications-and-inbox-badge.md` | Handoff notification to assignee/owner, "Needs human" badge in inbox list | None |
 | Access & Permissions Redesign | IN PROGRESS | `docs/superpowers/plans/2026-03-15-access-permissions-redesign.md` | 4-level permissions (no_access/view/reply/manage), bidirectional conversation overrides, conflict resolution UI | None |
+| Gmail Channel Integration | TODO | `plans/2026-03-16-gmail-channel-integration.md` | 6-phase omnichannel: channel abstraction, Gmail backend (OAuth/Pub/Sub), de-WhatsApp UI, 3-tab inbox, email composer, cross-channel features | None |
