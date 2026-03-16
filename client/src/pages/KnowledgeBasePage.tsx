@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PlanGate } from '@/components/auth/PlanGate';
 import type { KBEntry, KBSearchResult } from '@/hooks/useCompanyKB';
 import KnowledgeBase from '@/components/settings/KnowledgeBase';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
 import { useDebugMode } from '@/hooks/useDebugMode';
 
@@ -423,15 +424,21 @@ export default function KnowledgeBasePage() {
                           </Button>
                         </PlanGate>
                         <PlanGate>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(kb.id)}
-                            disabled={isDeleting}
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          <ConfirmDialog
+                            title="Delete knowledge base?"
+                            description="This will permanently delete this knowledge base and all its entries. This action cannot be undone."
+                            onConfirm={() => handleDelete(kb.id)}
+                            loading={isDeleting}
                           >
-                            {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                          </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isDeleting}
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            >
+                              {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                            </Button>
+                          </ConfirmDialog>
                         </PlanGate>
                       </div>
                       {isExpanded ? (
