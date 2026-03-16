@@ -247,7 +247,7 @@ function useRealWaveform(src: string, buckets: number, fallback: number[]): numb
 }
 
 // ── Voice note speed persistence ──────────────────────────────────────────────
-const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2] as const;
+const SPEED_OPTIONS = [1, 1.5, 2] as const;
 const SPEED_STORAGE_KEY = 'voiceNoteSpeed';
 
 function getStoredSpeed(): number {
@@ -394,22 +394,23 @@ function VoiceNotePlayer({ src, isOutbound, timeSlot }: { src: string; isOutboun
           <span className={cn('text-[10px] tabular-nums', isOutbound ? 'text-white/60' : 'text-muted-foreground')}>
             {playing ? fmt(currentTime) : fmt(duration)}
           </span>
-          {showSpeedBadge && (
-            <button
-              onClick={cycleSpeed}
-              className={cn(
-                'rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
-                isOutbound
-                  ? 'bg-white/20 text-white hover:bg-white/30'
-                  : 'bg-primary/10 text-primary hover:bg-primary/20'
-              )}
-            >
-              {playbackRate}x
-            </button>
-          )}
           {timeSlot}
         </div>
       </div>
+
+      {showSpeedBadge && (
+        <button
+          onClick={cycleSpeed}
+          className={cn(
+            'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
+            isOutbound
+              ? 'bg-white/20 text-white hover:bg-white/30'
+              : 'bg-primary/10 text-primary hover:bg-primary/20'
+          )}
+        >
+          {playbackRate}x
+        </button>
+      )}
     </div>
   );
 }

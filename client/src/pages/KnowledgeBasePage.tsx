@@ -54,12 +54,14 @@ export default function KnowledgeBasePage() {
   // Delete KB
   const [deletingKbId, setDeletingKbId] = useState<string | null>(null);
 
-  // Search test panel
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<KBSearchResult[]>([]);
-  const [searchClassification, setSearchClassification] = useState<{ method: string; reasoning: string } | null>(null);
-  const [searching, setSearching] = useState(false);
+  // Per-KB search state
+  const [kbSearchState, setKbSearchState] = useState<Record<string, {
+    show: boolean;
+    query: string;
+    results: KBSearchResult[];
+    classification: { method: string; reasoning: string } | null;
+    searching: boolean;
+  }>>({});
 
   // Protect create/edit forms from accidental navigation
   const isPageDirty = useMemo(() => {
@@ -137,9 +139,12 @@ export default function KnowledgeBasePage() {
     try {
       await deleteKnowledgeBase(kbId);
       if (expandedKbId === kbId) setExpandedKbId(null);
-      // Clear stale search results — deleted KB entries may still be shown
-      setSearchQuery('');
-      setSearchResults([]);
+      // Clear stale search state for deleted KB
+      setKbSearchState((prev) => {
+        const next = { ...prev };
+        delete next[kbId];
+        return next;
+      });
       toast.success('Knowledge base deleted');
     } catch {
       toast.error('Failed to delete knowledge base');
@@ -240,20 +245,26 @@ export default function KnowledgeBasePage() {
     [deleteChunk]
   );
 
-  const handleSearch = async () => {
-    const q = searchQuery.trim();
+  const handleSearch = async (kbId: string) => {
+    const state = kbSearchState[kbId];
+    const q = state?.query?.trim();
     if (!q) return;
-    setSearching(true);
-    setSearchResults([]);
-    setSearchClassification(null);
+    setKbSearchState((prev) => ({
+      ...prev,
+      [kbId]: { ...prev[kbId], searching: true, results: [], classification: null },
+    }));
     try {
-      const { results, queryClassification } = await searchKB(q);
-      setSearchResults(results);
-      setSearchClassification(queryClassification ?? null);
+      const { results, queryClassification } = await searchKB(q, [kbId]);
+      setKbSearchState((prev) => ({
+        ...prev,
+        [kbId]: { ...prev[kbId], searching: false, results, classification: queryClassification ?? null },
+      }));
     } catch {
       toast.error('Search failed');
-    } finally {
-      setSearching(false);
+      setKbSearchState((prev) => ({
+        ...prev,
+        [kbId]: { ...prev[kbId], searching: false },
+      }));
     }
   };
 
@@ -434,7 +445,7 @@ export default function KnowledgeBasePage() {
 
                 {/* Expanded entries */}
                 {isExpanded && (
-                  <div className="border-t px-4 py-3">
+                  <div className="border-t px-4 py-3 space-y-3">
                     <KnowledgeBase
                       entries={entries}
                       onAdd={handleAddEntry(kb.id)}
@@ -450,6 +461,107 @@ export default function KnowledgeBasePage() {
                       isDebugMode={debugMode}
                       loading={isLoadingEntries}
                     />
+
+                    {/* Per-KB search */}
+                    {(() => {
+                      const ss = kbSearchState[kb.id] || { show: false, query: '', results: [], classification: null, searching: false };
+                      const toggleShow = () => setKbSearchState((prev) => ({
+                        ...prev,
+                        [kb.id]: { ...ss, show: !ss.show },
+                      }));
+                      const setQuery = (q: string) => setKbSearchState((prev) => ({
+                        ...prev,
+                        [kb.id]: { ...ss, ...prev[kb.id], query: q },
+                      }));
+
+                      return (
+                        <div className="rounded border bg-muted/10">
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 transition-colors"
+                            onClick={toggleShow}
+                          >
+                            <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="text-xs font-medium">Test Search</span>
+                            <span className="text-[11px] text-muted-foreground">Query this knowledge base</span>
+                            {ss.show ? (
+                              <ChevronUp className="ml-auto h-3 w-3 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="ml-auto h-3 w-3 shrink-0 text-muted-foreground" />
+                            )}
+                          </button>
+
+                          {ss.show && (
+                            <div className="border-t px-3 py-2.5 space-y-2.5">
+                              <div className="flex gap-2">
+                                <Input
+                                  value={ss.query}
+                                  onChange={(e) => setQuery(e.target.value)}
+                                  placeholder="Type a query to test search..."
+                                  className="h-7 text-xs"
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(kb.id); }}
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleSearch(kb.id)}
+                                  disabled={ss.searching || !ss.query.trim()}
+                                  className="h-7 shrink-0 gap-1.5 text-xs"
+                                >
+                                  {ss.searching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                                  Search
+                                </Button>
+                              </div>
+
+                              {ss.searching && (
+                                <div className="space-y-2">
+                                  <div className="h-14 animate-pulse rounded bg-muted" />
+                                  <div className="h-14 animate-pulse rounded bg-muted" />
+                                </div>
+                              )}
+
+                              {!ss.searching && ss.results.length > 0 && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs text-muted-foreground">{ss.results.length} results</p>
+                                    {ss.classification && (
+                                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary" title={ss.classification.reasoning}>
+                                        {ss.classification.method.toUpperCase()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {ss.results.map((result, i) => (
+                                    <div key={result.id} className="rounded border bg-muted/30 p-2.5 space-y-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">#{i + 1}</span>
+                                        <span className="text-[11px] text-muted-foreground">
+                                          {ss.classification?.method === 'vector' ? 'Sim' : ss.classification?.method === 'fts' ? 'FTS' : 'RRF'}: {result.rrfScore.toFixed(4)}
+                                        </span>
+                                        {result.vectorRank > 0 && (
+                                          <span className="text-[11px] text-muted-foreground">Vector: #{result.vectorRank}</span>
+                                        )}
+                                        {result.ftsRank > 0 && (
+                                          <span className="text-[11px] text-muted-foreground">FTS: #{result.ftsRank}</span>
+                                        )}
+                                      </div>
+                                      {result.relevanceReason && (
+                                        <p className="text-xs text-primary/80 italic">{result.relevanceReason}</p>
+                                      )}
+                                      <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
+                                        {result.snippet || result.content.slice(0, 300)}{!result.snippet && result.content.length > 300 ? '...' : ''}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {!ss.searching && ss.results.length === 0 && ss.query.trim() && (
+                                <p className="text-xs text-muted-foreground">No results. Try a different query.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -481,100 +593,6 @@ export default function KnowledgeBasePage() {
         )
       )}
 
-      {/* Search test panel */}
-      {knowledgeBases.length > 0 && (
-        <div className="rounded-lg border">
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-            onClick={() => setShowSearch(!showSearch)}
-          >
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-sm font-medium">Test Search</span>
-            <span className="text-xs text-muted-foreground">Query your knowledge bases</span>
-            {showSearch ? (
-              <ChevronUp className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            )}
-          </button>
-
-          {showSearch && (
-            <div className="border-t px-4 py-3 space-y-3">
-              <div className="flex gap-2">
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Type a query to test knowledge base search..."
-                  className="h-8 text-sm"
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-                />
-                <Button
-                  size="sm"
-                  onClick={handleSearch}
-                  disabled={searching || !searchQuery.trim()}
-                  className="h-8 shrink-0 gap-1.5 text-xs"
-                >
-                  {searching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                  Search
-                </Button>
-              </div>
-
-              {searching && (
-                <div className="space-y-2">
-                  <div className="h-16 animate-pulse rounded bg-muted" />
-                  <div className="h-16 animate-pulse rounded bg-muted" />
-                </div>
-              )}
-
-              {!searching && searchResults.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">{searchResults.length} results</p>
-                    {searchClassification && (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary" title={searchClassification.reasoning}>
-                        {searchClassification.method.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  {searchResults.map((result, i) => (
-                    <div key={result.id} className="rounded border bg-muted/30 p-2.5 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">#{i + 1}</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {searchClassification?.method === 'vector' ? 'Sim' : searchClassification?.method === 'fts' ? 'FTS' : 'RRF'}: {result.rrfScore.toFixed(4)}
-                        </span>
-                        {result.vectorRank > 0 && (
-                          <span className="text-[11px] text-muted-foreground">
-                            Vector: #{result.vectorRank}
-                          </span>
-                        )}
-                        {result.ftsRank > 0 && (
-                          <span className="text-[11px] text-muted-foreground">
-                            FTS: #{result.ftsRank}
-                          </span>
-                        )}
-                      </div>
-                      {result.relevanceReason && (
-                        <p className="text-xs text-primary/80 italic">
-                          {result.relevanceReason}
-                        </p>
-                      )}
-                      <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
-                        {result.snippet || result.content.slice(0, 300)}{!result.snippet && result.content.length > 300 ? '...' : ''}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {!searching && searchResults.length === 0 && searchQuery.trim() && (
-                <p className="text-xs text-muted-foreground">No results. Try a different query.</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

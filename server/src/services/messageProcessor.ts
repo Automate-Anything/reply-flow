@@ -344,15 +344,11 @@ export async function processIncomingMessage(
     const shouldEnd = await checkSessionShouldEnd(activeSession, companyId);
 
     if (shouldEnd) {
-      // End the old session. If it's ending due to timeout (status is still open/pending),
-      // also archive it so it doesn't linger in the inbox alongside the new session.
-      const endUpdate: Record<string, unknown> = { ended_at: new Date().toISOString() };
-      if (activeSession.status !== 'resolved' && activeSession.status !== 'closed') {
-        endUpdate.is_archived = true;
-      }
+      // End the old session. Archiving is a separate user-initiated action,
+      // so we only set ended_at here — never auto-archive.
       await supabaseAdmin
         .from('chat_sessions')
-        .update(endUpdate)
+        .update({ ended_at: new Date().toISOString() })
         .eq('id', activeSession.id);
 
       // Extract memories from the ended session (async, never blocks)

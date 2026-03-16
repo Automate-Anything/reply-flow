@@ -54,6 +54,7 @@ export interface ConversationFilters {
   priority?: string[];
   starred?: boolean;
   snoozed?: boolean;
+  archived?: boolean;
   unread?: boolean;
   sort?: 'newest' | 'oldest';
   labelId?: string;
@@ -112,6 +113,7 @@ export function useConversations(
       }
       if (filters?.starred) params.set('starred', 'true');
       if (filters?.snoozed) params.set('snoozed', 'true');
+      if (filters?.archived) params.set('archived', 'true');
       if (filters?.unread) params.set('unread', 'true');
       if (filters?.sort) params.set('sort', filters.sort);
       if (filters?.labelId) params.set('labelId', filters.labelId);

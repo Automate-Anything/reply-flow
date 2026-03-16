@@ -58,7 +58,9 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
     if (archived === 'true') {
       query = query.eq('is_archived', true);
     } else {
-      query = query.eq('is_archived', false);
+      // Normal inbox: exclude archived AND ended sessions (ended sessions
+      // are no longer auto-archived, so we filter them out explicitly).
+      query = query.eq('is_archived', false).is('ended_at', null);
     }
 
     const statusValues = typeof status === 'string'
@@ -250,6 +252,81 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
   }
 });
 
+// Get a single conversation by ID (used for notification deep-links when the
+// conversation isn't in the currently-filtered list, e.g. snoozed or archived)
+router.get('/:sessionId', requirePermission('conversations', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { sessionId } = req.params;
+
+    const { data: session, error } = await supabaseAdmin
+      .from('chat_sessions')
+      .select(
+        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url)'
+      )
+      .eq('id', sessionId as string)
+      .eq('company_id', companyId)
+      .is('deleted_at', null)
+      .single();
+
+    if (error || !session) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    // Verify the user has access to this conversation
+    const { filter } = await getAccessibleSessions(req.userId!, companyId);
+    if (filter.mode === 'filtered') {
+      const hasChannelAccess = filter.channelIds.includes(session.channel_id);
+      const isExcluded = filter.excludedSessionIds.includes(session.id);
+      if (!hasChannelAccess || isExcluded) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+    }
+
+    // Unread count
+    const { data: unreadRows } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id')
+      .eq('session_id', sessionId as string)
+      .eq('direction', 'inbound')
+      .eq('read', false);
+
+    // Session count for contact
+    let contactSessionCount = 1;
+    if (session.contact_id) {
+      const { count } = await supabaseAdmin
+        .from('chat_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('contact_id', session.contact_id)
+        .is('deleted_at', null);
+      contactSessionCount = count || 1;
+    }
+
+    // Override metadata
+    const overrideMeta = await getOverrideMetadata([sessionId as string], companyId);
+
+    const enriched = {
+      ...session,
+      unread_count: unreadRows?.length || 0,
+      contact_session_count: contactSessionCount,
+      profile_picture_url: (session.contact as Record<string, unknown>)?.profile_picture_url || null,
+      labels:
+        session.conversation_labels
+          ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
+          .filter(Boolean) || [],
+      assigned_user: session.assigned_user || null,
+      override_meta: overrideMeta[0] || null,
+    };
+
+    res.json({ session: enriched });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get messages for a conversation (cursor pagination)
 router.get('/:sessionId/messages', requirePermission('conversations', 'view'), async (req, res, next) => {
   try {
@@ -264,10 +341,30 @@ router.get('/:sessionId/messages', requirePermission('conversations', 'view'), a
       return;
     }
 
+    // Look up the contact for this session, then fetch messages across ALL
+    // sessions for that contact so the thread shows full conversation history.
+    const { data: currentSession } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('contact_id')
+      .eq('id', sessionId as string)
+      .single();
+
+    let sessionIds: string[] = [sessionId as string];
+    if (currentSession?.contact_id) {
+      const { data: contactSessions } = await supabaseAdmin
+        .from('chat_sessions')
+        .select('id')
+        .eq('contact_id', currentSession.contact_id)
+        .eq('company_id', companyId);
+      if (contactSessions && contactSessions.length > 0) {
+        sessionIds = contactSessions.map((s) => s.id);
+      }
+    }
+
     let query = supabaseAdmin
       .from('chat_messages')
       .select('*')
-      .eq('session_id', sessionId)
+      .in('session_id', sessionIds)
       .order('created_at', { ascending: false })
       .limit(Number(limit));
 
