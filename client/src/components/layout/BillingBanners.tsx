@@ -56,7 +56,7 @@ export default function BillingBanners() {
           <span className="flex-1">
             Your AI agent is paused — you've used all included messages this month and your balance is $0.{' '}
             <Link
-              to="/settings?tab=billing"
+              to="/company-settings?tab=billing"
               className="font-medium underline underline-offset-2 hover:text-amber-900"
             >
               Add balance to resume
@@ -80,7 +80,7 @@ export default function BillingBanners() {
               <>
                 Your subscription has expired. Renew to restore your AI agent and WhatsApp service.{' '}
                 <Link
-                  to="/settings?tab=billing"
+                  to="/company-settings?tab=billing"
                   className="font-medium underline underline-offset-2 hover:text-red-900"
                 >
                   Renew now
@@ -97,7 +97,7 @@ export default function BillingBanners() {
                 </strong>{' '}
                 if payment isn't received.{' '}
                 <Link
-                  to="/settings?tab=billing"
+                  to="/company-settings?tab=billing"
                   className="font-medium underline underline-offset-2 hover:text-red-900"
                 >
                   Update payment method
@@ -107,7 +107,7 @@ export default function BillingBanners() {
               <>
                 Your subscription renewal failed. Please update your payment method.{' '}
                 <Link
-                  to="/settings?tab=billing"
+                  to="/company-settings?tab=billing"
                   className="font-medium underline underline-offset-2 hover:text-red-900"
                 >
                   Update now

@@ -128,7 +128,7 @@ export default function UsageTab() {
         <p className="text-muted-foreground text-sm">
           You don't have an active plan yet. Select a plan to see your usage.
         </p>
-        <Button onClick={() => navigate('/settings?tab=billing')}>View Plans</Button>
+        <Button onClick={() => navigate('/company-settings?tab=billing')}>View Plans</Button>
       </div>
     );
   }

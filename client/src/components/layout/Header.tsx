@@ -65,8 +65,8 @@ export default function Header({ onMenuClick }: HeaderProps) {
     if (path === '/channels') return 'Channels';
     if (path.startsWith('/ai-agents')) return 'AI Agents';
     if (path === '/schedule') return 'Schedule';
-    if (path === '/settings') return 'Company Settings';
-    if (path === '/profile') return 'Profile Settings';
+    if (path === '/company-settings') return 'Company Settings';
+    if (path === '/profile-settings') return 'Profile Settings';
     return '';
   })();
 
@@ -164,12 +164,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => navigate('/profile')}>
+            <DropdownMenuItem onClick={() => navigate('/profile-settings')}>
               <User className="mr-2 h-4 w-4" />
               Profile Settings
             </DropdownMenuItem>
             {canViewCompanySettings && (
-              <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <DropdownMenuItem onClick={() => navigate('/company-settings')}>
                 <Building2 className="mr-2 h-4 w-4" />
                 Company Settings
               </DropdownMenuItem>
