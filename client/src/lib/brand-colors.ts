@@ -1,4 +1,5 @@
 // Hex-to-OKLCH conversion and CSS variable override for company brand colors.
+// Replaces the default teal hue (155) across the ENTIRE theme with the brand color's hue.
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -52,62 +53,99 @@ function hexToOklch(hex: string): { L: number; C: number; H: number } {
   return { L, C, H };
 }
 
-// ── CSS variable application ────────────────────────────────────────
+// ── Full theme override ─────────────────────────────────────────────
+// Each entry: [css-var-name, lightness, chroma]
+// The hue is replaced with the brand color's hue.
+// Values taken directly from index.css (:root and .dark blocks).
 
-const CSS_VARS_TO_OVERRIDE = [
-  '--primary',
-  '--ring',
-  '--sidebar-primary',
-  '--sidebar-ring',
-  '--chart-1',
-] as const;
+type ThemeVar = [string, number, number];
 
-const FOREGROUND_VARS = [
-  '--primary-foreground',
-  '--sidebar-primary-foreground',
-] as const;
+// Variables that use the base hue (155 in default theme)
+const LIGHT_THEME: ThemeVar[] = [
+  ['--background',                    0.985, 0.002],
+  ['--foreground',                    0.145, 0.005],
+  ['--card-foreground',               0.145, 0.005],
+  ['--popover-foreground',            0.145, 0.005],
+  ['--primary',                       0.55,  0.17 ],
+  ['--primary-foreground',            0.985, 0.005],
+  ['--secondary',                     0.965, 0.015],
+  ['--secondary-foreground',          0.205, 0.02 ],
+  ['--muted',                         0.965, 0.01 ],
+  ['--muted-foreground',              0.50,  0.01 ],
+  ['--accent',                        0.94,  0.03 ],
+  ['--accent-foreground',             0.205, 0.02 ],
+  ['--border',                        0.90,  0.01 ],
+  ['--input',                         0.90,  0.015],
+  ['--ring',                          0.55,  0.17 ],
+  ['--chart-1',                       0.55,  0.17 ],
+  ['--sidebar',                       0.22,  0.03 ],
+  ['--sidebar-foreground',            0.92,  0.01 ],
+  ['--sidebar-primary',               0.55,  0.17 ],
+  ['--sidebar-primary-foreground',    0.985, 0.005],
+  ['--sidebar-accent',                0.30,  0.04 ],
+  ['--sidebar-accent-foreground',     0.98,  0.01 ],
+  ['--sidebar-border',                0.30,  0.03 ],
+  ['--sidebar-ring',                  0.55,  0.17 ],
+];
+
+const DARK_THEME: ThemeVar[] = [
+  ['--background',                    0.145, 0.01 ],
+  ['--foreground',                    0.96,  0.005],
+  ['--card',                          0.20,  0.015],
+  ['--card-foreground',               0.96,  0.005],
+  ['--popover',                       0.20,  0.015],
+  ['--popover-foreground',            0.96,  0.005],
+  ['--primary',                       0.60,  0.17 ],
+  ['--primary-foreground',            0.15,  0.02 ],
+  ['--secondary',                     0.25,  0.02 ],
+  ['--secondary-foreground',          0.96,  0.005],
+  ['--muted',                         0.25,  0.015],
+  ['--muted-foreground',              0.65,  0.015],
+  ['--accent',                        0.28,  0.03 ],
+  ['--accent-foreground',             0.96,  0.005],
+  ['--border',                        0.30,  0.02 ],
+  ['--input',                         0.28,  0.02 ],
+  ['--ring',                          0.60,  0.17 ],
+  ['--chart-1',                       0.60,  0.17 ],
+  ['--sidebar',                       0.16,  0.015],
+  ['--sidebar-foreground',            0.92,  0.01 ],
+  ['--sidebar-primary',               0.60,  0.17 ],
+  ['--sidebar-primary-foreground',    0.96,  0.005],
+  ['--sidebar-accent',                0.24,  0.03 ],
+  ['--sidebar-accent-foreground',     0.96,  0.005],
+  ['--sidebar-border',                0.25,  0.02 ],
+  ['--sidebar-ring',                  0.60,  0.17 ],
+];
+
+// All variable names that we override (union of light + dark) — used for cleanup
+const ALL_VARS = [...new Set([
+  ...LIGHT_THEME.map(([v]) => v),
+  ...DARK_THEME.map(([v]) => v),
+])];
 
 function isDark(): boolean {
   return document.documentElement.classList.contains('dark');
 }
 
-function buildOklch(L: number, C: number, H: number): string {
-  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${H.toFixed(1)})`;
-}
-
 /**
- * Apply a brand color to the document by overriding CSS custom properties.
+ * Apply a brand color to the document by overriding ALL theme CSS variables.
+ * Replaces the default hue (155) with the brand color's hue across the entire theme.
  * Pass null to revert to CSS defaults.
  */
 export function applyBrandColor(hex: string | null): void {
   const root = document.documentElement;
 
   if (!hex || !HEX_RE.test(hex)) {
-    // Remove overrides — fall back to CSS defaults
-    for (const v of CSS_VARS_TO_OVERRIDE) root.style.removeProperty(v);
-    for (const v of FOREGROUND_VARS) root.style.removeProperty(v);
+    // Remove all overrides — fall back to CSS defaults
+    for (const v of ALL_VARS) root.style.removeProperty(v);
     return;
   }
 
-  const { C, H } = hexToOklch(hex);
-  const dark = isDark();
+  const { H } = hexToOklch(hex);
+  const theme = isDark() ? DARK_THEME : LIGHT_THEME;
 
-  // Primary color: lighter in dark mode for good contrast
-  const primaryL = dark ? 0.60 : 0.55;
-  const primaryValue = buildOklch(primaryL, C, H);
-
-  for (const v of CSS_VARS_TO_OVERRIDE) {
-    root.style.setProperty(v, primaryValue);
-  }
-
-  // Foreground: match existing convention — light mode uses light text on primary,
-  // dark mode uses dark text on primary (see index.css defaults)
-  const fgValue = dark
-    ? 'oklch(0.15 0.02 155)'   // dark text on lighter primary (matches --primary-foreground in .dark)
-    : 'oklch(0.985 0.005 155)'; // light text on darker primary (matches --primary-foreground in :root)
-
-  for (const v of FOREGROUND_VARS) {
-    root.style.setProperty(v, fgValue);
+  for (const [varName, L, C] of theme) {
+    root.style.setProperty(varName, `oklch(${L} ${C} ${H.toFixed(1)})`);
   }
 }
 
