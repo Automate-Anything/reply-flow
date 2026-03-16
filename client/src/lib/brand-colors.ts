@@ -151,6 +151,17 @@ export function applyBrandColor(hex: string | null): void {
   }
 }
 
+/**
+ * Returns the CSS color string that --primary would be for the given hex.
+ * Use this for swatch backgrounds so they match exactly what the browser
+ * renders for --primary (no hex round-trip mismatch).
+ */
+export function primaryColorForHex(hex: string | null): string {
+  if (!hex || !HEX_RE.test(hex)) return 'oklch(0.55 0.17 160)'; // default teal
+  const { H } = hexToOklch(hex);
+  return `oklch(0.55 0.17 ${H.toFixed(1)})`;
+}
+
 // ── Dark mode observer ──────────────────────────────────────────────
 
 let currentHex: string | null = null;

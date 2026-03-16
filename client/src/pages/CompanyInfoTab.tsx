@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Loader2, Building2, Trash2, ChevronsUpDown, Check, Paintbrush, Upload, X } from 'lucide-react';
-import { BRAND_PRESETS, applyBrandColor } from '@/lib/brand-colors';
+import { BRAND_PRESETS, applyBrandColor, primaryColorForHex } from '@/lib/brand-colors';
 import { cn } from '@/lib/utils';
 import BusinessHoursSettings from '@/components/settings/BusinessHoursSettings';
 import HolidayEditor from '@/components/settings/HolidayEditor';
@@ -467,7 +467,7 @@ export default function CompanyInfoTab() {
                       ? 'border-foreground ring-2 ring-foreground/20'
                       : 'border-transparent'
                   )}
-                  style={{ backgroundColor: preset.hex || '#0d9488' }}
+                  style={{ backgroundColor: primaryColorForHex(preset.hex) }}
                   onClick={() => handleBrandColorChange(preset.hex)}
                 >
                   {brandColor === preset.hex && (
