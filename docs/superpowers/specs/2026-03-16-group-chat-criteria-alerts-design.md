@@ -89,7 +89,7 @@ Add the ability for customers to monitor their WhatsApp group chats and receive 
 | `company_id` | UUID (FK → companies) | Tenant isolation |
 | `group_chat_message_id` | UUID (FK → group_chat_messages) | The message that triggered the match |
 | `criteria_ids` | UUID[] | All criteria that matched this message |
-| `notification_id` | UUID (FK → notifications, nullable) | The consolidated notification created |
+| `notification_ids` | UUID[] | All notification rows created (one per recipient) |
 | `created_at` | TIMESTAMPTZ | |
 
 - **RLS:** Filtered by `company_id`
@@ -101,10 +101,10 @@ Add the ability for customers to monitor their WhatsApp group chats and receive 
 Current behavior in `webhook.ts`: messages with `chat_id` ending in `@g.us` are skipped. New behavior:
 
 1. Receive group message from Whapi webhook
-2. Look up `group_chats` by `(channel_id, group_jid)`
+2. Look up `group_chats` by `(channel_id, group_jid)` — where `channel_id` is the internal UUID from `whatsapp_channels.id` (already resolved from `payload.channel_id` in the existing webhook channel lookup)
 3. **Group not found:** Auto-create row with `monitoring_enabled = false`. Stop processing. (Group now appears as available to configure in the UI.)
 4. **Group found, monitoring disabled:** Stop processing.
-5. **Group found, monitoring enabled:** Store message in `group_chat_messages`, then pass to criteria evaluation pipeline.
+5. **Group found, monitoring enabled:** Store message in `group_chat_messages` (all messages from monitored groups are stored for context, not just matched ones), then pass to criteria evaluation pipeline.
 
 ### Criteria Evaluation Pipeline
 
@@ -114,13 +114,14 @@ Triggered when a monitored group message is stored:
 
 1. **Fetch applicable criteria:** All enabled criteria where `group_chat_id` matches this group OR `group_chat_id IS NULL` (global)
 2. **Evaluate keyword criteria locally:**
-   - Case-insensitive substring matching
-   - AND operator: all keywords must appear in the message
-   - OR operator: any keyword must appear
+   - Each keyword entry is matched as an exact substring (case-insensitive). E.g., `"delivery delay"` matches only if that exact phrase appears in the message.
+   - AND operator: all keyword entries must appear in the message
+   - OR operator: any keyword entry must appear
    - Returns list of matched keyword criteria
 3. **Evaluate AI criteria via Claude:**
-   - Batch all AI criteria into a single API call
+   - Batch all AI criteria into a single API call (max 20 AI criteria per call; if more exist, split into multiple calls)
    - Prompt asks Claude to evaluate the message against each criteria description and return which ones matched (with a yes/no per criteria)
+   - **On API failure/timeout:** Log the error and skip AI criteria evaluation for this message. Keyword matches (step 2) still produce notifications. AI criteria failures are non-blocking — no retry queue needed for v1.
    - Returns list of matched AI criteria
 4. **Consolidate matches:**
    - Union all matched criteria (keyword + AI)
@@ -137,7 +138,8 @@ The pipeline must **never** call Whapi's send message API. No code path from gro
 
 ## Notification Integration
 
-- **New notification type:** `group_criteria_match` added to the existing notification types enum/check constraint
+- **New notification type:** `group_criteria_match` added to the existing notification types enum/check constraint. Must also be added to `PREFERENCE_DEFAULTS` in `notificationService.ts` and the default JSON in the `notification_preferences` column default (consistent with how `handoff` was added in migration 057).
+- **User IDs:** `notify_user_ids` in `group_criteria` and `user_id` in `notifications` both reference `auth.users(id)`, consistent with existing notification patterns.
 - **Uses existing infrastructure:** `notificationService.ts`, `notifications` table, Supabase Realtime CDC for live delivery to the frontend
 - **Respects notification preferences:** If a team member has notifications disabled, they don't receive group criteria alerts either
 - **Consolidated:** One notification per message per recipient, listing all matched criteria in the metadata
@@ -205,8 +207,10 @@ When a user clicks a `group_criteria_match` notification:
 | `POST` | `/groups/criteria` | Create a new criteria (group-specific or global based on `group_chat_id` field) |
 | `PATCH` | `/groups/criteria/:id` | Update a criteria |
 | `DELETE` | `/groups/criteria/:id` | Delete a criteria |
-| `GET` | `/groups/criteria/global` | List all global criteria |
+| `GET` | `/groups/global-criteria` | List all global criteria |
 | `GET` | `/groups/:id/matches` | Get criteria match log for a group |
+
+**Route registration note:** `/groups/global-criteria` uses a distinct path segment to avoid conflicts with `/groups/:id` parameter matching.
 
 ## Out of Scope (Future)
 
@@ -216,3 +220,5 @@ When a user clicks a `group_criteria_match` notification:
 - Media message content analysis (only text evaluated for now)
 - Criteria templates / presets
 - Analytics / dashboards on match frequency
+- Stale group cleanup (groups deleted from WhatsApp remain in the system)
+- Pagination for groups list and global criteria list (acceptable for v1; revisit if scale requires it)
