@@ -75,8 +75,6 @@ export default function CompanyInfoTab() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [removingLogo, setRemovingLogo] = useState(false);
-  const [customColorInput, setCustomColorInput] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const fetchCompany = useCallback(async () => {
@@ -90,11 +88,6 @@ export default function CompanyInfoTab() {
       setBrandColor(data.company.brand_color || null);
       setSavedBrandColor(data.company.brand_color || null);
       setLogoUrl(data.company.logo_url || null);
-      const isCustom = data.company.brand_color && !BRAND_PRESETS.some(p => p.hex === data.company.brand_color);
-      if (isCustom) {
-        setCustomColorInput(data.company.brand_color);
-        setShowCustomInput(true);
-      }
     } catch {
       toast.error('Failed to load company settings');
     } finally {
@@ -174,18 +167,6 @@ export default function CompanyInfoTab() {
   const handleBrandColorChange = (hex: string | null) => {
     setBrandColor(hex);
     applyBrandColor(hex); // live preview
-    setShowCustomInput(false);
-    setCustomColorInput('');
-  };
-
-  const handleCustomColorApply = () => {
-    const val = customColorInput.trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
-      setBrandColor(val);
-      applyBrandColor(val);
-    } else {
-      toast.error('Enter a valid hex color (e.g. #2563eb)');
-    }
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -475,43 +456,31 @@ export default function CompanyInfoTab() {
                   )}
                 </button>
               ))}
-              {/* Custom color button */}
-              <button
-                type="button"
-                disabled={!canEdit}
+              {/* Custom color picker */}
+              <label
                 title="Custom color"
                 className={cn(
-                  'relative flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all hover:scale-110 disabled:opacity-50',
-                  showCustomInput && brandColor && !BRAND_PRESETS.some(p => p.hex === brandColor)
+                  'relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 transition-all hover:scale-110',
+                  brandColor && !BRAND_PRESETS.some(p => p.hex === brandColor)
                     ? 'border-foreground ring-2 ring-foreground/20'
                     : 'border-muted-foreground/30',
+                  !canEdit && 'pointer-events-none opacity-50',
                   'bg-gradient-to-br from-red-400 via-blue-400 to-green-400'
                 )}
-                onClick={() => setShowCustomInput(!showCustomInput)}
               >
                 <Paintbrush className="h-3.5 w-3.5 text-white" />
-              </button>
-            </div>
-            {showCustomInput && (
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="#2563eb"
-                  value={customColorInput}
-                  onChange={(e) => setCustomColorInput(e.target.value)}
+                <input
+                  type="color"
+                  className="sr-only"
                   disabled={!canEdit}
-                  className="w-32 font-mono"
-                  maxLength={7}
+                  value={brandColor || '#0d9488'}
+                  onChange={(e) => {
+                    const hex = e.target.value;
+                    setBrandColor(hex);
+                    applyBrandColor(hex);
+                  }}
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!canEdit}
-                  onClick={handleCustomColorApply}
-                >
-                  Apply
-                </Button>
-              </div>
-            )}
+              </label>
           </div>
 
           {canEdit && (
