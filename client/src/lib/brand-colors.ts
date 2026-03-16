@@ -54,82 +54,78 @@ function hexToOklch(hex: string): { L: number; C: number; H: number } {
 }
 
 // ── Full theme override ─────────────────────────────────────────────
-// Each entry: [css-var-name, lightness, chromaScale]
-//   chromaScale is a multiplier of the brand color's actual chroma.
-//   1.0 = exact brand color intensity.  0.05 = very subtle tint.
-//   This means vivid brand colors produce vivid themes and muted
-//   brand colors produce muted themes — the intensity always matches.
+// L and C values are copied EXACTLY from index.css so the brand override
+// looks identical to the default teal theme — just with a different hue.
+// The only exception: "exact" vars use the brand hex's actual L/C/H so
+// buttons and links visually match the swatch the user clicked.
 
 type ThemeVar = [string, number, number];
 
+// Vars that use the brand hex's exact L and C (not the defaults)
+const EXACT_VARS = new Set([
+  '--primary',
+  '--ring',
+  '--chart-1',
+  '--sidebar-primary',
+  '--sidebar-ring',
+]);
+
+// Light theme — L/C copied verbatim from :root in index.css
 const LIGHT_THEME: ThemeVar[] = [
-  // Main surfaces — high chroma scale so they ARE the brand color
-  ['--sidebar',                       0.25,  0.70],
-  ['--sidebar-accent',                0.32,  0.55],
-  ['--sidebar-border',                0.32,  0.45],
-  ['--sidebar-foreground',            0.93,  0.05],
-  ['--sidebar-primary',               0.92,  0.15],
-  ['--sidebar-primary-foreground',    0.25,  0.60],
-  ['--sidebar-accent-foreground',     0.95,  0.05],
-  ['--sidebar-ring',                  0.60,  0.80],
-
-  // Primary (buttons, links) — exact brand color
-  ['--primary',                       1.0,   1.0 ],  // special: L=1.0 means "use brand L"
-  ['--primary-foreground',            0.985, 0.03],
-  ['--ring',                          1.0,   1.0 ],
-  ['--chart-1',                       1.0,   1.0 ],
-
-  // Supporting surfaces — moderate tint
-  ['--accent',                        0.94,  0.20],
-  ['--accent-foreground',             0.205, 0.15],
-  ['--secondary',                     0.955, 0.15],
-  ['--secondary-foreground',          0.205, 0.12],
-  ['--muted',                         0.960, 0.10],
-  ['--muted-foreground',              0.50,  0.08],
-
-  // Backgrounds & chrome — subtle tint
-  ['--background',                    0.985, 0.03],
-  ['--foreground',                    0.145, 0.08],
-  ['--card-foreground',               0.145, 0.08],
-  ['--popover-foreground',            0.145, 0.08],
-  ['--border',                        0.90,  0.10],
-  ['--input',                         0.90,  0.12],
+  ['--background',                    0.985, 0.002],
+  ['--foreground',                    0.145, 0.005],
+  ['--card-foreground',               0.145, 0.005],
+  ['--popover-foreground',            0.145, 0.005],
+  ['--primary',                       0.55,  0.17 ],
+  ['--primary-foreground',            0.985, 0.005],
+  ['--secondary',                     0.965, 0.015],
+  ['--secondary-foreground',          0.205, 0.02 ],
+  ['--muted',                         0.965, 0.01 ],
+  ['--muted-foreground',              0.50,  0.01 ],
+  ['--accent',                        0.94,  0.03 ],
+  ['--accent-foreground',             0.205, 0.02 ],
+  ['--border',                        0.90,  0.01 ],
+  ['--input',                         0.90,  0.015],
+  ['--ring',                          0.55,  0.17 ],
+  ['--chart-1',                       0.55,  0.17 ],
+  ['--sidebar',                       0.22,  0.03 ],
+  ['--sidebar-foreground',            0.92,  0.01 ],
+  ['--sidebar-primary',               0.55,  0.17 ],
+  ['--sidebar-primary-foreground',    0.985, 0.005],
+  ['--sidebar-accent',                0.30,  0.04 ],
+  ['--sidebar-accent-foreground',     0.98,  0.01 ],
+  ['--sidebar-border',                0.30,  0.03 ],
+  ['--sidebar-ring',                  0.55,  0.17 ],
 ];
 
+// Dark theme — L/C copied verbatim from .dark in index.css
 const DARK_THEME: ThemeVar[] = [
-  // Main surfaces
-  ['--sidebar',                       0.18,  0.55],
-  ['--sidebar-accent',                0.25,  0.45],
-  ['--sidebar-border',                0.27,  0.35],
-  ['--sidebar-foreground',            0.93,  0.05],
-  ['--sidebar-primary',               0.65,  0.80],
-  ['--sidebar-primary-foreground',    0.15,  0.50],
-  ['--sidebar-accent-foreground',     0.95,  0.05],
-  ['--sidebar-ring',                  0.65,  0.80],
-
-  // Primary — exact brand color (slightly boosted L for dark mode)
-  ['--primary',                       1.0,   1.0 ],
-  ['--primary-foreground',            0.15,  0.05],
-  ['--ring',                          1.0,   1.0 ],
-  ['--chart-1',                       1.0,   1.0 ],
-
-  // Supporting surfaces
-  ['--accent',                        0.28,  0.20],
-  ['--accent-foreground',             0.96,  0.05],
-  ['--secondary',                     0.25,  0.15],
-  ['--secondary-foreground',          0.96,  0.05],
-  ['--muted',                         0.25,  0.10],
-  ['--muted-foreground',              0.65,  0.08],
-
-  // Backgrounds & chrome
-  ['--background',                    0.145, 0.04],
-  ['--foreground',                    0.96,  0.05],
-  ['--card',                          0.20,  0.08],
-  ['--card-foreground',               0.96,  0.05],
-  ['--popover',                       0.20,  0.08],
-  ['--popover-foreground',            0.96,  0.05],
-  ['--border',                        0.30,  0.12],
-  ['--input',                         0.28,  0.12],
+  ['--background',                    0.145, 0.01 ],
+  ['--foreground',                    0.96,  0.005],
+  ['--card',                          0.20,  0.015],
+  ['--card-foreground',               0.96,  0.005],
+  ['--popover',                       0.20,  0.015],
+  ['--popover-foreground',            0.96,  0.005],
+  ['--primary',                       0.60,  0.17 ],
+  ['--primary-foreground',            0.15,  0.02 ],
+  ['--secondary',                     0.25,  0.02 ],
+  ['--secondary-foreground',          0.96,  0.005],
+  ['--muted',                         0.25,  0.015],
+  ['--muted-foreground',              0.65,  0.015],
+  ['--accent',                        0.28,  0.03 ],
+  ['--accent-foreground',             0.96,  0.005],
+  ['--border',                        0.30,  0.02 ],
+  ['--input',                         0.28,  0.02 ],
+  ['--ring',                          0.60,  0.17 ],
+  ['--chart-1',                       0.60,  0.17 ],
+  ['--sidebar',                       0.16,  0.015],
+  ['--sidebar-foreground',            0.92,  0.01 ],
+  ['--sidebar-primary',               0.60,  0.17 ],
+  ['--sidebar-primary-foreground',    0.96,  0.005],
+  ['--sidebar-accent',                0.24,  0.03 ],
+  ['--sidebar-accent-foreground',     0.96,  0.005],
+  ['--sidebar-border',                0.25,  0.02 ],
+  ['--sidebar-ring',                  0.60,  0.17 ],
 ];
 
 // All variable names — used for cleanup
@@ -143,11 +139,10 @@ function isDark(): boolean {
 }
 
 /**
- * Apply a brand color to the document by overriding ALL theme CSS variables.
- * Each variable's chroma is a proportion of the brand color's actual chroma,
- * so the main surfaces (sidebar, accents) are clearly in the brand color and
- * supporting surfaces (backgrounds, borders) get a proportional tint.
- * Entries with L=1.0 use the brand color's exact L and C (for --primary etc.).
+ * Apply a brand color by replacing the hue across all theme variables.
+ * L and C stay identical to the default CSS so the visual style matches.
+ * "Exact" vars (--primary, --ring, --sidebar-primary, etc.) use the
+ * brand hex's actual L/C so buttons match the swatch the user picked.
  * Pass null to revert to CSS defaults.
  */
 export function applyBrandColor(hex: string | null): void {
@@ -159,17 +154,15 @@ export function applyBrandColor(hex: string | null): void {
   }
 
   const { L: brandL, C: brandC, H } = hexToOklch(hex);
-  const dark = isDark();
-  const theme = dark ? DARK_THEME : LIGHT_THEME;
+  const theme = isDark() ? DARK_THEME : LIGHT_THEME;
 
-  for (const [varName, L, cScale] of theme) {
-    if (L === 1.0 && cScale === 1.0) {
-      // Exact brand color (--primary, --ring, --chart-1)
-      const effectiveL = dark ? Math.min(brandL + 0.08, 0.75) : brandL;
-      root.style.setProperty(varName, `oklch(${effectiveL.toFixed(3)} ${brandC.toFixed(4)} ${H.toFixed(1)})`);
+  for (const [varName, defaultL, defaultC] of theme) {
+    if (EXACT_VARS.has(varName)) {
+      // Use exact brand color so buttons/links match the picked swatch
+      root.style.setProperty(varName, `oklch(${brandL} ${brandC} ${H.toFixed(1)})`);
     } else {
-      const c = brandC * cScale;
-      root.style.setProperty(varName, `oklch(${L} ${c.toFixed(4)} ${H.toFixed(1)})`);
+      // Use default L/C, only swap the hue
+      root.style.setProperty(varName, `oklch(${defaultL} ${defaultC} ${H.toFixed(1)})`);
     }
   }
 }
