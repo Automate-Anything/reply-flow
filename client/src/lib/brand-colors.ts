@@ -3,17 +3,19 @@
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-/** Preset brand colors — null means "use CSS default (teal)". */
+/** Preset brand colors — null means "use CSS default (teal)".
+ *  Hex values are the sRGB equivalent of oklch(0.55 0.17 H) so the
+ *  swatch visually matches what --primary becomes on the site. */
 export const BRAND_PRESETS: { name: string; hex: string | null }[] = [
   { name: 'Teal', hex: null },
-  { name: 'Blue', hex: '#2563eb' },
-  { name: 'Indigo', hex: '#6366f1' },
-  { name: 'Purple', hex: '#9333ea' },
-  { name: 'Pink', hex: '#ec4899' },
-  { name: 'Rose', hex: '#f43f5e' },
-  { name: 'Orange', hex: '#f97316' },
-  { name: 'Emerald', hex: '#10b981' },
-  { name: 'Slate', hex: '#64748b' },
+  { name: 'Blue', hex: '#366bd3' },
+  { name: 'Indigo', hex: '#5c62d2' },
+  { name: 'Purple', hex: '#8552c2' },
+  { name: 'Pink', hex: '#b53c7f' },
+  { name: 'Rose', hex: '#c03a51' },
+  { name: 'Orange', hex: '#af540f' },
+  { name: 'Emerald', hex: '#148659' },
+  { name: 'Cyan', hex: '#13808f' },
 ];
 
 // ── Hex → sRGB → OKLCH conversion ──────────────────────────────────
@@ -56,19 +58,8 @@ function hexToOklch(hex: string): { L: number; C: number; H: number } {
 // ── Full theme override ─────────────────────────────────────────────
 // L and C values are copied EXACTLY from index.css so the brand override
 // looks identical to the default teal theme — just with a different hue.
-// The only exception: "exact" vars use the brand hex's actual L/C/H so
-// buttons and links visually match the swatch the user clicked.
 
 type ThemeVar = [string, number, number];
-
-// Vars that use the brand hex's exact L and C (not the defaults)
-const EXACT_VARS = new Set([
-  '--primary',
-  '--ring',
-  '--chart-1',
-  '--sidebar-primary',
-  '--sidebar-ring',
-]);
 
 // Light theme — L/C copied verbatim from :root in index.css
 const LIGHT_THEME: ThemeVar[] = [
@@ -140,9 +131,8 @@ function isDark(): boolean {
 
 /**
  * Apply a brand color by replacing the hue across all theme variables.
- * L and C stay identical to the default CSS so the visual style matches.
- * "Exact" vars (--primary, --ring, --sidebar-primary, etc.) use the
- * brand hex's actual L/C so buttons match the swatch the user picked.
+ * L and C stay identical to the default CSS so the visual style matches
+ * the default teal theme exactly — only the hue changes.
  * Pass null to revert to CSS defaults.
  */
 export function applyBrandColor(hex: string | null): void {
@@ -153,17 +143,11 @@ export function applyBrandColor(hex: string | null): void {
     return;
   }
 
-  const { L: brandL, C: brandC, H } = hexToOklch(hex);
+  const { H } = hexToOklch(hex);
   const theme = isDark() ? DARK_THEME : LIGHT_THEME;
 
-  for (const [varName, defaultL, defaultC] of theme) {
-    if (EXACT_VARS.has(varName)) {
-      // Use exact brand color so buttons/links match the picked swatch
-      root.style.setProperty(varName, `oklch(${brandL} ${brandC} ${H.toFixed(1)})`);
-    } else {
-      // Use default L/C, only swap the hue
-      root.style.setProperty(varName, `oklch(${defaultL} ${defaultC} ${H.toFixed(1)})`);
-    }
+  for (const [varName, L, C] of theme) {
+    root.style.setProperty(varName, `oklch(${L} ${C} ${H.toFixed(1)})`);
   }
 }
 
