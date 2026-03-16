@@ -481,6 +481,7 @@ export default function CompanyInfoTab() {
                   }}
                 />
               </label>
+            </div>
           </div>
 
           {canEdit && (
