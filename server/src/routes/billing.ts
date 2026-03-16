@@ -254,7 +254,7 @@ router.post('/portal', requirePermission('billing', 'manage'), async (req, res, 
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: sub.stripe_customer_id,
-      return_url: `${env.CLIENT_URL}/settings?tab=billing`,
+      return_url: `${env.CLIENT_URL}/company-settings?tab=billing`,
     });
 
     res.json({ url: portalSession.url });
@@ -819,8 +819,8 @@ router.post('/topup', async (req, res, next) => {
         company_id: companyId,
         amount_cents: String(amount_cents),
       },
-      success_url: `${env.CLIENT_URL}/settings?tab=billing&topup=success`,
-      cancel_url: `${env.CLIENT_URL}/settings?tab=billing`,
+      success_url: `${env.CLIENT_URL}/company-settings?tab=billing&topup=success`,
+      cancel_url: `${env.CLIENT_URL}/company-settings?tab=billing`,
     };
 
     if (sub?.stripe_customer_id) {

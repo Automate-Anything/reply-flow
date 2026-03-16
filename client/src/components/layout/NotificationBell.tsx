@@ -183,7 +183,7 @@ export default function NotificationBell() {
             className="h-auto w-full px-2 py-1.5 text-xs text-muted-foreground"
             onClick={() => {
               setOpen(false);
-              navigate('/profile');
+              navigate('/profile-settings');
             }}
           >
             Notification preferences

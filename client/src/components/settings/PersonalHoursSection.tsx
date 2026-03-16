@@ -76,9 +76,6 @@ export default function PersonalHoursSection({
 
   const handleToggleHoursControl = (checked: boolean) => {
     setLocalHoursControl(checked);
-    if (checked && !localHours) {
-      setLocalHours(getDefaultBusinessHours());
-    }
   };
 
   const handleSave = async () => {
@@ -192,16 +189,14 @@ export default function PersonalHoursSection({
         />
       </div>
 
-      {/* Working hours editor — only shown when toggle is ON */}
-      {localHoursControl && (
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Working Hours</Label>
-          <BusinessHoursEditor
-            value={localHours ?? getDefaultBusinessHours()}
-            onChange={setLocalHours}
-          />
-        </div>
-      )}
+      {/* Working hours editor */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Working Hours</Label>
+        <BusinessHoursEditor
+          value={localHours ?? getDefaultBusinessHours()}
+          onChange={setLocalHours}
+        />
+      </div>
 
       {/* Save button — only shown when there are unsaved changes */}
       {hasChanges && (

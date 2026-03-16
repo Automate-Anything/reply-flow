@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CalendarClock, ChevronDown, Clock, MessageSquare, UserCheck } from 'lucide-react';
+import { Archive, CalendarClock, ChevronDown, Clock, MessageSquare, UserCheck } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -24,7 +24,7 @@ import ForwardMessageModal from '@/components/inbox/ForwardMessageModal';
 import ScheduledMessagesList from '@/components/inbox/ScheduledMessagesList';
 import { useDebugMode } from '@/hooks/useDebugMode';
 
-type InboxTab = 'all' | 'assigned' | 'snoozed' | 'scheduled';
+type InboxTab = 'all' | 'assigned' | 'snoozed' | 'scheduled' | 'archived';
 
 export default function InboxPage() {
   const pageReady = usePageReady();
@@ -32,13 +32,16 @@ export default function InboxPage() {
 
   const [activeTab, setActiveTab] = useState<InboxTab>(() => {
     const t = searchParams.get('tab');
-    if (t === 'snoozed' || t === 'scheduled' || t === 'assigned') return t;
+    if (t === 'snoozed' || t === 'scheduled' || t === 'assigned' || t === 'archived') return t;
     return 'all';
   });
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ConversationFilters>({});
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const restoredConvRef = useRef(false);
+  const [pendingConvId, setPendingConvId] = useState<string | null>(() => {
+    return searchParams.get('conversation') || null;
+  });
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [allLabels, setAllLabels] = useState<{ id: string; name: string; color: string }[]>([]);
@@ -60,6 +63,7 @@ export default function InboxPage() {
   const effectiveFilters = useMemo(() => {
     if (activeTab === 'snoozed') return { ...filters, snoozed: true };
     if (activeTab === 'assigned') return { ...filters, assignee: ['me'] };
+    if (activeTab === 'archived') return { ...filters, archived: true };
     return filters;
   }, [activeTab, filters]);
 
@@ -123,40 +127,62 @@ export default function InboxPage() {
     }
   }, [activeConversation]);
 
-  // Sync tab from URL params (notification deep-link, works even when already mounted)
+  // Capture notification deep-link params from URL into state, then clean URL.
+  // Using state (pendingConvId) ensures the target survives URL cleanup and
+  // triggers the resolve effect below even if conversations haven't reloaded yet.
   useEffect(() => {
     const t = searchParams.get('tab');
-    if (t === 'snoozed' || t === 'scheduled' || t === 'assigned') {
+    const convParam = searchParams.get('conversation');
+
+    let changed = false;
+    if (t === 'snoozed' || t === 'scheduled' || t === 'assigned' || t === 'archived') {
       setActiveTab(t);
-      // Clear tab param so it doesn't go stale if user manually switches tabs
-      if (!searchParams.has('conversation')) {
-        const newParams = new URLSearchParams(searchParams);
-        newParams.delete('tab');
-        setSearchParams(newParams, { replace: true });
-      }
+      changed = true;
+    }
+    if (convParam) {
+      setPendingConvId(convParam);
+      changed = true;
+    }
+
+    if (changed) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('tab');
+      newParams.delete('conversation');
+      setSearchParams(newParams, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 
-  // Select conversation from URL params (notification click deep-link)
+  // Resolve pending conversation selection once conversations have loaded.
+  // If the conversation isn't in the current filtered list (e.g. it's snoozed
+  // but user is on the "all" tab), fall back to a direct API fetch.
   useEffect(() => {
-    const convParam = searchParams.get('conversation');
-    if (!convParam || convsLoading || conversations.length === 0) return;
+    if (!pendingConvId || convsLoading) return;
 
-    // Clean up URL params after consuming
-    const newParams = new URLSearchParams(searchParams);
-    newParams.delete('conversation');
-    newParams.delete('tab');
-    setSearchParams(newParams, { replace: true });
+    const targetId = pendingConvId;
+    const conv = conversations.find((c) => c.id === targetId);
 
-    const conv = conversations.find((c) => c.id === convParam);
     if (conv) {
+      setPendingConvId(null);
       draftRef.current = conv.draft_message || '';
       setActiveConversation(conv);
       if (conv.unread_count > 0 || conv.marked_unread) {
         api.post(`/conversations/${conv.id}/read`).then(() => refetchConvs());
       }
+      return;
     }
-  }, [conversations, convsLoading, refetchConvs, searchParams, setSearchParams]);
+
+    // Not in the current filtered list — fetch the conversation directly
+    setPendingConvId(null);
+    api.get(`/conversations/${targetId}`).then(({ data }) => {
+      if (data.session) {
+        draftRef.current = data.session.draft_message || '';
+        setActiveConversation(data.session);
+        if (data.session.unread_count > 0 || data.session.marked_unread) {
+          api.post(`/conversations/${targetId}/read`).then(() => refetchConvs());
+        }
+      }
+    }).catch(() => {});
+  }, [pendingConvId, conversations, convsLoading, refetchConvs]);
 
   // Fetch profile picture if the active conversation has a contact but no picture yet
   const fetchedPicForRef = useRef<string | null>(null);
@@ -465,14 +491,15 @@ export default function InboxPage() {
           <button
             className={cn(
               'flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-              activeTab === 'snoozed' || activeTab === 'scheduled'
+              activeTab === 'snoozed' || activeTab === 'scheduled' || activeTab === 'archived'
                 ? 'bg-accent text-accent-foreground'
                 : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
             )}
           >
             {activeTab === 'snoozed' && <><Clock className="h-3.5 w-3.5 shrink-0" />Snoozed</>}
             {activeTab === 'scheduled' && <><CalendarClock className="h-3.5 w-3.5 shrink-0" />Scheduled</>}
-            {activeTab !== 'snoozed' && activeTab !== 'scheduled' && 'More'}
+            {activeTab === 'archived' && <><Archive className="h-3.5 w-3.5 shrink-0" />Archived</>}
+            {activeTab !== 'snoozed' && activeTab !== 'scheduled' && activeTab !== 'archived' && 'More'}
             <ChevronDown className="h-3 w-3" />
           </button>
         </DropdownMenuTrigger>
@@ -484,6 +511,10 @@ export default function InboxPage() {
           <DropdownMenuItem onClick={() => { setActiveTab('scheduled'); setActiveConversation(null); }}>
             <CalendarClock className="mr-2 h-4 w-4" />
             Scheduled
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setActiveTab('archived')}>
+            <Archive className="mr-2 h-4 w-4" />
+            Archived
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -667,6 +698,8 @@ export default function InboxPage() {
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
             {activeTab === 'scheduled' ? (
               <CalendarClock className="h-7 w-7 opacity-40" />
+            ) : activeTab === 'archived' ? (
+              <Archive className="h-7 w-7 opacity-40" />
             ) : (
               <MessageSquare className="h-7 w-7 opacity-40" />
             )}
@@ -675,12 +708,16 @@ export default function InboxPage() {
             <p className="text-sm font-medium">
               {activeTab === 'scheduled'
                 ? 'Manage scheduled messages'
-                : 'Select a conversation'}
+                : activeTab === 'archived'
+                  ? 'Archived conversations'
+                  : 'Select a conversation'}
             </p>
             <p className="mt-0.5 text-xs">
               {activeTab === 'scheduled'
                 ? 'Edit or cancel messages from the list'
-                : 'Choose from the list to start messaging'}
+                : activeTab === 'archived'
+                  ? 'Select a conversation to view its history'
+                  : 'Choose from the list to start messaging'}
             </p>
           </div>
         </div>

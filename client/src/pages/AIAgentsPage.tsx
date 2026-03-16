@@ -105,7 +105,7 @@ export default function AIAgentsPage() {
             <p className="text-sm text-amber-800 dark:text-amber-200">
               You've reached the agent limit for your <span className="font-semibold">{subscription?.plan.name}</span> plan ({agentLimit} agent{agentLimit !== 1 ? 's' : ''}).
             </p>
-            <Button size="sm" variant="outline" className="ml-4 shrink-0" onClick={() => navigate('/settings?tab=billing')}>
+            <Button size="sm" variant="outline" className="ml-4 shrink-0" onClick={() => navigate('/company-settings?tab=billing')}>
               Upgrade
             </Button>
           </CardContent>

@@ -25,7 +25,7 @@ const navItems = [
   { to: '/knowledge-base', icon: BookOpen, label: 'Knowledge Base', permission: { resource: 'knowledge_base', action: 'view' } },
   { to: '/ai-agents', icon: Bot, label: 'AI Agents', permission: { resource: 'ai_settings', action: 'view' } },
   { to: '/channels', icon: Smartphone, label: 'Channels' },
-  { to: '/settings', icon: Settings, label: 'Company Settings', permission: { resource: 'company_settings', action: 'view' } },
+  { to: '/company-settings', icon: Settings, label: 'Company Settings', permission: { resource: 'company_settings', action: 'view' } },
 ];
 
 interface SidebarProps {
@@ -34,7 +34,7 @@ interface SidebarProps {
 
 export default function Sidebar({ onNavigate }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const { hasPermission } = useSession();
+  const { hasPermission, companyLogoUrl, companyName } = useSession();
   const { guardNavigation } = useFormGuard();
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,12 +71,20 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
           collapsed && 'justify-center px-2'
         )}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-          <MessageSquareText className="h-4 w-4 text-primary-foreground" />
-        </div>
+        {companyLogoUrl ? (
+          <img
+            src={companyLogoUrl}
+            alt={companyName || 'Company logo'}
+            className="h-8 w-8 shrink-0 rounded-lg object-contain"
+          />
+        ) : (
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
+            <MessageSquareText className="h-4 w-4 text-primary-foreground" />
+          </div>
+        )}
         {!collapsed && (
-          <span className="text-lg font-semibold text-sidebar-foreground">
-            Reply Flow
+          <span className="truncate text-lg font-semibold text-sidebar-foreground">
+            {companyName || 'Reply Flow'}
           </span>
         )}
         <Button

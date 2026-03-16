@@ -235,7 +235,7 @@ export default function ProfileSettingsPage() {
     try {
       const { error } = await supabase.auth.linkIdentity({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/profile` },
+        options: { redirectTo: `${window.location.origin}/profile-settings` },
       });
       if (error) throw error;
     } catch (err: unknown) {

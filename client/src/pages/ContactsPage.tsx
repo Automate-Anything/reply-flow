@@ -76,21 +76,40 @@ export default function ContactsPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Restore active contact from URL params (notification click)
+  // Capture contact deep-link param from URL, then resolve from list or direct fetch
+  const [pendingContactId, setPendingContactId] = useState<string | null>(() => {
+    return searchParams.get('contact') || null;
+  });
+
   useEffect(() => {
     const contactParam = searchParams.get('contact');
-    if (!contactParam || loading) return;
-
-    // Clean up URL param after consuming (only delete the one we used)
+    if (!contactParam) return;
+    setPendingContactId(contactParam);
     const newParams = new URLSearchParams(searchParams);
     newParams.delete('contact');
     setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-    const contact = contacts.find((c) => c.id === contactParam);
+  useEffect(() => {
+    if (!pendingContactId || loading) return;
+
+    const targetId = pendingContactId;
+    const contact = contacts.find((c) => c.id === targetId);
+
     if (contact) {
+      setPendingContactId(null);
       setActiveContact(contact);
+      return;
     }
-  }, [contacts, loading, searchParams, setSearchParams]);
+
+    // Contact not in current list (search/filter/pagination) — fetch directly
+    setPendingContactId(null);
+    api.get(`/contacts/${targetId}`).then(({ data }) => {
+      if (data.contact) {
+        setActiveContact(data.contact);
+      }
+    }).catch(() => {});
+  }, [pendingContactId, contacts, loading]);
 
   // Sync activeListId into filters
   useEffect(() => {

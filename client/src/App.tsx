@@ -15,7 +15,7 @@ import KnowledgeBasePage from '@/pages/KnowledgeBasePage';
 import ProfileSettingsPage from '@/pages/ProfileSettingsPage';
 import AcceptInvitePage from '@/pages/AcceptInvitePage';
 import OnboardingPage from '@/pages/OnboardingPage';
-import SettingsPage from '@/pages/SettingsPage';
+import CompanySettingsPage from '@/pages/CompanySettingsPage';
 import ChannelsPage from '@/pages/ChannelsPage';
 import ChannelDetailPage from '@/components/settings/ChannelDetailView';
 import AIAgentsPage from '@/pages/AIAgentsPage';
@@ -47,8 +47,8 @@ function App() {
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="channels/:channelId" element={<ChannelDetailPage />} />
 
-                  <Route path="settings" element={<SettingsPage />} />
-                  <Route path="profile" element={<ProfileSettingsPage />} />
+                  <Route path="company-settings" element={<CompanySettingsPage />} />
+                  <Route path="profile-settings" element={<ProfileSettingsPage />} />
                   <Route path="super-admin" element={<SuperAdminPage />} />
                 </Route>
               </Route>

@@ -6,6 +6,8 @@
   Branch: feature/quick-setup-wizard.
 - **Fix self-sent messages showing as unread** — Claude — Started 2026-03-12. Files: server/src/services/messageProcessor.ts. Branch: fix-outbound-unread.
 ## Completed
+- **Company Branding (logo + color scheme)** — Claude — Completed 2026-03-16. Branch: feat/company-branding. Merged: no.
+  Logo upload to Supabase Storage, brand color picker (presets + custom hex), full-theme OKLCH hue rotation (all CSS variables), sidebar dynamic logo/name. Migration: 062_company_branding.sql.
 - **Contact Detail v2 — Full Redesign** — Claude — Completed 2026-03-15. Branch: main. Merged: yes.
   Overview tab (stats + recent activity), Conversations tab (inline message viewer), Notes tab (CRUD), Memories editing, backend extensions.
 - **Task 14: Clean up old access control code + migration 060** — Claude — Completed 2026-03-15. Branch: feature/access-permissions-redesign. Merged: no.

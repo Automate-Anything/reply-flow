@@ -1,8 +1,22 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { requirePermission } from '../middleware/permissions.js';
 import * as whapi from '../services/whapi.js';
+
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
+    }
+  },
+});
 
 const router = Router();
 router.use(requireAuth);
@@ -120,7 +134,7 @@ router.get('/', requirePermission('company_settings', 'view'), async (req, res, 
 router.put('/', requirePermission('company_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { name, slug, logo_url, timezone, default_language, business_hours, session_timeout_hours, business_type, business_description, auto_assign_mode, auto_create_contacts } = req.body;
+    const { name, slug, logo_url, timezone, default_language, business_hours, session_timeout_hours, business_type, business_description, auto_assign_mode, auto_create_contacts, brand_color } = req.body;
 
     const updates: Record<string, unknown> = {};
     if (name !== undefined) updates.name = name;
@@ -148,6 +162,13 @@ router.put('/', requirePermission('company_settings', 'edit'), async (req, res, 
     }
     if (auto_create_contacts !== undefined) {
       updates.auto_create_contacts = Boolean(auto_create_contacts);
+    }
+    if (brand_color !== undefined) {
+      if (brand_color !== null && !/^#[0-9a-fA-F]{6}$/.test(brand_color)) {
+        res.status(400).json({ error: 'brand_color must be a valid hex color (e.g. #2563eb) or null' });
+        return;
+      }
+      updates.brand_color = brand_color;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -217,6 +238,111 @@ router.delete('/', async (req, res, next) => {
     const { error } = await supabaseAdmin
       .from('companies')
       .delete()
+      .eq('id', companyId);
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// UPLOAD COMPANY LOGO
+// ────────────────────────────────────────────────
+router.post('/logo', requirePermission('company_settings', 'edit'), logoUpload.single('logo'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const file = req.file;
+
+    if (!file) {
+      res.status(400).json({ error: 'No file provided' });
+      return;
+    }
+
+    const ext = file.mimetype === 'image/png' ? 'png'
+      : file.mimetype === 'image/webp' ? 'webp'
+      : 'jpg';
+
+    const storagePath = `${companyId}/logo.${ext}`;
+
+    // Upload new logo first (safer: old file remains if upload fails)
+    const { error: storageError } = await supabaseAdmin.storage
+      .from('company-logos')
+      .upload(storagePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (storageError) {
+      console.error('Logo upload error:', storageError);
+      res.status(500).json({ error: 'Failed to upload logo' });
+      return;
+    }
+
+    // Clean up old files with different extensions (e.g., old logo.png when uploading logo.jpg)
+    const { data: existingFiles } = await supabaseAdmin.storage
+      .from('company-logos')
+      .list(companyId);
+
+    if (existingFiles && existingFiles.length > 0) {
+      const filesToDelete = existingFiles
+        .map((f) => `${companyId}/${f.name}`)
+        .filter((path) => path !== storagePath);
+      if (filesToDelete.length > 0) {
+        await supabaseAdmin.storage.from('company-logos').remove(filesToDelete);
+      }
+    }
+
+    // Get public URL with cache-busting
+    const { data: urlData } = supabaseAdmin.storage
+      .from('company-logos')
+      .getPublicUrl(storagePath);
+
+    const logoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+    // Update company record
+    const { data, error } = await supabaseAdmin
+      .from('companies')
+      .update({ logo_url: logoUrl })
+      .eq('id', companyId)
+      .select()
+      .single();
+
+    if (error) {
+      // Best-effort cleanup if DB update fails
+      await supabaseAdmin.storage.from('company-logos').remove([storagePath]);
+      throw error;
+    }
+
+    res.json({ logo_url: data.logo_url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ────────────────────────────────────────────────
+// DELETE COMPANY LOGO
+// ────────────────────────────────────────────────
+router.delete('/logo', requirePermission('company_settings', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+
+    // List and remove all files in the company's logo folder
+    const { data: existingFiles } = await supabaseAdmin.storage
+      .from('company-logos')
+      .list(companyId);
+
+    if (existingFiles && existingFiles.length > 0) {
+      const filePaths = existingFiles.map((f) => `${companyId}/${f.name}`);
+      await supabaseAdmin.storage.from('company-logos').remove(filePaths);
+    }
+
+    // Clear logo_url in company record
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({ logo_url: null })
       .eq('id', companyId);
 
     if (error) throw error;
