@@ -595,8 +595,23 @@ export async function processIncomingMessage(
     .update(sessionUpdate)
     .eq('id', sessionId);
 
-  // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed
-  if (isOutbound) return;
+  // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed.
+  // Mark the conversation as read since the user is actively engaged (matches app send behavior).
+  if (isOutbound) {
+    await supabaseAdmin
+      .from('chat_sessions')
+      .update({ marked_unread: false, last_read_at: new Date().toISOString() })
+      .eq('id', sessionId);
+
+    await supabaseAdmin
+      .from('chat_messages')
+      .update({ read: true })
+      .eq('session_id', sessionId)
+      .eq('direction', 'inbound')
+      .eq('read', false);
+
+    return;
+  }
 
   // 5c. Auto-classify new conversations (fire-and-forget)
   if (isNewSession) {
