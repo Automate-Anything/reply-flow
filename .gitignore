@@ -14,3 +14,4 @@ Thumbs.db
 # AI agent local state (not source code)
 MEMORY.md
 WORKBOARD.md
+.worktrees/
