@@ -13,6 +13,7 @@ interface MessageThreadProps {
   contactName?: string;
   contactAvatarUrl?: string | null;
   onSend: (body: string) => Promise<void>;
+  onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   onCancelScheduled: (messageId: string) => Promise<void>;
   initialDraft?: string;
@@ -49,6 +50,7 @@ export default function MessageThread({
   contactName,
   contactAvatarUrl,
   onSend,
+  onSendVoiceNote,
   onSchedule,
   onCancelScheduled,
   initialDraft,
@@ -197,6 +199,7 @@ export default function MessageThread({
       <MessageInput
         key={sessionId}
         onSend={onSend}
+        onSendVoiceNote={onSendVoiceNote}
         onSchedule={onSchedule}
         initialDraft={initialDraft}
         onDraftChange={onDraftChange}

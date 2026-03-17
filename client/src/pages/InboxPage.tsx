@@ -69,7 +69,7 @@ export default function InboxPage() {
 
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
     useConversations(search, effectiveFilters);
-  const { messages, setMessages, loading: msgsLoading, sendMessage, scheduleMessage, cancelScheduledMessage, markRead } = useMessages(
+  const { messages, setMessages, loading: msgsLoading, sendMessage, sendVoiceNote, scheduleMessage, cancelScheduledMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );
 
@@ -374,6 +374,15 @@ export default function InboxPage() {
     }
   };
 
+  const handleSendVoiceNote = async (blob: Blob, duration: number) => {
+    try {
+      await sendVoiceNote(blob, duration);
+      refetchConvs();
+    } catch {
+      toast.error('Failed to send voice note');
+    }
+  };
+
   const handleSchedule = async (body: string, scheduledFor: string) => {
     try {
       await scheduleMessage(body, scheduledFor);
@@ -644,6 +653,7 @@ export default function InboxPage() {
               contactName={activeConversation.contact_name || activeConversation.phone_number}
               contactAvatarUrl={activeConversation.profile_picture_url}
               onSend={handleSend}
+              onSendVoiceNote={handleSendVoiceNote}
               onSchedule={handleSchedule}
               onCancelScheduled={handleCancelScheduled}
               initialDraft={activeConversation?.draft_message || ''}
