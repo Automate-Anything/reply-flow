@@ -336,10 +336,10 @@ Section in company settings:
 
 | Component | Change |
 |-----------|--------|
-| Conversation detail side panel | Mount `<ClassificationCard>` |
-| Conversation header bar | Add "Analyze" button (wand icon) |
-| Agent editor | Mount `<ClassificationSettings>` section |
-| Company settings page | Mount `<ClassificationModeSettings>` section |
+| `client/src/components/inbox/ContactPanel.tsx` | Mount `<ClassificationCard>` in the contact/conversation side panel |
+| `client/src/components/inbox/ConversationHeader.tsx` | Add "Analyze" button (wand icon) to the action buttons bar |
+| `client/src/components/settings/AIAgentSections.tsx` | Add `<ClassificationSettings>` as a new section in the agent editor |
+| `client/src/pages/CompanySettingsPage.tsx` | Mount `<ClassificationModeSettings>` section |
 
 ### New Hook: `useClassificationSuggestions`
 
@@ -365,7 +365,9 @@ export function useClassificationSuggestions(sessionId: string) {
 
 ## Integration Point: Auto-Classify on New Conversation
 
-In the existing inbound message handler (in `server/src/routes/ai.ts` or the webhook handler), after the first inbound message is stored in a new `chat_session` (not on session creation itself, since the session may not have messages yet):
+In the existing inbound message processor at `server/src/services/messageProcessor.ts`, after the first inbound message is inserted into `chat_messages` (around line 539 in `processIncomingMessage()`). This is the same location where `shouldAIRespond()` is called (line 670). The classification hook goes after message insertion but can run in parallel with the AI response flow:
+
+**Note:** Contact history context is already available via `getContactContext()` (imported from `sessionMemory.ts`), which is used by the AI response pipeline. The classification service can reuse this.
 
 ```typescript
 // Fire-and-forget — don't block message delivery
@@ -445,9 +447,9 @@ Creates:
 | File | Change |
 |------|--------|
 | `server/src/index.ts` | Register classification router |
-| `server/src/routes/ai.ts` | Add auto-classify hook on new session creation |
+| `server/src/services/messageProcessor.ts` | Add auto-classify hook after first inbound message insertion (around line 539) |
 | `server/src/types/index.ts` | Add TypeScript interfaces |
-| Conversation detail side panel component | Mount ClassificationCard |
-| Conversation header component | Add Analyze button |
-| Agent editor component | Mount ClassificationSettings |
-| Settings page | Mount ClassificationModeSettings |
+| `client/src/components/inbox/ContactPanel.tsx` | Mount ClassificationCard in side panel |
+| `client/src/components/inbox/ConversationHeader.tsx` | Add Analyze button to action bar |
+| `client/src/components/settings/AIAgentSections.tsx` | Add ClassificationSettings section |
+| `client/src/pages/CompanySettingsPage.tsx` | Mount ClassificationModeSettings |
