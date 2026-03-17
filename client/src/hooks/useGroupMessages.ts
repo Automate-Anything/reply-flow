@@ -27,8 +27,12 @@ export function useGroupMessages(groupId: string | null) {
     if (groupId) {
       setLoading(true);
       fetchMessages();
+    } else {
+      setMessages([]);
+      setMatches([]);
+      setLoading(false);
     }
   }, [groupId, fetchMessages]);
 
-  return { messages, matches, loading, refetch: fetchMessages, setMessages };
+  return { messages, matches, loading, refetch: fetchMessages, setMessages, setMatches };
 }

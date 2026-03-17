@@ -28,9 +28,12 @@ router.get('/', async (req, res, next) => {
       .eq('is_enabled', true);
 
     const countMap = new Map<string, number>();
+    let globalCriteriaCount = 0;
     for (const c of criteriaCounts || []) {
       if (c.group_chat_id) {
         countMap.set(c.group_chat_id, (countMap.get(c.group_chat_id) || 0) + 1);
+      } else {
+        globalCriteriaCount++;
       }
     }
 
@@ -38,7 +41,7 @@ router.get('/', async (req, res, next) => {
       ...g,
       channel_name: g.whatsapp_channels?.channel_name ?? null,
       whatsapp_channels: undefined,
-      criteria_count: countMap.get(g.id) || 0,
+      criteria_count: (countMap.get(g.id) || 0) + globalCriteriaCount,
     }));
 
     // Backfill group names for any groups missing them (non-blocking)
@@ -222,9 +225,9 @@ router.get('/:id/messages', async (req, res, next) => {
   try {
     const companyId = req.companyId!;
     const { id } = req.params;
-    const { limit = '50', offset = '0', matched_only } = req.query;
+    const { limit = '50', offset = '0' } = req.query;
 
-    let query = supabaseAdmin
+    const { data: messages, error, count } = await supabaseAdmin
       .from('group_chat_messages')
       .select('*', { count: 'exact' })
       .eq('group_chat_id', id)
@@ -232,25 +235,8 @@ router.get('/:id/messages', async (req, res, next) => {
       .order('created_at', { ascending: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
 
-    const { data: messages, error, count } = await query;
     if (error) throw error;
-
-    // If matched_only, filter to messages that have criteria matches
-    let result = messages || [];
-    if (matched_only === 'true') {
-      const messageIds = result.map((m) => m.id);
-      if (messageIds.length > 0) {
-        const { data: matches } = await supabaseAdmin
-          .from('group_criteria_matches')
-          .select('group_chat_message_id, criteria_ids')
-          .in('group_chat_message_id', messageIds);
-
-        const matchedSet = new Set((matches || []).map((m) => m.group_chat_message_id));
-        result = result.filter((m) => matchedSet.has(m.id));
-      }
-    }
-
-    res.json({ messages: result, count });
+    res.json({ messages: messages || [], count });
   } catch (err) {
     next(err);
   }
@@ -283,14 +269,27 @@ router.get('/:id/matches', async (req, res, next) => {
     const { id } = req.params;
     const { limit = '50', offset = '0' } = req.query;
 
+    // Step 1: get message IDs belonging to this group
+    // (PostgREST doesn't support filtering on embedded join columns via .eq(),
+    //  so we do a two-step query to correctly scope matches to this group)
+    const { data: msgIds } = await supabaseAdmin
+      .from('group_chat_messages')
+      .select('id')
+      .eq('group_chat_id', id)
+      .eq('company_id', companyId);
+
+    const messageIds = (msgIds || []).map((m: any) => m.id);
+
+    if (messageIds.length === 0) {
+      return res.json({ matches: [], count: 0 });
+    }
+
+    // Step 2: get matches for those message IDs, with embedded message data
     const { data: matches, error, count } = await supabaseAdmin
       .from('group_criteria_matches')
-      .select(`
-        *,
-        group_chat_messages!inner (*)
-      `, { count: 'exact' })
+      .select('*, group_chat_messages (*)', { count: 'exact' })
       .eq('company_id', companyId)
-      .eq('group_chat_messages.group_chat_id', id)
+      .in('group_chat_message_id', messageIds)
       .order('created_at', { ascending: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
 

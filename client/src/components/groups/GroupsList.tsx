@@ -1,4 +1,3 @@
-import { useGroups } from '@/hooks/useGroups';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
@@ -6,11 +5,12 @@ import type { GroupChat } from '@/types/groups';
 
 interface GroupsListProps {
   onSelectGroup: (groupId: string) => void;
+  groups: GroupChat[];
+  loading: boolean;
+  toggleMonitoring: (groupId: string, enabled: boolean) => void;
 }
 
-export function GroupsList({ onSelectGroup }: GroupsListProps) {
-  const { groups, loading, toggleMonitoring } = useGroups();
-
+export function GroupsList({ onSelectGroup, groups, loading, toggleMonitoring }: GroupsListProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
