@@ -23,7 +23,6 @@
     ]
   },
   "defaultMode": "acceptEdits",
-  "skipDangerousModePermissionPrompt": true,
 
   "hooks": {
     "Stop": [
@@ -32,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'cd \"$(git rev-parse --show-toplevel)\" && CHANGED=$(git diff --name-only -- \"*.ts\" \"*.tsx\" 2>/dev/null); if [ -n \"$CHANGED\" ]; then echo \"Running typecheck...\"; npx tsc --noEmit 2>&1 | tail -30; fi'"
+            "command": "bash -c 'ROOTS=$(git worktree list 2>/dev/null | awk \"{print \\$1}\"); if [ -z \"$ROOTS\" ]; then exit 0; fi; for ROOT in $ROOTS; do CHANGED=$(git -C \"$ROOT\" diff --name-only -- \"*.ts\" \"*.tsx\" 2>/dev/null | head -1); if [ -n \"$CHANGED\" ] && [ -f \"$ROOT/server/tsconfig.json\" ]; then echo \"Typechecking $(basename $ROOT)...\"; npx tsc --noEmit --project \"$ROOT/server/tsconfig.json\" 2>&1 | tail -20; fi; done'"
           }
         ]
       }
