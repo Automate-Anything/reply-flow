@@ -18,9 +18,11 @@ import api from '@/lib/api';
 import { useContactNotes, type Contact, type ContactNote } from '@/hooks/useContacts';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
+import ClassificationCard from './ClassificationCard';
 
 interface ContactPanelProps {
   contactId: string | null;
+  sessionId?: string | null;
   open: boolean;
   onClose: () => void;
   onProfilePictureLoaded?: (url: string) => void;
@@ -30,7 +32,7 @@ interface ContactPanelProps {
   previewPicture?: string | null;
 }
 
-export default function ContactPanel({ contactId, open, onClose, onProfilePictureLoaded, previewName, previewPhone, previewPicture }: ContactPanelProps) {
+export default function ContactPanel({ contactId, sessionId, open, onClose, onProfilePictureLoaded, previewName, previewPhone, previewPicture }: ContactPanelProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -313,6 +315,12 @@ export default function ContactPanel({ contactId, open, onClose, onProfilePictur
                     )}
                     Save Changes
                   </Button>
+                )}
+
+                {sessionId && !editing && (
+                  <div className="mt-4 border-t pt-4">
+                    <ClassificationCard sessionId={sessionId} />
+                  </div>
                 )}
               </div>
             </TabsContent>

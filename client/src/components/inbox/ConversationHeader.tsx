@@ -36,6 +36,7 @@ import {
   Tag,
   UserPlus,
   CalendarClock,
+  Wand2,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -68,6 +69,8 @@ interface ConversationHeaderProps {
   onPriorityMetadataNeeded?: () => void;
   notesPanelOpen?: boolean;
   onLabelsCreated?: () => void;
+  onClassify?: () => void;
+  classifying?: boolean;
 }
 
 interface LabelOption {
@@ -111,6 +114,8 @@ export default function ConversationHeader({
   onPriorityMetadataNeeded,
   notesPanelOpen,
   onLabelsCreated,
+  onClassify,
+  classifying,
 }: ConversationHeaderProps) {
   const { companyTimezone } = useSession();
   const [allLabels, setAllLabels] = useState<LabelOption[]>([]);
@@ -464,6 +469,20 @@ export default function ConversationHeader({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Classify with AI */}
+        {onClassify && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClassify} disabled={classifying}>
+                  {classifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Analyze with AI</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         {/* More actions */}
         <DropdownMenu>

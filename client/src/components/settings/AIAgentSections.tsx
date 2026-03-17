@@ -13,6 +13,7 @@ import FallbackToggle from './response-flow/FallbackToggle';
 import StyleSection from './sections/StyleSection';
 import AgentKBSection from './sections/AgentKBSection';
 import LanguageSection from './sections/LanguageSection';
+import ClassificationSettings from '../agents/ClassificationSettings';
 import { useResponseFlow, migrateFromFlat } from './response-flow/useResponseFlow';
 import PromptPreviewPanel from './PromptPreviewPanel';
 
@@ -154,6 +155,9 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
           onToggle={() => toggleStep('lang')}
           onSave={saveProfileFields}
         />
+
+        {/* Step 4: Classification */}
+        <ClassificationSettings profileData={profileData} onSave={onSave} />
       </TabsContent>
 
       {/* ── Tab 2: Response Flow ── */}

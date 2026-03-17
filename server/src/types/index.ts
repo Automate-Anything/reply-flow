@@ -166,3 +166,47 @@ export interface Invitation {
   expires_at: string;
   created_at: string;
 }
+
+export interface ClassificationSuggestionItem {
+  id: string;
+  confidence: number;
+  name?: string;
+}
+
+export interface ClassificationSuggestions {
+  labels?: ClassificationSuggestionItem[];
+  priority?: ClassificationSuggestionItem;
+  status?: ClassificationSuggestionItem;
+  contact_tags?: ClassificationSuggestionItem[];
+  contact_lists?: ClassificationSuggestionItem[];
+  reasoning: string;
+}
+
+export interface ClassificationSuggestion {
+  id: string;
+  company_id: string;
+  session_id: string;
+  contact_id: string;
+  trigger: 'auto' | 'manual';
+  status: 'pending' | 'accepted' | 'dismissed' | 'applied';
+  suggestions: ClassificationSuggestions;
+  accepted_items: Partial<ClassificationSuggestions> | null;
+  applied_by: string | null;
+  created_at: string;
+  applied_at: string | null;
+  updated_at: string;
+}
+
+export interface ClassificationConfig {
+  enabled: boolean;
+  rules: string;
+  auto_classify_new: boolean;
+}
+
+export interface PartialAccept {
+  labels?: string[];
+  priority?: boolean;
+  status?: boolean;
+  contact_tags?: string[];
+  contact_lists?: string[];
+}
