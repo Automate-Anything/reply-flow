@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { ProfileData, ResponseFlow, Scenario, CommunicationStyle, FallbackMode } from '@/hooks/useCompanyAI';
 
 const DEFAULT_STYLE: CommunicationStyle = {
@@ -60,6 +60,14 @@ export function useResponseFlow(profileData: ProfileData) {
     return migrateFlow(raw);
   });
   const [dirty, setDirty] = useState(false);
+
+  // Resync flow from profileData when it changes externally (e.g., independent section saves)
+  useEffect(() => {
+    if (!dirty) {
+      const raw = profileData.response_flow ?? migrateFromFlat(profileData);
+      setFlow(migrateFlow(raw));
+    }
+  }, [profileData, dirty]);
 
   const updateFlow = useCallback((updates: Partial<ResponseFlow>) => {
     setFlow((prev) => ({ ...prev, ...updates }));
