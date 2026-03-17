@@ -80,12 +80,12 @@ export default function AgentKBSection({
           <div className="flex items-center justify-between rounded-lg border px-3 py-2.5">
             <div className="space-y-0.5">
               <Label htmlFor="agent-kb-mode" className="text-xs font-medium">
-                Include in all messages
+                When to use this knowledge
               </Label>
               <p className="text-xs text-muted-foreground">
                 {draftMode === 'always'
-                  ? 'Knowledge base will be included alongside scenario-specific knowledge in every response'
-                  : 'Knowledge base will only be used when no scenario matches'}
+                  ? 'Always — included in every message, even when a scenario matches'
+                  : 'Fallback only — used only when no scenario matches'}
               </p>
             </div>
             <Switch
