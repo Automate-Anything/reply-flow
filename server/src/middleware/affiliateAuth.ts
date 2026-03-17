@@ -22,6 +22,10 @@ export async function requireAffiliateAuth(
   }
 
   const token = authHeader.slice(7);
+  if (!env.AFFILIATE_JWT_SECRET) {
+    res.status(500).json({ error: 'Affiliate auth not configured' });
+    return;
+  }
   try {
     const decoded = jwt.verify(token, env.AFFILIATE_JWT_SECRET);
     if (typeof decoded !== 'object' || decoded === null || typeof (decoded as any).affiliateId !== 'string') {

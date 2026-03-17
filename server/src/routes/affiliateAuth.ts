@@ -18,10 +18,12 @@ const BCRYPT_ROUNDS = 12;
 // ── Helpers ────────────────────────────────────────────────────
 
 function signAccessToken(affiliateId: string): string {
+  if (!env.AFFILIATE_JWT_SECRET) throw new Error('AFFILIATE_JWT_SECRET not configured');
   return jwt.sign({ affiliateId }, env.AFFILIATE_JWT_SECRET, { expiresIn: '15m' });
 }
 
 function signRefreshToken(affiliateId: string): string {
+  if (!env.AFFILIATE_JWT_REFRESH_SECRET) throw new Error('AFFILIATE_JWT_REFRESH_SECRET not configured');
   return jwt.sign({ affiliateId, type: 'refresh' }, env.AFFILIATE_JWT_REFRESH_SECRET, { expiresIn: '7d' });
 }
 
@@ -176,6 +178,10 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return;
     }
 
+    if (!env.AFFILIATE_JWT_REFRESH_SECRET) {
+      res.status(500).json({ error: 'Affiliate auth not configured' });
+      return;
+    }
     let decoded: { affiliateId: string; type: string };
     try {
       const payload = jwt.verify(refreshToken, env.AFFILIATE_JWT_REFRESH_SECRET);

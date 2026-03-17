@@ -34,8 +34,12 @@ import notificationsRouter from './routes/notifications.js';
 import groupsRouter from './routes/groups.js';
 import holidaysRouter from './routes/holidays.js';
 import teamAvailabilityRouter from './routes/teamAvailability.js';
+import affiliateAuthRouter from './routes/affiliateAuth.js';
+import affiliatePortalRouter from './routes/affiliatePortal.js';
+import affiliateAdminRouter from './routes/affiliateAdmin.js';
 import { startScheduler } from './services/scheduler.js';
 import { startAvailabilityScheduler } from './services/availabilityScheduler.js';
+import { startPayoutScheduler } from './cron/affiliatePayouts.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -121,6 +125,9 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/groups', groupsRouter);
 app.use('/api/holidays', holidaysRouter);
 app.use('/api/team/availability', teamAvailabilityRouter);
+app.use('/api/affiliate/admin', affiliateAdminRouter);
+app.use('/api/affiliate', affiliateAuthRouter);
+app.use('/api/affiliate', affiliatePortalRouter);
 
 app.use(errorHandler);
 
@@ -128,6 +135,7 @@ app.listen(env.PORT, () => {
   console.log(`Server running on port ${env.PORT} (smart-kb)`);
   startScheduler();
   startAvailabilityScheduler();
+  startPayoutScheduler();
 });
 
 export default app;

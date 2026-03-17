@@ -757,8 +757,8 @@ router.post('/connect-onboarding', async (req: Request, res: Response) => {
     // 3. Create Account Link for onboarding
     const link = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${env.AFFILIATE_PORTAL_URL}/#/settings?connect=refresh`,
-      return_url: `${env.AFFILIATE_PORTAL_URL}/#/settings?connect=complete`,
+      refresh_url: `${env.AFFILIATE_PORTAL_URL || env.CLIENT_URL}/#/settings?connect=refresh`,
+      return_url: `${env.AFFILIATE_PORTAL_URL || env.CLIENT_URL}/#/settings?connect=complete`,
       type: 'account_onboarding',
     });
 

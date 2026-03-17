@@ -15,6 +15,9 @@ const envSchema = z.object({
   CLIENT_URL: z.string().url().default('http://localhost:5173'),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  AFFILIATE_JWT_SECRET: z.string().optional(),
+  AFFILIATE_JWT_REFRESH_SECRET: z.string().optional(),
+  AFFILIATE_PORTAL_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

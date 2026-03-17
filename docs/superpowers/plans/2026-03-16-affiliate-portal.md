@@ -17,11 +17,11 @@
 ### Task 1.1: Database Migration
 
 **Files:**
-- Create: `supabase/migrations/063_affiliate_portal.sql`
+- Create: `supabase/migrations/064_affiliate_portal.sql`
 
 - [ ] **Step 1: Write the migration file**
 
-Create `supabase/migrations/063_affiliate_portal.sql` with all affiliate tables. Follow the existing migration pattern (see `supabase/migrations/062_company_branding.sql` for reference).
+Create `supabase/migrations/064_affiliate_portal.sql` with all affiliate tables. Follow the existing migration pattern (see `supabase/migrations/062_company_branding.sql` for reference).
 
 ```sql
 -- Enable moddatetime extension if not already enabled
@@ -194,7 +194,7 @@ CREATE INDEX idx_commission_schedule_periods_schedule_id ON commission_schedule_
 - [ ] **Step 2: Commit migration**
 
 ```bash
-git add supabase/migrations/063_affiliate_portal.sql
+git add supabase/migrations/064_affiliate_portal.sql
 git commit -m "feat(affiliate): add database schema for affiliate portal"
 ```
 
@@ -1481,7 +1481,7 @@ Fix any TypeScript errors.
 
 (Requires user confirmation — do NOT auto-run)
 
-The migration file is at: `supabase/migrations/063_affiliate_portal.sql`
+The migration file is at: `supabase/migrations/064_affiliate_portal.sql`
 
 - [ ] **Step 5: Commit any build fixes**
 
