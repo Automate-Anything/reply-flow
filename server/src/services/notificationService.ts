@@ -20,6 +20,7 @@ const PREFERENCE_DEFAULTS: Record<string, boolean> = {
   status_change: true,
   contact_note: true,
   handoff: true,
+  group_criteria_match: true,
 };
 
 /**

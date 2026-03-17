@@ -22,6 +22,7 @@ import AIAgentsPage from '@/pages/AIAgentsPage';
 import AgentDetailPage from '@/pages/AgentDetailPage';
 import SuperAdminPage from '@/pages/SuperAdminPage';
 import BillingPage from '@/pages/BillingPage';
+import GroupsPage from '@/pages/GroupsPage';
 import DebugOverlay from '@/components/debug/DebugOverlay';
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
                   <Route path="ai-agents/:agentId" element={<AgentDetailPage />} />
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="channels/:channelId" element={<ChannelDetailPage />} />
+                  <Route path="groups" element={<GroupsPage />} />
 
                   <Route path="company-settings" element={<CompanySettingsPage />} />
                   <Route path="profile-settings" element={<ProfileSettingsPage />} />

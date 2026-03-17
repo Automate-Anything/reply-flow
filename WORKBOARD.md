@@ -9,6 +9,8 @@
   Files: plans/2026-03-16-gmail-channel-integration.md. Branch: feat/gmail-channel-integration (not yet created).
   Depends on: none.
 ## Completed
+- **Group Chat Criteria Alerts** — Claude — Completed 2026-03-17. Branch: feat/group-chat-criteria-alerts. Merged: no (pending push).
+  Files modified: server/src/routes/groups.ts, server/src/routes/webhook.ts, server/src/services/groupCriteriaService.ts, server/src/services/groupMessageProcessor.ts, server/src/services/notificationService.ts, server/src/types/index.ts, server/src/index.ts, client/src/pages/GroupsPage.tsx, client/src/components/groups/*.tsx, client/src/hooks/useGroup*.ts, client/src/components/layout/Sidebar.tsx, client/src/components/layout/NotificationBell.tsx, client/src/App.tsx, supabase/migrations/063_group_chat_criteria.sql.
 - **Company Branding (logo + color scheme)** — Claude — Completed 2026-03-16. Branch: feat/company-branding. Merged: yes.
   Logo upload to Supabase Storage, brand color picker (presets + custom hex), full-theme OKLCH hue rotation (all CSS variables), sidebar dynamic logo/name. Migration: 062_company_branding.sql.
 - **Contact Detail v2 — Full Redesign** — Claude — Completed 2026-03-15. Branch: main. Merged: yes.
