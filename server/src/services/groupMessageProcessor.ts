@@ -1,7 +1,38 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { evaluateGroupCriteria } from './groupCriteriaService.js';
+import { getGroupInfo } from './whapi.js';
 import type { GroupChat, GroupChatMessage } from '../types/index.js';
 import type { WhapiIncomingMessage } from '../types/webhook.js';
+
+/**
+ * Fetch the group name from Whapi and update the database record.
+ * Non-blocking — logs errors but never throws.
+ */
+async function syncGroupName(
+  groupId: string,
+  groupJid: string,
+  channelId: string
+): Promise<void> {
+  try {
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('channel_token')
+      .eq('id', channelId)
+      .single();
+
+    if (!channel?.channel_token) return;
+
+    const info = await getGroupInfo(channel.channel_token, groupJid);
+    if (info?.name) {
+      await supabaseAdmin
+        .from('group_chats')
+        .update({ group_name: info.name, updated_at: new Date().toISOString() })
+        .eq('id', groupId);
+    }
+  } catch (err) {
+    console.error('[group] Failed to sync group name:', err);
+  }
+}
 
 export async function processGroupMessage(
   msg: WhapiIncomingMessage,
@@ -26,7 +57,7 @@ export async function processGroupMessage(
         company_id: companyId,
         channel_id: channelId,
         group_jid: groupJid,
-        group_name: null, // Will be updated when metadata is available
+        group_name: null,
         monitoring_enabled: false,
       })
       .select()
@@ -37,6 +68,12 @@ export async function processGroupMessage(
       return;
     }
     group = newGroup;
+
+    // Fetch group name from Whapi (non-blocking)
+    syncGroupName(group.id, groupJid, channelId);
+  } else if (!group.group_name) {
+    // Group exists but has no name — retry fetching it (non-blocking)
+    syncGroupName(group.id, groupJid, channelId);
   }
 
   // 2. If monitoring is disabled, stop here

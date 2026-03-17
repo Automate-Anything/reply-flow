@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
+import { getGroupInfo } from '../services/whapi.js';
 
 const router = Router();
 
@@ -39,6 +40,37 @@ router.get('/', async (req, res, next) => {
       whatsapp_channels: undefined,
       criteria_count: countMap.get(g.id) || 0,
     }));
+
+    // Backfill group names for any groups missing them (non-blocking)
+    const unnamed = (groups || []).filter((g: any) => !g.group_name);
+    if (unnamed.length > 0) {
+      // Get channel tokens for the unnamed groups
+      const channelIds = [...new Set(unnamed.map((g: any) => g.channel_id))];
+      const { data: channels } = await supabaseAdmin
+        .from('whatsapp_channels')
+        .select('id, channel_token')
+        .in('id', channelIds);
+
+      const tokenMap = new Map((channels || []).map((c: any) => [c.id, c.channel_token]));
+
+      // Fetch names from Whapi and update DB + response in parallel
+      await Promise.allSettled(
+        unnamed.map(async (g: any) => {
+          const token = tokenMap.get(g.channel_id);
+          if (!token) return;
+          const info = await getGroupInfo(token, g.group_jid);
+          if (info?.name) {
+            await supabaseAdmin
+              .from('group_chats')
+              .update({ group_name: info.name, updated_at: new Date().toISOString() })
+              .eq('id', g.id);
+            // Update the response object so the name appears on this request too
+            const match = enriched.find((e: any) => e.id === g.id);
+            if (match) match.group_name = info.name;
+          }
+        })
+      );
+    }
 
     res.json({ groups: enriched });
   } catch (err) {
