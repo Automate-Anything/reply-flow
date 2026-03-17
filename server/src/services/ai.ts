@@ -881,8 +881,13 @@ export async function sendOutsideHoursReply(
   const now = new Date().toISOString();
   const outboundMetadata = { source: 'ai_send', kind: 'outside_hours' };
 
-  // Update session BEFORE inserting so refetch triggered by Realtime INSERT sees correct data.
-  // Also mark conversation as read — the AI has handled it.
+  // Unconditional: clear read state before inserting the message.
+  await supabaseAdmin
+    .from('chat_sessions')
+    .update({ marked_unread: false, last_read_at: now, updated_at: now })
+    .eq('id', sessionId);
+
+  // Conditional: update last_message fields only if this is the newest message.
   await supabaseAdmin
     .from('chat_sessions')
     .update({
@@ -890,9 +895,6 @@ export async function sendOutsideHoursReply(
       last_message_at: now,
       last_message_direction: 'outbound',
       last_message_sender: 'ai',
-      marked_unread: false,
-      last_read_at: now,
-      updated_at: now,
     })
     .eq('id', sessionId)
     .or(`last_message_at.is.null,last_message_at.lte.${now}`);
@@ -968,9 +970,22 @@ async function sendAndStoreMessage(
     ...(metadata ?? {}),
   };
 
-  // Update session BEFORE inserting the message so the Realtime INSERT event on
-  // chat_messages triggers a client refetch that already sees the correct last_message.
-  // Also mark the conversation as read — the AI has handled it.
+  // Step 1 (unconditional): mark conversation as read and update preview.
+  // This runs before the message INSERT so the Realtime INSERT triggers a client
+  // refetch that already sees a clean read state.
+  // marked_unread + last_read_at are unconditional — we always want to clear the
+  // unread indicator when the AI responds, regardless of message timestamp ordering.
+  await supabaseAdmin
+    .from('chat_sessions')
+    .update({
+      marked_unread: false,
+      last_read_at: now,
+      updated_at: now,
+    })
+    .eq('id', sessionId);
+
+  // Step 2 (conditional): update last_message fields only if this AI message is
+  // actually the newest — prevents a slow AI response from overwriting a newer message.
   await supabaseAdmin
     .from('chat_sessions')
     .update({
@@ -978,14 +993,13 @@ async function sendAndStoreMessage(
       last_message_at: now,
       last_message_direction: 'outbound',
       last_message_sender: 'ai',
-      marked_unread: false,
-      last_read_at: now,
-      updated_at: now,
     })
     .eq('id', sessionId)
     .or(`last_message_at.is.null,last_message_at.lte.${now}`);
 
-  // Mark all pending inbound messages as read
+  // Step 3: mark all pending inbound messages as read before inserting the AI message.
+  // Realtime fires on INSERT — if we mark read after the insert, the client refetch
+  // races this update and can see a stale unread count.
   await supabaseAdmin
     .from('chat_messages')
     .update({ read: true })
