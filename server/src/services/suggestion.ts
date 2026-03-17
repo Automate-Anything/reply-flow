@@ -201,6 +201,7 @@ function buildSuggestionPrompt(
     const personalityLines: string[] = [];
     if (p.business_name) personalityLines.push(`Business: ${p.business_name}`);
     if (p.business_type) personalityLines.push(`Type: ${p.business_type}`);
+    if (p.business_description) personalityLines.push(`About: ${p.business_description}`);
     if (style?.tone) personalityLines.push(`Tone: ${style.tone}`);
     if (style?.response_length) personalityLines.push(`Length: ${style.response_length}`);
     if (style?.emoji_usage) personalityLines.push(`Emoji usage: ${style.emoji_usage}`);
@@ -321,6 +322,9 @@ export async function streamSuggestion(
         res.write(`data: ${JSON.stringify({ token: event.delta.text })}\n\n`);
       }
     }
+
+    // Clean up close listener now that streaming is done
+    res.off('close', onClose);
 
     // Increment usage counter
     const suggestionsToday = incrementUsage(userId);

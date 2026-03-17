@@ -36,11 +36,12 @@ export const sendLimiter = rateLimit({
   message: { error: 'Message rate limit reached. Please slow down.' },
 });
 
-// AI suggestion: stricter limit since each call hits Anthropic API
+// AI suggestion: per-user limit since each call hits Anthropic API
 export const suggestionLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 15,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => (req as unknown as { userId?: string }).userId || req.ip || 'unknown',
   message: { error: 'Suggestion rate limit reached. Please slow down.' },
 });

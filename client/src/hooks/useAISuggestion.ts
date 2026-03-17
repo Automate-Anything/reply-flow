@@ -128,12 +128,19 @@ export function useAISuggestion() {
     suggest(last.sessionId, last.existingText, last.mode);
   }, [suggest]);
 
+  /** Call when the user manually edits text after a suggestion — clears regenerate state */
+  const clearSuggestion = useCallback(() => {
+    setStreamedText('');
+    lastRequestRef.current = null;
+  }, []);
+
   return {
     suggest,
     stop,
     regenerate,
     streamedText,
     setStreamedText,
+    clearSuggestion,
     isStreaming,
     suggestionsToday,
     error,

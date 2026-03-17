@@ -1,3 +1,4 @@
+import { useState, useImperativeHandle, forwardRef } from 'react';
 import { Sparkles, Square, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,99 +21,111 @@ interface AISuggestionButtonProps {
   disabled?: boolean;
 }
 
-export function AISuggestionButton({
-  hasText,
-  isStreaming,
-  hasStreamedText,
-  onSuggest,
-  onStop,
-  onRegenerate,
-  disabled,
-}: AISuggestionButtonProps) {
-  // Streaming state — show stop button
-  if (isStreaming) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-red-500 hover:text-red-600"
-            onClick={onStop}
-          >
-            <Square className="h-4 w-4 fill-current" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Stop generating</TooltipContent>
-      </Tooltip>
-    );
-  }
+export interface AISuggestionButtonHandle {
+  openDropdown: () => void;
+}
 
-  // After streaming — show regenerate button alongside the star
-  const regenerateButton = hasStreamedText && !isStreaming ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 text-muted-foreground hover:text-foreground"
-          onClick={onRegenerate}
-          disabled={disabled}
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Regenerate suggestion</TooltipContent>
-    </Tooltip>
-  ) : null;
+export const AISuggestionButton = forwardRef<AISuggestionButtonHandle, AISuggestionButtonProps>(
+  function AISuggestionButton(
+    { hasText, isStreaming, hasStreamedText, onSuggest, onStop, onRegenerate, disabled },
+    ref,
+  ) {
+    const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // No text — click directly generates
-  if (!hasText) {
-    return (
-      <>
-        {regenerateButton}
+    useImperativeHandle(ref, () => ({
+      openDropdown: () => setDropdownOpen(true),
+    }));
+
+    // Streaming state — show stop button
+    if (isStreaming) {
+      return (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 text-muted-foreground hover:text-purple-500"
-              onClick={() => onSuggest('generate')}
-              disabled={disabled}
+              className="h-9 w-9 text-red-500 hover:text-red-600"
+              onClick={onStop}
             >
-              <Sparkles className="h-4 w-4" />
+              <Square className="h-4 w-4 fill-current" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Generate AI suggestion</TooltipContent>
+          <TooltipContent>Stop generating</TooltipContent>
         </Tooltip>
-      </>
-    );
-  }
+      );
+    }
 
-  // Has text — show dropdown with Complete / Rewrite
-  return (
-    <>
-      {regenerateButton}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+    // After streaming — show regenerate button alongside the star
+    const regenerateButton = hasStreamedText && !isStreaming ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 text-muted-foreground hover:text-purple-500"
+            className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            onClick={onRegenerate}
             disabled={disabled}
           >
-            <Sparkles className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onSuggest('complete')}>
-            Complete — continue from here
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onSuggest('rewrite')}>
-            Rewrite — polish my draft
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
-  );
-}
+        </TooltipTrigger>
+        <TooltipContent>Regenerate suggestion</TooltipContent>
+      </Tooltip>
+    ) : null;
+
+    // No text — click directly generates
+    if (!hasText) {
+      return (
+        <>
+          {regenerateButton}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:text-purple-500"
+                onClick={() => onSuggest('generate')}
+                disabled={disabled}
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Generate AI suggestion (Ctrl+J)</TooltipContent>
+          </Tooltip>
+        </>
+      );
+    }
+
+    // Has text — show dropdown with Complete / Rewrite
+    return (
+      <>
+        {regenerateButton}
+        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-muted-foreground hover:text-purple-500"
+                  disabled={disabled}
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>AI suggestion (Ctrl+J)</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onSuggest('complete')}>
+              Complete — continue from here
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onSuggest('rewrite')}>
+              Rewrite — polish my draft
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    );
+  },
+);

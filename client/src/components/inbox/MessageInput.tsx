@@ -16,7 +16,7 @@ import { VoiceRecordButton } from './VoiceRecordButton';
 import { VoiceRecordingBar } from './VoiceRecordingBar';
 import { toast } from 'sonner';
 import { useAISuggestion } from '@/hooks/useAISuggestion';
-import { AISuggestionButton } from './AISuggestionButton';
+import { AISuggestionButton, type AISuggestionButtonHandle } from './AISuggestionButton';
 
 interface MessageInputProps {
   onSend: (body: string) => Promise<void>;
@@ -101,12 +101,14 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
     stop: stopSuggestion,
     regenerate,
     streamedText,
+    clearSuggestion,
     isStreaming: isSuggestionStreaming,
     suggestionsToday,
     error: suggestionError,
   } = useAISuggestion();
 
   const originalTextRef = useRef<string>('');
+  const suggestionBtnRef = useRef<AISuggestionButtonHandle>(null);
 
   const handleSuggest = useCallback(
     (mode: 'generate' | 'complete' | 'rewrite') => {
@@ -117,13 +119,23 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
     [sessionId, text, suggest],
   );
 
-  // Sync streamed text into textarea
+  // Sync streamed text into textarea — only while actively streaming
+  const wasSuggestionStreaming = useRef(false);
   useEffect(() => {
-    if (!isSuggestionStreaming && !streamedText) return;
-    if (originalTextRef.current) {
-      setText(originalTextRef.current + streamedText);
-    } else {
-      setText(streamedText);
+    if (isSuggestionStreaming) {
+      // While streaming, continuously update the textarea
+      wasSuggestionStreaming.current = true;
+      const fullText = originalTextRef.current
+        ? originalTextRef.current + streamedText
+        : streamedText;
+      setText(fullText);
+    } else if (wasSuggestionStreaming.current && streamedText) {
+      // Final sync when streaming ends — then stop touching setText
+      wasSuggestionStreaming.current = false;
+      const fullText = originalTextRef.current
+        ? originalTextRef.current + streamedText
+        : streamedText;
+      setText(fullText);
     }
   }, [streamedText, isSuggestionStreaming]);
 
@@ -220,6 +232,11 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
     setText(value);
     onDraftChange?.(value);
 
+    // User is manually editing after a suggestion — clear stale regenerate state
+    if (streamedText) {
+      clearSuggestion();
+    }
+
     const slashIndex = value.lastIndexOf('/');
     if (slashIndex !== -1 && (slashIndex === 0 || value[slashIndex - 1] === ' ' || value[slashIndex - 1] === '\n')) {
       const query = value.slice(slashIndex + 1);
@@ -268,7 +285,7 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
       if (text.trim().length === 0) {
         handleSuggest('generate');
       } else {
-        handleSuggest('complete');
+        suggestionBtnRef.current?.openDropdown();
       }
       return;
     }
@@ -465,6 +482,7 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
       />
 
       <AISuggestionButton
+        ref={suggestionBtnRef}
         hasText={hasText}
         isStreaming={isSuggestionStreaming}
         hasStreamedText={streamedText.length > 0}
