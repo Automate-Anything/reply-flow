@@ -564,6 +564,18 @@ export async function processIncomingMessage(
     .update(sessionUpdate)
     .eq('id', sessionId);
 
+  // For outbound messages, mark pending inbound messages as read BEFORE inserting the
+  // outbound message. Realtime fires on INSERT and triggers a client refetch — if we mark
+  // read after the insert, the refetch races this update and can return a stale unread count.
+  if (isOutbound) {
+    await supabaseAdmin
+      .from('chat_messages')
+      .update({ read: true })
+      .eq('session_id', sessionId)
+      .eq('direction', 'inbound')
+      .eq('read', false);
+  }
+
   // 5a. Insert the message (session is already up-to-date for Realtime consumers)
   const { data: insertedMessage, error: messageError } = await supabaseAdmin
     .from('chat_messages')
@@ -607,15 +619,8 @@ export async function processIncomingMessage(
   }
 
   // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed.
-  // Session was already marked as read above. Just mark pending inbound messages as read.
+  // Session and inbound read state were already updated before the insert above.
   if (isOutbound) {
-    await supabaseAdmin
-      .from('chat_messages')
-      .update({ read: true })
-      .eq('session_id', sessionId)
-      .eq('direction', 'inbound')
-      .eq('read', false);
-
     return;
   }
 
