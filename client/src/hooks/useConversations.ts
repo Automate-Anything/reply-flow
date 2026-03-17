@@ -139,5 +139,12 @@ export function useConversations(
     fetchConversations();
   }, [fetchConversations]);
 
+  // Polling fallback: re-fetch every 10 seconds so the inbox stays current even
+  // when the Supabase Realtime WebSocket drops or fires late.
+  useEffect(() => {
+    const id = setInterval(fetchConversations, 10_000);
+    return () => clearInterval(id);
+  }, [fetchConversations]);
+
   return { conversations, setConversations, loading, refetch: fetchConversations };
 }
