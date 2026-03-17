@@ -13,7 +13,7 @@ import FallbackToggle from './response-flow/FallbackToggle';
 import StyleSection from './sections/StyleSection';
 import AgentKBSection from './sections/AgentKBSection';
 import LanguageSection from './sections/LanguageSection';
-import { useResponseFlow } from './response-flow/useResponseFlow';
+import { useResponseFlow, migrateFromFlat } from './response-flow/useResponseFlow';
 import PromptPreviewPanel from './PromptPreviewPanel';
 
 interface Props {
@@ -52,13 +52,13 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
    *  accidentally persisting unsaved changes from other tabs. */
   const saveStyle = useCallback(
     async (style: CommunicationStyle) => {
-      const baseFlow = profileData.response_flow ?? flow;
+      const baseFlow = profileData.response_flow ?? migrateFromFlat(profileData);
       const updatedFlow = { ...baseFlow, default_style: style };
       const merged = { ...profileData, response_flow: updatedFlow };
       await onSave({ profile_data: merged });
       toast.success('Saved');
     },
-    [profileData, flow, onSave]
+    [profileData, onSave]
   );
 
   /** Save agent-level KB attachments and mode to response_flow.
@@ -66,7 +66,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
    *  accidentally persisting unsaved changes from other tabs. */
   const saveAgentKB = useCallback(
     async (kbAttachments: ScenarioKBAttachment[], mode: 'always' | 'fallback') => {
-      const baseFlow = profileData.response_flow ?? flow;
+      const baseFlow = profileData.response_flow ?? migrateFromFlat(profileData);
       const updatedFlow = {
         ...baseFlow,
         fallback_kb_attachments: kbAttachments.length > 0 ? kbAttachments : undefined,
@@ -76,7 +76,7 @@ export default function AIAgentSections({ profileData, onSave, agentId }: Props)
       await onSave({ profile_data: merged });
       toast.success('Saved');
     },
-    [profileData, flow, onSave]
+    [profileData, onSave]
   );
 
   // ── Fallback tab save (still uses shared flow state) ──
