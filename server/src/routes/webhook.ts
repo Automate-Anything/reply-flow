@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { processIncomingMessage } from '../services/messageProcessor.js';
+import { processGroupMessage } from '../services/groupMessageProcessor.js';
 import type { WhapiWebhookPayload, WhapiStatusUpdate } from '../types/webhook.js';
 
 const router = Router();
@@ -89,8 +90,15 @@ router.post('/', async (req, res) => {
     // Process incoming messages
     if (payload.messages && payload.messages.length > 0) {
       for (const msg of payload.messages) {
-        // Skip group messages (chat_id ends with @g.us)
-        if (msg.chat_id?.endsWith('@g.us')) continue;
+        // Handle group messages separately (read-only — never respond)
+        if (msg.chat_id?.endsWith('@g.us')) {
+          try {
+            await processGroupMessage(msg, channel.company_id, channel.id);
+          } catch (err) {
+            console.error('[webhook] Error processing group message:', err);
+          }
+          continue;
+        }
 
         await processIncomingMessage(msg, channel.company_id, channel.id, channel.user_id, channel.phone_number ?? undefined);
       }
