@@ -549,6 +549,18 @@ export async function buildScenarioResponsePrompt(
     const styleDesc = formatStyleDescription(resolved, t);
     if (styleDesc) track('CommunicationStyle', `## Communication Style\n${styleDesc}`);
 
+    // Agent-level KB (when mode is 'always', include alongside scenario KB)
+    if (flow.agent_kb_mode === 'always' && flow.fallback_kb_attachments && flow.fallback_kb_attachments.length > 0) {
+      const agentKBEntries: KBEntry[] = [];
+      for (const att of flow.fallback_kb_attachments) {
+        agentKBEntries.push(...kbEntries.filter((e) => e.knowledge_base_id === att.kb_id));
+      }
+      if (agentKBEntries.length > 0) {
+        const agentKB = buildKBSection(agentKBEntries, t);
+        if (agentKB) track('AgentKB', agentKB.replace('## Relevant Knowledge Base Context', '## General Knowledge Base'));
+      }
+    }
+
     // Single scenario block
     const scenarioLines: string[] = [];
     scenarioLines.push(`## Active Scenario: ${matchedScenario.label}`);
