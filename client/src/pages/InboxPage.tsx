@@ -577,7 +577,7 @@ export default function InboxPage() {
   return (
     <div className="flex h-full animate-in fade-in duration-150" data-component="InboxPage">
       {/* Left panel */}
-      <div className={`${activeConversation && showConversationList ? 'hidden md:flex' : 'flex'} h-full w-full flex-col border-r md:w-[320px]`}>
+      <div className={`${activeConversation && showConversationList ? 'hidden md:flex' : 'flex'} h-full w-full shrink-0 flex-col border-r md:w-[320px]`}>
         <div className="min-h-0 flex-1">
           {activeTab === 'scheduled' ? (
             <ScheduledMessagesList
@@ -630,7 +630,7 @@ export default function InboxPage() {
       {/* Right panel: message thread + notes */}
       {activeConversation ? (
         <>
-          <div className={`${activeConversation ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
+          <div className={`${activeConversation ? 'flex' : 'hidden md:flex'} min-w-0 flex-1 flex-col`}>
             <ConversationHeader
               conversation={activeConversation}
               onArchive={handleArchive}

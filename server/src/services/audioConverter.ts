@@ -31,7 +31,7 @@ export async function convertToOggOpus(
         .format('ogg')
         .output(outputPath)
         .on('end', () => resolve())
-        .on('error', (err) => reject(new Error(`ffmpeg conversion failed: ${err.message}`)))
+        .on('error', (err: Error) => reject(new Error(`ffmpeg conversion failed: ${err.message}`)))
         .run();
     });
 

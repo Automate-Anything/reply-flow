@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Trash2, Pause, Play, Send } from 'lucide-react';
 import type { RecorderState } from '@/hooks/useVoiceRecorder';
 
-const BAR_COUNT = 32;
+const BAR_COUNT = 48;
 
 interface VoiceRecordingBarProps {
   state: RecorderState;
@@ -67,26 +67,31 @@ export function VoiceRecordingBar({
   }, [state, analyserNode]);
 
   return (
-    <div className="flex w-full items-center justify-end gap-1.5 px-2 py-1.5">
+    <div className="flex w-full items-center justify-end gap-3 px-3 py-2">
       <button
         onClick={onDelete}
-        className="shrink-0 rounded-full p-1 text-destructive hover:bg-destructive/10"
+        className="shrink-0 rounded-full p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="h-5 w-5" />
       </button>
 
-      <span className="text-xs font-mono text-muted-foreground tabular-nums shrink-0">
+      {/* Recording indicator dot */}
+      {state === 'recording' && (
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-destructive animate-pulse" />
+      )}
+
+      <span className="text-sm font-mono tabular-nums shrink-0">
         {formatDuration(duration)}
       </span>
 
-      <div className="flex h-5 w-28 items-center gap-[1.5px]">
+      <div className="flex h-7 flex-1 max-w-[240px] items-center gap-[1.5px]">
         {bars.map((height, i) => (
           <div
             key={i}
             className="flex-1 rounded-full"
             style={{
               height: `${Math.max(15, Math.round(height * 100))}%`,
-              minHeight: 2,
+              minHeight: 3,
               background: 'color-mix(in srgb, var(--color-primary) 70%, transparent)',
             }}
           />
@@ -95,21 +100,21 @@ export function VoiceRecordingBar({
 
       <button
         onClick={state === 'paused' ? onResume : onPause}
-        className="shrink-0 rounded-full p-1 hover:bg-accent"
+        className="shrink-0 rounded-full p-1.5 hover:bg-accent"
       >
         {state === 'paused' ? (
-          <Play className="h-3.5 w-3.5" />
+          <Play className="h-5 w-5" />
         ) : (
-          <Pause className="h-3.5 w-3.5" />
+          <Pause className="h-5 w-5" />
         )}
       </button>
 
       <Button
         size="icon"
         onClick={onSend}
-        className="h-8 w-8 shrink-0 rounded-full"
+        className="h-10 w-10 shrink-0 rounded-full"
       >
-        <Send className="h-3.5 w-3.5" />
+        <Send className="h-4 w-4" />
       </Button>
     </div>
   );
