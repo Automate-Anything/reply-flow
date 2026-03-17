@@ -22,7 +22,7 @@ export function GroupDetail({ groupId, onBack, groups, groupsLoading, toggleMoni
   const group = groups.find((g) => g.id === groupId);
   const { criteria, createCriteria, updateCriteria, deleteCriteria } =
     useGroupCriteria(groupId);
-  const { messages, matches, loading: messagesLoading, setMessages, setMatches } =
+  const { matches, loading: messagesLoading, setMessages, setMatches } =
     useGroupMessages(groupId);
 
   const [dialogOpen, setDialogOpen] = useState(false);
