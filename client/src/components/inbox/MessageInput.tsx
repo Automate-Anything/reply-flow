@@ -411,6 +411,31 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
         className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
 
+      {hasText ? (
+        <PlanGate>
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={!hasText || disabled || sending}
+            className="h-9 w-9 shrink-0"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </PlanGate>
+      ) : (
+        typeof MediaRecorder !== 'undefined' && (
+          <PlanGate>
+            <VoiceRecordButton
+              onRecordStart={recorder.start}
+              onRecordStop={handleVoiceRecordStop}
+              onLock={handleVoiceLock}
+              onCancel={recorder.cancel}
+              disabled={disabled}
+            />
+          </PlanGate>
+        )
+      )}
+
       {/* Schedule send button */}
       <Popover
         open={scheduleOpen}
@@ -500,31 +525,6 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
           )}
         </PopoverContent>
       </Popover>
-
-      {hasText ? (
-        <PlanGate>
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={!hasText || disabled || sending}
-            className="h-9 w-9 shrink-0"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </PlanGate>
-      ) : (
-        typeof MediaRecorder !== 'undefined' && (
-          <PlanGate>
-            <VoiceRecordButton
-              onRecordStart={recorder.start}
-              onRecordStop={handleVoiceRecordStop}
-              onLock={handleVoiceLock}
-              onCancel={recorder.cancel}
-              disabled={disabled}
-            />
-          </PlanGate>
-        )
-      )}
       </div>
       )}
     </div>
