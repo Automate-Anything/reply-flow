@@ -6,10 +6,10 @@ import { extractSessionMemories } from './sessionMemory.js';
 import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 import { downloadMediaById, fetchFullMessage, getContactProfile } from './whapi.js';
-import { cacheProfilePicture } from './profilePictureStorage.js';
 import { autoAssignConversation } from './autoAssignService.js';
 import { createNotification, createNotificationsForUsers } from './notificationService.js';
 import { evaluateAutoReply } from './autoReplyEvaluator.js';
+import { cacheProfilePicture } from './profilePictureStorage.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -427,11 +427,9 @@ export async function processIncomingMessage(
   //   (a) Echo arrives with from_me=true but message_id_normalized format doesn't match → primary dedup misses it
   //   (b) Echo arrives with from_me absent/false → treated as inbound, primary dedup misses it
   // In both cases, an outbound message with the same body already exists in the session.
-  // We run this check regardless of isOutbound — case (b) echoes are misclassified as
-  // inbound and would slip through if we only checked when isOutbound is true.
-  // Safe because we only compare against outbound messages with app_send/ai_send source,
-  // so a contact legitimately sending the same text is never suppressed.
-  {
+  // We only compare against outbound messages so a contact legitimately sending the same
+  // message twice is never suppressed.
+  if (isOutbound) {
     const windowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: recentOutbound } = await supabaseAdmin
       .from('chat_messages')
@@ -448,7 +446,7 @@ export async function processIncomingMessage(
     });
 
     if (existingOutbound) {
-      console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}, isOutbound=${isOutbound}`);
+      console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}`);
       return;
     }
   }

@@ -4,8 +4,8 @@ import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import * as whapi from '../services/whapi.js';
-import { cacheProfilePicture } from '../services/profilePictureStorage.js';
 import { checkPlanLimit } from './billing.js';
+import { cacheProfilePicture } from '../services/profilePictureStorage.js';
 
 const router = Router();
 
