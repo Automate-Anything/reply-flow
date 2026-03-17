@@ -54,6 +54,7 @@ export interface ResponseFlow {
   fallback_style?: CommunicationStyle;
   human_phone?: string;
   fallback_kb_attachments?: { kb_id: string; instructions?: string }[];
+  agent_kb_mode?: 'always' | 'fallback';
 }
 
 // ── Profile & KB types ──────────────────────────────
