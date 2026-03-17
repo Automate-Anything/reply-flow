@@ -33,7 +33,7 @@ function DashboardTab({ stats, balance, earningsHistory, funnel, affiliateLink, 
   };
 
   const chartData = useMemo(() => {
-    return earningsHistory.map((m) => ({
+    return (earningsHistory ?? []).map((m) => ({
       month: formatMonthLabel(m.month),
       amount: m.amountCents / 100,
     }));
@@ -80,14 +80,14 @@ function DashboardTab({ stats, balance, earningsHistory, funnel, affiliateLink, 
 
   const funnelSteps = funnel
     ? [
-        { label: 'Clicks', value: funnel.clicks, rate: null },
-        { label: 'Signups', value: funnel.signups, rate: funnel.clickToSignupRate },
-        { label: 'Trials', value: funnel.trials, rate: funnel.signups > 0 ? Math.round((funnel.trials / funnel.signups) * 10000) / 100 : 0 },
-        { label: 'Active', value: funnel.active, rate: funnel.signupToActiveRate },
+        { label: 'Clicks', value: funnel.clicks ?? 0, rate: null },
+        { label: 'Signups', value: funnel.signups ?? 0, rate: funnel.clickToSignupRate ?? 0 },
+        { label: 'Trials', value: funnel.trials ?? 0, rate: (funnel.signups ?? 0) > 0 ? Math.round(((funnel.trials ?? 0) / (funnel.signups ?? 1)) * 10000) / 100 : 0 },
+        { label: 'Active', value: funnel.active ?? 0, rate: funnel.signupToActiveRate ?? 0 },
       ]
     : [];
 
-  const funnelMax = funnel ? Math.max(funnel.clicks, funnel.signups, 1) : 1;
+  const funnelMax = funnel ? Math.max(funnel.clicks ?? 0, funnel.signups ?? 0, 1) : 1;
 
   return (
     <div className="space-y-6" role="tabpanel">

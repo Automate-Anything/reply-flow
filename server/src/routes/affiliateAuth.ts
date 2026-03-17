@@ -68,7 +68,14 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       .update({ refresh_token: refreshToken })
       .eq('id', affiliate.id);
 
-    res.json({ accessToken, refreshToken, approvalStatus: affiliate.approval_status });
+    // Fetch full affiliate info for the client
+    const { data: fullAffiliate } = await supabaseAdmin
+      .from('affiliates')
+      .select('id, name, email, affiliate_code')
+      .eq('id', affiliate.id)
+      .single();
+
+    res.json({ accessToken, refreshToken, affiliate: fullAffiliate });
   } catch (err) {
     console.error('Login error:', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Internal server error' });
@@ -141,7 +148,14 @@ router.post('/signup', authLimiter, async (req: Request, res: Response) => {
       .update({ refresh_token: refreshToken })
       .eq('id', affiliate.id);
 
-    res.status(201).json({ accessToken, refreshToken, affiliateCode });
+    // Fetch full affiliate info for the client
+    const { data: fullAffiliate } = await supabaseAdmin
+      .from('affiliates')
+      .select('id, name, email, affiliate_code')
+      .eq('id', affiliate.id)
+      .single();
+
+    res.status(201).json({ accessToken, refreshToken, affiliate: fullAffiliate });
   } catch (err) {
     console.error('Signup error:', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Internal server error' });
@@ -208,7 +222,15 @@ router.post('/refresh', async (req: Request, res: Response) => {
     }
 
     const accessToken = signAccessToken(affiliate.id);
-    res.json({ accessToken });
+    const newRefreshToken = signRefreshToken(affiliate.id);
+
+    // Rotate refresh token in DB
+    await supabaseAdmin
+      .from('affiliates')
+      .update({ refresh_token: newRefreshToken })
+      .eq('id', affiliate.id);
+
+    res.json({ accessToken, refreshToken: newRefreshToken });
   } catch (err) {
     console.error('Refresh error:', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Internal server error' });

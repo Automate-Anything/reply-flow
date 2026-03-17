@@ -32,7 +32,7 @@ router.get('/me', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(affiliate);
+    res.json({ affiliate });
   } catch (err) {
     console.error('GET /me error:', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Internal server error' });
