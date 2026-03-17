@@ -516,49 +516,11 @@ export async function processIncomingMessage(
     }
   }
 
-  // 5. Insert the message
-  const { data: insertedMessage, error: messageError } = await supabaseAdmin
-    .from('chat_messages')
-    .insert({
-      session_id: sessionId,
-      company_id: companyId,
-      user_id: userId,
-      chat_id_normalized: chatId,
-      phone_number: phoneNumber,
-      message_body: messageBody,
-      message_type: (msg.type === 'ptt' || msg.type === 'voice') ? 'audio'
-        : msg.type === 'reply' ? 'text'  // button/list reply is just text
-        : (msg.type || 'text'),
-      message_id_normalized: msg.id,
-      direction: isOutbound ? 'outbound' : 'inbound',
-      sender_type: isOutbound ? 'human' : 'contact',
-      status: isOutbound ? 'sent' : 'received',
-      read: isOutbound,
-      message_ts: messageTs,
-      metadata: Object.keys(metadata).length > 0 ? metadata : null,
-      media_mime_type: mediaMimeType || null,
-      media_filename: mediaFilename || null,
-    })
-    .select('id')
-    .single();
-
-  if (messageError) throw messageError;
-
-  // 5a. Download, store, and extract media content BEFORE AI triggers
-  // This must complete so the AI has access to images, transcripts, and document text
-  if (insertedMessage && mediaMimeType) {
-    try {
-      if (mediaLink) {
-        await processMedia(insertedMessage.id, mediaLink, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
-      } else if (mediaBuffer) {
-        await processMediaFromBuffer(insertedMessage.id, mediaBuffer, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
-      }
-    } catch (err) {
-      console.error('Media processing error:', err);
-    }
-  }
-
-  // 5b. Update session metadata
+  // 5. Update session metadata BEFORE inserting the message.
+  // Why: Supabase Realtime fires an INSERT event on chat_messages which triggers the client
+  // to refetch conversations. If the session still has the old last_message at that point,
+  // the refetch returns stale preview text. By updating the session first, the refetch
+  // always sees the correct last_message.
   const { data: currentSession } = await supabaseAdmin
     .from('chat_sessions')
     .select('snoozed_until, last_message_at')
@@ -590,19 +552,63 @@ export async function processIncomingMessage(
     sessionUpdate.snoozed_until = null;
   }
 
+  // For outbound messages (sent from WhatsApp phone), also mark conversation as read
+  // in the same update to avoid a second Realtime event.
+  if (isOutbound) {
+    sessionUpdate.marked_unread = false;
+    sessionUpdate.last_read_at = new Date().toISOString();
+  }
+
   await supabaseAdmin
     .from('chat_sessions')
     .update(sessionUpdate)
     .eq('id', sessionId);
 
-  // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed.
-  // Mark the conversation as read since the user is actively engaged (matches app send behavior).
-  if (isOutbound) {
-    await supabaseAdmin
-      .from('chat_sessions')
-      .update({ marked_unread: false, last_read_at: new Date().toISOString() })
-      .eq('id', sessionId);
+  // 5a. Insert the message (session is already up-to-date for Realtime consumers)
+  const { data: insertedMessage, error: messageError } = await supabaseAdmin
+    .from('chat_messages')
+    .insert({
+      session_id: sessionId,
+      company_id: companyId,
+      user_id: userId,
+      chat_id_normalized: chatId,
+      phone_number: phoneNumber,
+      message_body: messageBody,
+      message_type: (msg.type === 'ptt' || msg.type === 'voice') ? 'audio'
+        : msg.type === 'reply' ? 'text'  // button/list reply is just text
+        : (msg.type || 'text'),
+      message_id_normalized: msg.id,
+      direction: isOutbound ? 'outbound' : 'inbound',
+      sender_type: isOutbound ? 'human' : 'contact',
+      status: isOutbound ? 'sent' : 'received',
+      read: isOutbound,
+      message_ts: messageTs,
+      metadata: Object.keys(metadata).length > 0 ? metadata : null,
+      media_mime_type: mediaMimeType || null,
+      media_filename: mediaFilename || null,
+    })
+    .select('id')
+    .single();
 
+  if (messageError) throw messageError;
+
+  // 5b. Download, store, and extract media content BEFORE AI triggers
+  // This must complete so the AI has access to images, transcripts, and document text
+  if (insertedMessage && mediaMimeType) {
+    try {
+      if (mediaLink) {
+        await processMedia(insertedMessage.id, mediaLink, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
+      } else if (mediaBuffer) {
+        await processMediaFromBuffer(insertedMessage.id, mediaBuffer, companyId, channelId, mediaMimeType, mediaFilename, msg.type);
+      }
+    } catch (err) {
+      console.error('Media processing error:', err);
+    }
+  }
+
+  // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed.
+  // Session was already marked as read above. Just mark pending inbound messages as read.
+  if (isOutbound) {
     await supabaseAdmin
       .from('chat_messages')
       .update({ read: true })
