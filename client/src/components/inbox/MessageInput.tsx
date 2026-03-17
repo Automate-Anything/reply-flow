@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
@@ -11,9 +11,14 @@ import { useLinkPreview } from '@/hooks/useLinkPreview';
 import type { Message } from '@/hooks/useMessages';
 import { PlanGate } from '@/components/auth/PlanGate';
 import { usePlan } from '@/contexts/PlanContext';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { VoiceRecordButton } from './VoiceRecordButton';
+import { VoiceRecordingBar } from './VoiceRecordingBar';
+import { toast } from 'sonner';
 
 interface MessageInputProps {
   onSend: (body: string) => Promise<void>;
+  onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   disabled?: boolean;
   initialDraft?: string;
@@ -31,7 +36,7 @@ function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }
   ];
 }
 
-export default function MessageInput({ onSend, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply }: MessageInputProps) {
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
@@ -44,6 +49,48 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
   const [customDate, setCustomDate] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { responses } = useCannedResponses();
+
+  // ── Voice recording ──────────────────────────────────────────────────────
+  const [isRecordingLocked, setIsRecordingLocked] = useState(false);
+
+  const handleVoiceSend = useCallback(async (blob: Blob, dur: number) => {
+    try {
+      await onSendVoiceNote(blob, dur);
+    } catch {
+      // Error toast handled by caller
+    }
+    setIsRecordingLocked(false);
+  }, [onSendVoiceNote]);
+
+  const recorder = useVoiceRecorder((blob, dur) => {
+    // Auto-stop at 15 min triggers send
+    handleVoiceSend(blob, dur);
+  });
+
+  const handleVoiceRecordStop = useCallback(async () => {
+    const { blob, duration: dur } = await recorder.stop();
+    handleVoiceSend(blob, dur);
+  }, [recorder, handleVoiceSend]);
+
+  const handleVoiceLock = useCallback(() => {
+    setIsRecordingLocked(true);
+  }, []);
+
+  const handleVoiceBarSend = useCallback(async () => {
+    const { blob, duration: dur } = await recorder.stop();
+    handleVoiceSend(blob, dur);
+  }, [recorder, handleVoiceSend]);
+
+  const handleVoiceBarDelete = useCallback(() => {
+    recorder.cancel();
+    setIsRecordingLocked(false);
+  }, [recorder]);
+
+  useEffect(() => {
+    if (recorder.error) {
+      toast.error(recorder.error);
+    }
+  }, [recorder.error]);
 
   // Note: conversation switching is handled via key={sessionId} on the parent,
   // which remounts this component with the correct initialDraft. No useEffect
@@ -272,6 +319,17 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
         </div>
       )}
 
+      {isRecordingLocked ? (
+        <VoiceRecordingBar
+          state={recorder.state}
+          duration={recorder.duration}
+          analyserNode={recorder.analyserNode}
+          onSend={handleVoiceBarSend}
+          onDelete={handleVoiceBarDelete}
+          onPause={recorder.pause}
+          onResume={recorder.resume}
+        />
+      ) : (
       <div className="relative flex items-end gap-2 p-3">
       {/* Quick replies popup */}
       {showQuickReplies && filteredResponses.length > 0 && (
@@ -443,17 +501,32 @@ export default function MessageInput({ onSend, onSchedule, disabled, initialDraf
         </PopoverContent>
       </Popover>
 
-      <PlanGate>
-        <Button
-          size="icon"
-          onClick={handleSend}
-          disabled={!hasText || disabled || sending}
-          className="h-9 w-9 shrink-0"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
-      </PlanGate>
+      {hasText ? (
+        <PlanGate>
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={!hasText || disabled || sending}
+            className="h-9 w-9 shrink-0"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </PlanGate>
+      ) : (
+        typeof MediaRecorder !== 'undefined' && (
+          <PlanGate>
+            <VoiceRecordButton
+              onRecordStart={recorder.start}
+              onRecordStop={handleVoiceRecordStop}
+              onLock={handleVoiceLock}
+              onCancel={recorder.cancel}
+              disabled={disabled}
+            />
+          </PlanGate>
+        )
+      )}
       </div>
+      )}
     </div>
   );
 }

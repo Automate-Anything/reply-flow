@@ -141,8 +141,18 @@ function useMediaUrl(message: Message) {
   const isMediaMessage = ['image', 'video', 'audio', 'ptt', 'voice', 'document'].includes(message.message_type);
   const shouldFetch = hasMedia || isMediaMessage;
   const messageId = message.id;
+  const blobUrl = (message.metadata as Record<string, unknown> | null)?._blobUrl as string | undefined;
 
   const fetchUrl = useCallback(async () => {
+    // Use blob URL directly for optimistic voice messages
+    if (blobUrl) {
+      setUrl(blobUrl);
+      return;
+    }
+
+    // Skip API call for temp messages (they don't exist on the server yet)
+    if (messageId.startsWith('temp-')) return;
+
     if (!shouldFetch) return;
 
     // Check cache
@@ -164,7 +174,7 @@ function useMediaUrl(message: Message) {
     } finally {
       setLoading(false);
     }
-  }, [messageId, shouldFetch]);
+  }, [messageId, shouldFetch, blobUrl]);
 
   useEffect(() => {
     fetchUrl();

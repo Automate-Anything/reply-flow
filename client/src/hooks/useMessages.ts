@@ -99,6 +99,70 @@ export function useMessages(sessionId: string | null) {
     [sessionId]
   );
 
+  const sendVoiceNote = useCallback(
+    async (audioBlob: Blob, duration: number) => {
+      if (!sessionId) return;
+
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const now = new Date().toISOString();
+      const minutes = Math.floor(duration / 60);
+      const seconds = Math.floor(duration % 60);
+      const durationStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+      // Create optimistic message with blob URL for immediate playback
+      const blobUrl = URL.createObjectURL(audioBlob);
+      const optimisticMsg: Message = {
+        id: tempId,
+        session_id: sessionId,
+        message_body: `[Voice message ${durationStr}]`,
+        message_type: 'voice',
+        direction: 'outbound',
+        sender_type: 'human',
+        status: 'pending',
+        read: true,
+        message_ts: now,
+        scheduled_for: null,
+        created_at: now,
+        metadata: { duration_seconds: duration, _blobUrl: blobUrl },
+        is_starred: false,
+        is_pinned: false,
+        reactions: [],
+        media_storage_path: null,
+        media_mime_type: 'audio/ogg',
+        media_filename: null,
+      };
+
+      setMessages((prev) => [...prev, optimisticMsg]);
+
+      try {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'voice-note.webm');
+        formData.append('sessionId', sessionId);
+        formData.append('duration', duration.toString());
+
+        const { data } = await api.post('/messages/send-voice', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        // Replace temp message with real one, revoke blob URL
+        const realId = data.message.id;
+        URL.revokeObjectURL(blobUrl);
+        setMessages((prev) => {
+          const withoutDupe = prev.filter((m) => m.id !== realId);
+          return withoutDupe.map((m) => (m.id === tempId ? data.message : m));
+        });
+        return data.message;
+      } catch (err) {
+        // Keep blob URL alive for retry; mark as failed
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)),
+        );
+        throw err;
+      }
+    },
+    [sessionId],
+  );
+
   const scheduleMessage = useCallback(
     async (body: string, scheduledFor: string) => {
       if (!sessionId) return;
@@ -125,5 +189,5 @@ export function useMessages(sessionId: string | null) {
     await api.post(`/conversations/${sessionId}/read`);
   }, [sessionId]);
 
-  return { messages, setMessages, loading, sendMessage, scheduleMessage, cancelScheduledMessage, markRead, refetch: fetchMessages };
+  return { messages, setMessages, loading, sendMessage, sendVoiceNote, scheduleMessage, cancelScheduledMessage, markRead, refetch: fetchMessages };
 }
