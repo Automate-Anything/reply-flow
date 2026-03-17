@@ -13,7 +13,7 @@ router.get('/', async (req, res, next) => {
     // Fetch groups with channel name join and criteria count
     const { data: groups, error } = await supabaseAdmin
       .from('group_chats')
-      .select('*, whatsapp_channels(name)')
+      .select('*, whatsapp_channels(channel_name)')
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
@@ -35,7 +35,7 @@ router.get('/', async (req, res, next) => {
 
     const enriched = (groups || []).map((g: any) => ({
       ...g,
-      channel_name: g.whatsapp_channels?.name ?? null,
+      channel_name: g.whatsapp_channels?.channel_name ?? null,
       whatsapp_channels: undefined,
       criteria_count: countMap.get(g.id) || 0,
     }));
