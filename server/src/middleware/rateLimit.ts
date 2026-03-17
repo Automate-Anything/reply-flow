@@ -35,3 +35,12 @@ export const sendLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Message rate limit reached. Please slow down.' },
 });
+
+// AI suggestion: stricter limit since each call hits Anthropic API
+export const suggestionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Suggestion rate limit reached. Please slow down.' },
+});

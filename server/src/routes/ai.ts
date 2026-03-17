@@ -14,6 +14,15 @@ import { classifyQuery } from '../services/queryClassifier.js';
 import { sseWrite } from '../services/pipelineEvents.js';
 import type { PipelineEvent, PipelineProgressCallback } from '../services/pipelineEvents.js';
 import { sendHandoffNotification } from '../services/handoffNotifier.js';
+import { streamSuggestion } from '../services/suggestion.js';
+import { suggestionLimiter } from '../middleware/rateLimit.js';
+import { z } from 'zod';
+
+const suggestSchema = z.object({
+  sessionId: z.string().uuid(),
+  mode: z.enum(['generate', 'complete', 'rewrite']),
+  existingText: z.string().optional(),
+});
 
 const router = Router();
 router.use(requireAuth);
@@ -1380,5 +1389,31 @@ router.post('/resume/:sessionId', requirePermission('conversations', 'edit'), as
     next(err);
   }
 });
+
+// ── AI Suggestion (streaming SSE) ─────────────────────
+
+router.post(
+  '/suggest',
+  requirePermission('messages', 'create'),
+  suggestionLimiter,
+  async (req, res) => {
+    const parsed = suggestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+      return;
+    }
+
+    const { sessionId, mode, existingText } = parsed.data;
+
+    await streamSuggestion(
+      req.companyId!,
+      sessionId,
+      req.userId!,
+      existingText,
+      mode,
+      res,
+    );
+  },
+);
 
 export default router;

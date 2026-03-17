@@ -15,6 +15,8 @@ import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { VoiceRecordButton } from './VoiceRecordButton';
 import { VoiceRecordingBar } from './VoiceRecordingBar';
 import { toast } from 'sonner';
+import { useAISuggestion } from '@/hooks/useAISuggestion';
+import { AISuggestionButton } from './AISuggestionButton';
 
 interface MessageInputProps {
   onSend: (body: string) => Promise<void>;
@@ -25,6 +27,7 @@ interface MessageInputProps {
   onDraftChange?: (text: string) => void;
   replyingTo?: Message | null;
   onCancelReply?: () => void;
+  sessionId?: string;
 }
 
 function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }[] {
@@ -36,7 +39,7 @@ function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }
   ];
 }
 
-export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply }: MessageInputProps) {
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
@@ -91,6 +94,44 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
       toast.error(recorder.error);
     }
   }, [recorder.error]);
+
+  // ── AI Suggestion ──────────────────────────────────────────────────────
+  const {
+    suggest,
+    stop: stopSuggestion,
+    regenerate,
+    streamedText,
+    isStreaming: isSuggestionStreaming,
+    suggestionsToday,
+    error: suggestionError,
+  } = useAISuggestion();
+
+  const originalTextRef = useRef<string>('');
+
+  const handleSuggest = useCallback(
+    (mode: 'generate' | 'complete' | 'rewrite') => {
+      if (!sessionId) return;
+      originalTextRef.current = mode === 'complete' ? text : '';
+      suggest(sessionId, text, mode);
+    },
+    [sessionId, text, suggest],
+  );
+
+  // Sync streamed text into textarea
+  useEffect(() => {
+    if (!isSuggestionStreaming && !streamedText) return;
+    if (originalTextRef.current) {
+      setText(originalTextRef.current + streamedText);
+    } else {
+      setText(streamedText);
+    }
+  }, [streamedText, isSuggestionStreaming]);
+
+  useEffect(() => {
+    if (suggestionError) {
+      toast.error(suggestionError);
+    }
+  }, [suggestionError]);
 
   // Note: conversation switching is handled via key={sessionId} on the parent,
   // which remounts this component with the correct initialDraft. No useEffect
@@ -219,6 +260,17 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
         insertCannedResponse(filteredResponses[selectedIndex]);
         return;
       }
+    }
+
+    // AI suggestion shortcut
+    if (e.ctrlKey && e.key === 'j') {
+      e.preventDefault();
+      if (text.trim().length === 0) {
+        handleSuggest('generate');
+      } else {
+        handleSuggest('complete');
+      }
+      return;
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -407,8 +459,19 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
         }}
         placeholder="Type a message... (/ for quick replies)"
         disabled={disabled || sending}
+        readOnly={isSuggestionStreaming}
         rows={1}
         className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      />
+
+      <AISuggestionButton
+        hasText={hasText}
+        isStreaming={isSuggestionStreaming}
+        hasStreamedText={streamedText.length > 0}
+        onSuggest={handleSuggest}
+        onStop={stopSuggestion}
+        onRegenerate={regenerate}
+        disabled={disabled}
       />
 
       {hasText ? (
@@ -526,6 +589,11 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
         </PopoverContent>
       </Popover>
       </div>
+      )}
+      {suggestionsToday > 0 && (
+        <p className="text-xs text-muted-foreground px-3 pb-1">
+          {suggestionsToday} suggestion{suggestionsToday !== 1 ? 's' : ''} used today
+        </p>
       )}
     </div>
   );
