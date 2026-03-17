@@ -192,7 +192,7 @@ function buildSuggestionPrompt(
 ): { system: string; userMessage: string } {
   const parts: string[] = [];
 
-  parts.push('You are a helpful assistant drafting a WhatsApp reply on behalf of a human agent.');
+  parts.push('You are a helpful assistant drafting the NEXT WhatsApp message on behalf of a human agent (the "Agent"). You are ALWAYS writing as the Agent, NEVER as the Contact. The Agent is the business representative; the Contact is the customer.');
 
   // Agent personality
   if (context.agentProfile) {
@@ -256,16 +256,24 @@ function buildSuggestionPrompt(
 
   let userMessage = '## Conversation\n' + historyLines.join('\n') + '\n\n';
 
+  // Determine who sent the last message to give Claude proper context
+  const lastMessage = context.messages.at(-1);
+  const lastSender = lastMessage?.direction === 'inbound' ? 'contact' : 'agent';
+
   // Mode-specific instruction
   switch (mode) {
     case 'generate':
-      userMessage += 'Write a complete reply to the contact\'s latest message.';
+      if (lastSender === 'contact') {
+        userMessage += 'Write the Agent\'s reply to the Contact\'s latest message.';
+      } else {
+        userMessage += 'The Agent already sent the last message(s) and the Contact has not replied yet. Write a follow-up message from the Agent — for example a nudge, clarification, or additional info. Do NOT write a response as if you were the Contact.';
+      }
       break;
     case 'complete':
-      userMessage += `The agent has started typing: "${existingText}". Continue naturally from where they left off. Do not repeat what they wrote. Output ONLY the continuation text.`;
+      userMessage += `The Agent has started typing: "${existingText}". Continue naturally from where they left off, writing as the Agent. Do not repeat what they wrote. Output ONLY the continuation text.`;
       break;
     case 'rewrite':
-      userMessage += `The agent drafted: "${existingText}". Use this as direction for what they want to say, but write a polished, complete response from scratch.`;
+      userMessage += `The Agent drafted: "${existingText}". Use this as direction for what the Agent wants to say, but write a polished, complete message from the Agent's perspective.`;
       break;
   }
 
