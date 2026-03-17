@@ -19,14 +19,14 @@ An AI-powered classification system that automatically analyzes conversations an
 4. **Admin-configurable rules** — Natural language classification instructions stored in the AI agent's `profile_data`.
 5. **Company-level apply mode** — Configurable per company: "auto_apply" (immediate) or "suggest" (human confirms).
 6. **Suggest & confirm UI** — Pending suggestions appear in the conversation side panel with per-item accept/dismiss and bulk accept/dismiss.
-7. **No override rule** — Auto-apply never overwrites values manually set by a human (only fills empty/default values).
+7. **No override rule** — Auto-apply only sets priority/status when the current value is the company's default (checked via `is_default` flag on the priority/status row). If a non-default value is already set (whether by a human or previous classification), auto-apply skips those fields.
 8. **Context used** — Contact history (last 3-5 past sessions) + full current session messages.
 9. **Only existing entities** — The AI never creates new labels/tags/lists; it picks from what exists in the company.
 
 ### Non-Functional
 
 - Classification latency: < 3 seconds (Haiku is typically < 2s)
-- Token budget: ~1000-3000 tokens per classification
+- Token budget: ~3000-8000 input tokens + ~500-1000 output tokens per classification
 - Rate limit: 1 on-demand classification per session per 30 seconds
 - Confidence threshold: items below 0.3 confidence are omitted
 - Max 5 labels per classification
@@ -40,20 +40,22 @@ An AI-powered classification system that automatically analyzes conversations an
 | `id` | UUID | PK, default gen_random_uuid() | |
 | `company_id` | UUID | FK → companies, NOT NULL | Multi-tenant isolation |
 | `session_id` | UUID | FK → chat_sessions, NOT NULL | Conversation being classified |
-| `contact_id` | UUID | FK → contacts | Contact being tagged |
+| `contact_id` | UUID | FK → contacts, NOT NULL | Contact being tagged |
 | `trigger` | TEXT | CHECK ('auto', 'manual'), NOT NULL | How classification was initiated |
 | `status` | TEXT | CHECK ('pending', 'accepted', 'dismissed', 'applied'), NOT NULL, default 'pending' | Suggestion lifecycle |
 | `suggestions` | JSONB | NOT NULL | Full AI output (see schema below) |
+| `accepted_items` | JSONB | nullable | Tracks which items were accepted in partial accept (for analytics) |
 | `applied_by` | UUID | FK → auth.users, nullable | Who accepted (null if auto-applied) |
 | `created_at` | TIMESTAMPTZ | default now() | |
 | `applied_at` | TIMESTAMPTZ | nullable | When accepted/applied |
+| `updated_at` | TIMESTAMPTZ | default now(), trigger auto-update | Standard audit column |
 
 **Indexes:**
 - `idx_classification_suggestions_session` on `(session_id)` WHERE `status = 'pending'`
 - `idx_classification_suggestions_company` on `(company_id)`
 
 **RLS Policies:**
-- SELECT/INSERT/UPDATE: `company_id = get_user_company_id(auth.uid())`
+- SELECT/INSERT/UPDATE: `company_id = get_user_company_id()` (function calls `auth.uid()` internally)
 
 ### `suggestions` JSONB Schema
 
@@ -62,7 +64,7 @@ An AI-powered classification system that automatically analyzes conversations an
   "labels": [{ "id": "uuid", "name": "Billing", "confidence": 0.95 }],
   "priority": { "id": "uuid", "name": "High", "confidence": 0.88 },
   "status": { "id": "uuid", "name": "pending", "confidence": 0.92 },
-  "contact_tags": ["VIP", "Returning Customer"],
+  "contact_tags": [{ "id": "uuid", "name": "VIP", "confidence": 0.90 }, { "id": "uuid", "name": "Returning Customer", "confidence": 0.85 }],
   "contact_lists": [{ "id": "uuid", "name": "Hot Leads", "confidence": 0.85 }],
   "reasoning": "Customer is asking about a refund for order #1234, expressing urgency..."
 }
@@ -105,8 +107,8 @@ Registered in `server/src/index.ts`. All routes require `requireAuth` middleware
 | `/suggestions/:suggestionId/accept` | POST | `conversations.edit` | Accept all items in a suggestion |
 | `/suggestions/:suggestionId/dismiss` | POST | `conversations.edit` | Dismiss a suggestion |
 | `/suggestions/:suggestionId/accept-partial` | POST | `conversations.edit` | Accept selected items from a suggestion |
-| `/settings` | GET | `settings.view` | Get company classification mode |
-| `/settings` | PUT | `settings.edit` | Update classification mode |
+| `/settings` | GET | `company_settings.view` | Get company classification mode |
+| `/settings` | PUT | `company_settings.edit` | Update classification mode |
 
 ### POST `/classify/:sessionId`
 
@@ -134,7 +136,7 @@ Returns `applied` status in auto_apply mode, `pending` in suggest mode.
     "labels": ["uuid1", "uuid2"],
     "priority": true,
     "status": false,
-    "contact_tags": ["VIP"],
+    "contact_tags": ["tag-uuid1"],
     "contact_lists": ["uuid3"]
   }
 }
@@ -159,7 +161,7 @@ Only the selected items are applied; the rest are discarded.
    - `labels` (visible to company)
    - `conversation_priorities` (active)
    - `conversation_statuses` (active)
-   - Distinct contact tags (from `contacts.tags` array)
+   - `contact_tags` table (id, name, color — proper tag entities, not free-form strings)
    - `contact_lists` (active)
 6. Build prompt and call Claude Haiku with tool_use (structured output)
 7. Validate response: check all returned IDs exist in the company's entities
@@ -223,7 +225,7 @@ Current Lists: {lists}
 Labels: {JSON array of {id, name}}
 Priorities: {JSON array of {id, name}}
 Statuses: {JSON array of {id, name, group}}
-Contact Tags: {Array of existing tag strings}
+Contact Tags: {JSON array of {id, name}}
 Contact Lists: {JSON array of {id, name}}
 ```
 
@@ -253,8 +255,7 @@ Contact Lists: {JSON array of {id, name}}
           "id": { "type": "string" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
         },
-        "required": ["id", "confidence"],
-        "nullable": true
+        "required": ["id", "confidence"]
       },
       "status": {
         "type": "object",
@@ -262,12 +263,18 @@ Contact Lists: {JSON array of {id, name}}
           "id": { "type": "string" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
         },
-        "required": ["id", "confidence"],
-        "nullable": true
+        "required": ["id", "confidence"]
       },
       "contact_tags": {
         "type": "array",
-        "items": { "type": "string" }
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["id", "confidence"]
+        }
       },
       "contact_lists": {
         "type": "array",
@@ -358,7 +365,7 @@ export function useClassificationSuggestions(sessionId: string) {
 
 ## Integration Point: Auto-Classify on New Conversation
 
-In the existing inbound message handler (in `server/src/routes/ai.ts` or the webhook handler), after a new `chat_session` is created:
+In the existing inbound message handler (in `server/src/routes/ai.ts` or the webhook handler), after the first inbound message is stored in a new `chat_session` (not on session creation itself, since the session may not have messages yet):
 
 ```typescript
 // Fire-and-forget — don't block message delivery
@@ -380,9 +387,24 @@ if (agent?.profile_data?.classification?.enabled && agent.profile_data.classific
 | No hallucinated IDs | Server validates every returned ID exists in company before applying |
 | Max labels | Cap at 5 labels per classification |
 | Rate limit | On-demand: 1 per session per 30 seconds (429 if exceeded) |
-| No override | Auto-apply skips priority/status if manually set by a human (not default value) |
+| No override | Auto-apply skips priority/status when current value is non-default (checked via `is_default` flag on the referenced status/priority row) |
 | Async execution | Auto-classify on new conversation is fire-and-forget, doesn't block message delivery |
 | Error isolation | Classification failures are logged but never break the message flow |
+| Deduplication | Before auto-classifying, check no `classification_suggestions` row exists for this `session_id` with `status IN ('pending', 'applied')` created in the last 60 seconds. Prevents double-classification from duplicate webhooks |
+| Entity validation on accept | When accepting a suggestion, re-validate that all referenced entities still exist (a label may have been deleted since classification) |
+| Empty entity guard | If the company has zero labels AND zero non-default tags AND zero contact lists, skip classification (nothing useful to pick from) |
+
+## Edge Cases
+
+| Scenario | Behavior |
+|----------|----------|
+| Conversation with no messages yet | Defer auto-classification until first inbound message is stored (trigger after message insert, not session creation) |
+| First-time contact, single short message | Attempt classification anyway — the AI may still infer priority or match labels from a short message. Confidence scores will naturally be lower. |
+| Company with no labels/tags/lists configured | Skip classification entirely (see empty entity guard above). No suggestion is created. |
+| Concurrent suggestion acceptance | Second accept call returns 409 Conflict if suggestion status is no longer `pending` |
+| Entity deleted after classification | Accept endpoint re-validates entity existence; skips deleted entities and applies the rest. If all entities are gone, returns error. |
+| Very large entity lists (200+ labels) | Cap the prompt to the 50 most recently used labels + all labels matching the admin's rules. Include a note in the prompt that only a subset is shown. |
+| Partial accept tracking | When `accept-partial` is used, store an `accepted_items` JSONB alongside `suggestions` to track which items were accepted vs dismissed (useful for analytics). |
 
 ## Permissions
 
@@ -391,13 +413,13 @@ if (agent?.profile_data?.classification?.enabled && agent.profile_data.classific
 | Trigger on-demand classification | `conversations.edit` |
 | View suggestions | `conversations.view` |
 | Accept/dismiss suggestions | `conversations.edit` |
-| View classification settings | `settings.view` |
-| Change classification mode | `settings.edit` |
+| View classification settings | `company_settings.view` |
+| Change classification mode | `company_settings.edit` |
 | Configure agent classification rules | `ai_settings.edit` |
 
 ## Migration
 
-File: `supabase/migrations/052_ai_classification.sql`
+File: `supabase/migrations/065_ai_classification.sql`
 
 Creates:
 - `classification_suggestions` table with all columns, constraints, and indexes
@@ -410,7 +432,7 @@ Creates:
 
 | File | Purpose |
 |------|---------|
-| `supabase/migrations/052_ai_classification.sql` | DB migration |
+| `supabase/migrations/065_ai_classification.sql` | DB migration |
 | `server/src/routes/classification.ts` | API routes |
 | `server/src/services/classification.ts` | Classification logic, prompt building, entity resolution |
 | `client/src/hooks/useClassificationSuggestions.ts` | Data-fetching hook |
