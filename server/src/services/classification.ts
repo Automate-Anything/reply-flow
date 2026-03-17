@@ -272,27 +272,34 @@ function validateAndFilter(
   raw: Record<string, unknown>,
   entities: AvailableEntities
 ): ClassificationSuggestions {
-  const validIds = new Set<string>([
-    ...entities.labels.map((l) => l.id),
-    ...entities.priorities.map((p) => p.id),
-    ...entities.statuses.map((s) => s.id),
-    ...entities.contact_tags.map((t) => t.id),
-    ...entities.contact_lists.map((l) => l.id),
-  ]);
+  // Build a map from entity ID → name for enrichment
+  const entityNameMap = new Map<string, string>();
+  for (const list of [entities.labels, entities.priorities, entities.statuses, entities.contact_tags, entities.contact_lists]) {
+    for (const e of list) {
+      entityNameMap.set(e.id, e.name);
+    }
+  }
+
+  const enrich = (item: ClassificationSuggestionItem): ClassificationSuggestionItem => ({
+    ...item,
+    name: entityNameMap.get(item.id) ?? item.id,
+  });
 
   const filterItems = (
     items: unknown
   ): ClassificationSuggestionItem[] => {
     if (!Array.isArray(items)) return [];
-    return items.filter(
-      (item): item is ClassificationSuggestionItem =>
-        typeof item === 'object' &&
-        item !== null &&
-        typeof (item as Record<string, unknown>).id === 'string' &&
-        typeof (item as Record<string, unknown>).confidence === 'number' &&
-        validIds.has((item as Record<string, unknown>).id as string) &&
-        (item as Record<string, unknown>).confidence as number >= CONFIDENCE_THRESHOLD
-    );
+    return items
+      .filter(
+        (item): item is ClassificationSuggestionItem =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof (item as Record<string, unknown>).id === 'string' &&
+          typeof (item as Record<string, unknown>).confidence === 'number' &&
+          entityNameMap.has((item as Record<string, unknown>).id as string) &&
+          (item as Record<string, unknown>).confidence as number >= CONFIDENCE_THRESHOLD
+      )
+      .map(enrich);
   };
 
   const filterSingle = (item: unknown): ClassificationSuggestionItem | undefined => {
@@ -305,8 +312,8 @@ function validateAndFilter(
       return undefined;
     }
     const typed = item as ClassificationSuggestionItem;
-    if (!validIds.has(typed.id) || typed.confidence < CONFIDENCE_THRESHOLD) return undefined;
-    return typed;
+    if (!entityNameMap.has(typed.id) || typed.confidence < CONFIDENCE_THRESHOLD) return undefined;
+    return enrich(typed);
   };
 
   const filteredLabels = filterItems(raw.labels).slice(0, MAX_LABELS);
@@ -337,7 +344,7 @@ async function applySuggestionItems(
   companyId: string,
   partial?: PartialAccept
 ): Promise<void> {
-  const tasks: Promise<unknown>[] = [];
+  const tasks: PromiseLike<unknown>[] = [];
 
   // Labels
   const labelItems =
@@ -558,11 +565,16 @@ export async function classifyConversation(
 
   const profileData = agent?.profile_data as Record<string, unknown> | null;
   const classificationConfig = profileData?.classification as
-    | { enabled?: boolean; rules?: string }
+    | { enabled?: boolean; auto_classify_new?: boolean; rules?: string }
     | undefined;
 
   // 3. Return null if classification not enabled
   if (!classificationConfig?.enabled) {
+    return null;
+  }
+
+  // 3b. For auto trigger, skip if auto_classify_new is explicitly disabled
+  if (trigger === 'auto' && classificationConfig.auto_classify_new === false) {
     return null;
   }
 
@@ -580,6 +592,7 @@ export async function classifyConversation(
       .eq('session_id', sessionId)
       .eq('company_id', companyId)
       .eq('trigger', 'auto')
+      .in('status', ['pending', 'applied'])
       .gte('created_at', dedupeWindowStart)
       .limit(1);
 
@@ -727,6 +740,7 @@ export async function acceptSuggestion(
     .from('classification_suggestions')
     .update({
       status: 'accepted',
+      accepted_items: partial ?? null,
       applied_by: userId,
       applied_at: now,
     })

@@ -73,6 +73,10 @@ router.post('/suggestions/:suggestionId/accept', requirePermission('conversation
     await acceptSuggestion(suggestionId, req.userId!, companyId);
     res.json({ status: 'ok' });
   } catch (err: unknown) {
+    if (err instanceof Error && err.message === 'NOT_FOUND') {
+      res.status(404).json({ error: 'Suggestion not found.' });
+      return;
+    }
     if (err instanceof Error && err.message === 'CONFLICT') {
       res.status(409).json({ error: 'Conflict: suggestion already actioned.' });
       return;
@@ -90,6 +94,10 @@ router.post('/suggestions/:suggestionId/dismiss', requirePermission('conversatio
     await dismissSuggestion(suggestionId, companyId);
     res.json({ status: 'ok' });
   } catch (err: unknown) {
+    if (err instanceof Error && err.message === 'NOT_FOUND') {
+      res.status(404).json({ error: 'Suggestion not found.' });
+      return;
+    }
     if (err instanceof Error && err.message === 'CONFLICT') {
       res.status(409).json({ error: 'Conflict: suggestion already actioned.' });
       return;
@@ -110,9 +118,28 @@ router.post('/suggestions/:suggestionId/accept-partial', requirePermission('conv
       return;
     }
 
-    await acceptSuggestion(suggestionId, req.userId!, companyId, accept as Record<string, unknown>);
+    const a = accept as Record<string, unknown>;
+    const isStringArray = (v: unknown): v is string[] =>
+      Array.isArray(v) && v.every((x) => typeof x === 'string');
+
+    if (
+      (a.labels !== undefined && !isStringArray(a.labels)) ||
+      (a.priority !== undefined && typeof a.priority !== 'boolean') ||
+      (a.status !== undefined && typeof a.status !== 'boolean') ||
+      (a.contact_tags !== undefined && !isStringArray(a.contact_tags)) ||
+      (a.contact_lists !== undefined && !isStringArray(a.contact_lists))
+    ) {
+      res.status(400).json({ error: 'Invalid `accept` shape. Expected { labels?: string[], priority?: boolean, status?: boolean, contact_tags?: string[], contact_lists?: string[] }.' });
+      return;
+    }
+
+    await acceptSuggestion(suggestionId, req.userId!, companyId, a as import('../types/index.js').PartialAccept);
     res.json({ status: 'ok' });
   } catch (err: unknown) {
+    if (err instanceof Error && err.message === 'NOT_FOUND') {
+      res.status(404).json({ error: 'Suggestion not found.' });
+      return;
+    }
     if (err instanceof Error && err.message === 'CONFLICT') {
       res.status(409).json({ error: 'Conflict: suggestion already actioned.' });
       return;
