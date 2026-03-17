@@ -198,6 +198,7 @@ export default function MessageThread({
 
       <MessageInput
         key={sessionId}
+        sessionId={sessionId}
         onSend={onSend}
         onSendVoiceNote={onSendVoiceNote}
         onSchedule={onSchedule}
