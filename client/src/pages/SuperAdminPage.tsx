@@ -28,8 +28,12 @@ import {
   Settings2,
   Bug,
 } from 'lucide-react';
+import { AffiliateListTab } from '@/components/super-admin/affiliates/AffiliateListTab';
+import { ScheduleListTab } from '@/components/super-admin/commission-schedules/ScheduleListTab';
+import { PayoutListTab } from '@/components/super-admin/affiliate-payouts/PayoutListTab';
+import { AgreementListTab } from '@/components/super-admin/affiliate-agreements/AgreementListTab';
 
-const TABS = ['overview', 'templates', 'preview', 'knowledge-bases', 'retrieval', 'debug'] as const;
+const TABS = ['overview', 'templates', 'preview', 'knowledge-bases', 'retrieval', 'debug', 'affiliates', 'commissions', 'payouts', 'agreements'] as const;
 type Tab = (typeof TABS)[number];
 
 // ── Types ──────────────────────────────────────────
@@ -176,6 +180,10 @@ export default function SuperAdminPage() {
           <TabsTrigger value="knowledge-bases" className="flex-1">Knowledge Bases</TabsTrigger>
           <TabsTrigger value="retrieval" className="flex-1">Retrieval Settings</TabsTrigger>
           <TabsTrigger value="debug" className="flex-1">Debug</TabsTrigger>
+          <TabsTrigger value="affiliates" className="flex-1">Affiliates</TabsTrigger>
+          <TabsTrigger value="commissions" className="flex-1">Commissions</TabsTrigger>
+          <TabsTrigger value="payouts" className="flex-1">Payouts</TabsTrigger>
+          <TabsTrigger value="agreements" className="flex-1">Agreements</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -195,6 +203,18 @@ export default function SuperAdminPage() {
         </TabsContent>
         <TabsContent value="debug" className="mt-6">
           <DebugModeTab />
+        </TabsContent>
+        <TabsContent value="affiliates" className="mt-6">
+          <AffiliateListTab />
+        </TabsContent>
+        <TabsContent value="commissions" className="mt-6">
+          <ScheduleListTab />
+        </TabsContent>
+        <TabsContent value="payouts" className="mt-6">
+          <PayoutListTab />
+        </TabsContent>
+        <TabsContent value="agreements" className="mt-6">
+          <AgreementListTab />
         </TabsContent>
       </Tabs>
     </div>

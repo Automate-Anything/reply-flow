@@ -1,13 +1,32 @@
 import { Router } from 'express';
+import multer from 'multer';
+import crypto from 'crypto';
+import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from '../services/whapi.js';
 import { getSignedUrl, downloadAndStore, storeBuffer } from '../services/mediaStorage.js';
 import { createNotification } from '../services/notificationService.js';
+import { convertToOggOpus } from '../services/audioConverter.js';
+import { extractAudioTranscript } from '../services/mediaContentExtractor.js';
 
 const router = Router();
 router.use(requireAuth);
+
+const voiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+}).single('audio');
+
+const sendVoiceSchema = z.object({
+  sessionId: z.string().uuid(),
+  duration: z.coerce.number().positive().max(900),
+});
+
+const retryVoiceSchema = z.object({
+  messageId: z.string().uuid(),
+});
 
 // Send a message
 router.post('/send', requirePermission('messages', 'create'), async (req, res, next) => {
@@ -142,6 +161,277 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
     res.json({ message });
   } catch (err) {
     next(err);
+  }
+});
+
+// Send a voice note
+router.post('/send-voice', requirePermission('messages', 'create'), (req, res, next) => {
+  voiceUpload(req, res, (err) => {
+    if (err) {
+      if ((err as any).code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({ error: 'Audio file too large (max 25MB)' });
+        return;
+      }
+      res.status(400).json({ error: 'File upload failed' });
+      return;
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No audio file provided' });
+      return;
+    }
+
+    const parsed = sendVoiceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
+      return;
+    }
+    const { sessionId, duration } = parsed.data;
+    const companyId = req.companyId!;
+    const userId = req.userId!;
+
+    // 1. Look up session to get channel info and chat_id
+    const { data: session, error: sessionErr } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('id, channel_id, phone_number, chat_id')
+      .eq('id', sessionId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (sessionErr || !session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    // Get channel token
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('channel_token')
+      .eq('id', session.channel_id)
+      .eq('channel_status', 'connected')
+      .single();
+
+    if (!channel) {
+      res.status(400).json({ error: 'No connected WhatsApp channel for this conversation' });
+      return;
+    }
+
+    // Format chat_id for Whapi
+    const chatId = session.chat_id.includes('@')
+      ? session.chat_id
+      : `${session.chat_id}@s.whatsapp.net`;
+
+    // 2. Generate message ID
+    const messageId = crypto.randomUUID();
+
+    // 3. Convert to OGG/Opus
+    const oggBuffer = await convertToOggOpus(file.buffer, messageId, file.mimetype);
+
+    // 4. Upload to Supabase Storage
+    const storagePath = await storeBuffer(
+      oggBuffer,
+      companyId,
+      session.channel_id,
+      messageId,
+      'audio/ogg',
+    );
+
+    if (!storagePath) {
+      res.status(500).json({ error: 'Failed to store audio file' });
+      return;
+    }
+
+    // 5. Format duration for message body
+    const minutes = Math.floor(duration / 60);
+    const seconds = Math.floor(duration % 60);
+    const durationStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    const now = new Date().toISOString();
+
+    // 6. Send to WhatsApp via Whapi
+    let status = 'sent';
+    try {
+      const signedUrl = await getSignedUrl(storagePath, 300); // 5-min URL for Whapi to download
+      if (!signedUrl) throw new Error('Failed to generate signed URL');
+      await whapi.sendVoiceMessage(channel.channel_token, chatId, signedUrl);
+    } catch (whapiErr) {
+      console.error('Whapi voice send failed:', whapiErr);
+      status = 'failed';
+    }
+
+    // 7. Insert chat_messages row
+    const { data: message, error: insertErr } = await supabaseAdmin
+      .from('chat_messages')
+      .insert({
+        id: messageId,
+        session_id: sessionId,
+        company_id: companyId,
+        user_id: userId,
+        chat_id_normalized: session.chat_id,
+        phone_number: session.phone_number,
+        message_body: `[Voice message ${durationStr}]`,
+        message_type: 'voice',
+        direction: 'outbound',
+        sender_type: 'human',
+        status,
+        read: true,
+        message_ts: now,
+        media_storage_path: storagePath,
+        media_mime_type: 'audio/ogg',
+        media_filename: `voice-${messageId}.ogg`,
+        metadata: { duration_seconds: duration },
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      console.error('Failed to insert voice message:', insertErr);
+      res.status(500).json({ error: 'Failed to save voice message' });
+      return;
+    }
+
+    // 8. Update chat_sessions (same pattern as text send route)
+    await supabaseAdmin
+      .from('chat_sessions')
+      .update({
+        last_message: '[Voice message]',
+        last_message_at: now,
+        last_message_direction: 'outbound',
+        last_message_sender: 'human',
+        updated_at: now,
+        draft_message: null,
+        marked_unread: false,
+        last_read_at: now,
+      })
+      .eq('id', sessionId)
+      .or(`last_message_at.is.null,last_message_at.lte.${now}`);
+
+    // 9. Mark inbound messages as read
+    await supabaseAdmin
+      .from('chat_messages')
+      .update({ read: true })
+      .eq('session_id', sessionId)
+      .eq('direction', 'inbound')
+      .eq('read', false);
+
+    // 10. Async transcription (fire-and-forget)
+    extractAudioTranscript(storagePath, 'audio/ogg')
+      .then(async (transcript) => {
+        if (transcript) {
+          await supabaseAdmin
+            .from('chat_messages')
+            .update({ media_transcript: transcript })
+            .eq('id', messageId);
+        }
+      })
+      .catch((err) => console.error('Voice transcription failed:', err));
+
+    res.json({ message });
+  } catch (err) {
+    console.error('Voice send error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Retry a failed voice message
+router.post('/:messageId/retry-voice', requirePermission('messages', 'create'), async (req, res) => {
+  try {
+    const parsed = retryVoiceSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid message ID' });
+      return;
+    }
+    const { messageId } = parsed.data;
+    const companyId = req.companyId!;
+
+    // 1. Look up the failed voice message
+    const { data: message, error: msgErr } = await supabaseAdmin
+      .from('chat_messages')
+      .select('id, session_id, media_storage_path')
+      .eq('id', messageId)
+      .eq('company_id', companyId)
+      .eq('message_type', 'voice')
+      .eq('status', 'failed')
+      .single();
+
+    if (msgErr || !message) {
+      res.status(404).json({ error: 'Failed voice message not found' });
+      return;
+    }
+
+    // 2. Look up session + channel
+    const { data: session } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('id, channel_id, chat_id')
+      .eq('id', message.session_id)
+      .single();
+
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    const { data: channel } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('channel_token')
+      .eq('id', session.channel_id)
+      .eq('channel_status', 'connected')
+      .single();
+
+    if (!channel) {
+      res.status(400).json({ error: 'No connected WhatsApp channel' });
+      return;
+    }
+
+    // 3. Generate signed URL for the existing stored file
+    const signedUrl = await getSignedUrl(message.media_storage_path, 300);
+    if (!signedUrl) {
+      res.status(500).json({ error: 'Failed to generate media URL' });
+      return;
+    }
+
+    // 4. Re-send via Whapi
+    const chatId = session.chat_id.includes('@')
+      ? session.chat_id
+      : `${session.chat_id}@s.whatsapp.net`;
+    await whapi.sendVoiceMessage(channel.channel_token, chatId, signedUrl);
+
+    // 5. Update status to sent
+    const now = new Date().toISOString();
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('chat_messages')
+      .update({ status: 'sent', updated_at: now })
+      .eq('id', messageId)
+      .select()
+      .single();
+
+    if (updateErr) {
+      res.status(500).json({ error: 'Failed to update message status' });
+      return;
+    }
+
+    // 6. Update session
+    await supabaseAdmin
+      .from('chat_sessions')
+      .update({
+        last_message: '[Voice message]',
+        last_message_at: now,
+        last_message_direction: 'outbound',
+        last_message_sender: 'human',
+        updated_at: now,
+        marked_unread: false,
+        last_read_at: now,
+      })
+      .eq('id', message.session_id)
+      .or(`last_message_at.is.null,last_message_at.lte.${now}`);
+
+    res.json({ message: updated });
+  } catch (err) {
+    console.error('Voice retry error:', err);
+    res.status(500).json({ error: 'Retry failed' });
   }
 });
 

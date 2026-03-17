@@ -225,6 +225,19 @@ export async function sendTextMessage(
   return data;
 }
 
+export async function sendVoiceMessage(
+  channelToken: string,
+  to: string,
+  mediaUrl: string,
+): Promise<unknown> {
+  const gate = gateApi(channelToken);
+  const { data } = await gate.post('/messages/voice', {
+    to,
+    media: mediaUrl,
+  });
+  return data;
+}
+
 // ── Message Actions ──────────────────────────────────────────────────────────
 
 export async function starMessage(channelToken: string, messageId: string): Promise<void> {
