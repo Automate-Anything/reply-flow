@@ -6,6 +6,7 @@ import { extractSessionMemories } from './sessionMemory.js';
 import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 import { downloadMediaById, fetchFullMessage, getContactProfile } from './whapi.js';
+import { cacheProfilePicture } from './profilePictureStorage.js';
 import { autoAssignConversation } from './autoAssignService.js';
 import { createNotification, createNotificationsForUsers } from './notificationService.js';
 import { evaluateAutoReply } from './autoReplyEvaluator.js';
@@ -324,7 +325,7 @@ export async function processIncomingMessage(
   }
 
   // 1b. Fetch profile picture if not already stored (non-blocking)
-  fetchAndStoreProfilePicture(contactId, phoneNumber, channelId).catch((err) => {
+  fetchAndStoreProfilePicture(contactId, phoneNumber, channelId, companyId).catch((err) => {
     console.error('Profile picture fetch error:', err);
   });
 
@@ -789,20 +790,23 @@ async function processMediaFromBuffer(
 export async function fetchAndStoreProfilePicture(
   contactId: string,
   phoneNumber: string,
-  channelId: number
+  channelId: number,
+  companyId: string,
 ): Promise<void> {
+  // Check if we already have a cached picture and it's fresh (< 7 days)
   const { data: contact } = await supabaseAdmin
     .from('contacts')
-    .select('profile_picture_url, updated_at')
+    .select('profile_picture_source_url, updated_at')
     .eq('id', contactId)
     .single();
 
-  if (contact?.profile_picture_url) {
+  if (contact?.profile_picture_source_url) {
     const updatedAt = new Date(contact.updated_at).getTime();
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     if (updatedAt > sevenDaysAgo) return;
   }
 
+  // Fetch channel token
   const { data: channel } = await supabaseAdmin
     .from('whatsapp_channels')
     .select('channel_token')
@@ -811,15 +815,29 @@ export async function fetchAndStoreProfilePicture(
 
   if (!channel?.channel_token) return;
 
+  // Fetch profile from Whapi
   const profile = await getContactProfile(channel.channel_token, phoneNumber);
   if (!profile) return;
 
-  const pictureUrl = profile.icon_full || profile.icon || null;
-  if (!pictureUrl) return;
+  const cdnUrl = profile.icon_full || profile.icon || null;
+  if (!cdnUrl) return;
 
+  // Skip if CDN URL hasn't changed (same picture)
+  if (cdnUrl === contact?.profile_picture_source_url) return;
+
+  // Download and cache to Supabase Storage
+  const storagePath = `${companyId}/${contactId}.jpg`;
+  const publicUrl = await cacheProfilePicture(cdnUrl, storagePath);
+  if (!publicUrl) return;
+
+  // Update contact with public URL and source URL for change detection
   await supabaseAdmin
     .from('contacts')
-    .update({ profile_picture_url: pictureUrl, updated_at: new Date().toISOString() })
+    .update({
+      profile_picture_url: publicUrl,
+      profile_picture_source_url: cdnUrl,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', contactId);
 }
 

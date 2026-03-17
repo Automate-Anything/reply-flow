@@ -243,7 +243,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
     if (missingPics.length > 0) {
       Promise.allSettled(
         missingPics.map((s) =>
-          fetchAndStoreProfilePicture(s.contact_id!, s.phone_number, s.channel_id!)
+          fetchAndStoreProfilePicture(s.contact_id!, s.phone_number, s.channel_id!, companyId)
         )
       ).catch(() => {});
     }
