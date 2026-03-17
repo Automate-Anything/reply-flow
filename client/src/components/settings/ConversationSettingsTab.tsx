@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Clock, Loader2, Shuffle, UserPlus } from 'lucide-react';
 import { PlanGate } from '@/components/auth/PlanGate';
 import AutoAssignSettings from './AutoAssignSettings';
+import ClassificationModeSettings from './ClassificationModeSettings';
 
 export default function ConversationSettingsTab() {
   const { hasPermission } = useSession();
@@ -158,6 +159,8 @@ export default function ConversationSettingsTab() {
           </div>
         </CardContent>
       </Card>
+
+      <ClassificationModeSettings />
     </div>
   );
 }

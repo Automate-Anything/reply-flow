@@ -23,6 +23,7 @@ import InboxToolsPanel from '@/components/inbox/InboxToolsPanel';
 import ForwardMessageModal from '@/components/inbox/ForwardMessageModal';
 import ScheduledMessagesList from '@/components/inbox/ScheduledMessagesList';
 import { useDebugMode } from '@/hooks/useDebugMode';
+import { useClassificationSuggestions } from '@/hooks/useClassificationSuggestions';
 
 type InboxTab = 'all' | 'assigned' | 'snoozed' | 'scheduled' | 'archived';
 
@@ -54,6 +55,7 @@ export default function InboxPage() {
   const [assignedUnreadCount, setAssignedUnreadCount] = useState(0);
   const needsConversationSupport = activeTab !== 'scheduled' || !!activeConversation;
   const { debugMode } = useDebugMode(needsConversationSupport);
+  const { classifying, classify } = useClassificationSuggestions(activeConversation?.id ?? null);
 
   // Draft persistence
   const draftRef = useRef<string>('');
@@ -645,6 +647,8 @@ export default function InboxPage() {
               onToggleNotes={() => setNotesPanelOpen((prev) => !prev)}
               notesPanelOpen={notesPanelOpen}
               onLabelsCreated={refreshLabels}
+              onClassify={() => { classify().catch(() => {}); }}
+              classifying={classifying}
             />
             <MessageThread
               messages={messages}
@@ -680,6 +684,7 @@ export default function InboxPage() {
           {/* Contact slide-over */}
           <ContactPanel
             contactId={activeConversation.contact_id}
+            sessionId={activeConversation.id}
             open={contactPanelOpen}
             onClose={() => setContactPanelOpen(false)}
             previewName={activeConversation.contact_name}

@@ -10,6 +10,7 @@ import { cacheProfilePicture } from './profilePictureStorage.js';
 import { autoAssignConversation } from './autoAssignService.js';
 import { createNotification, createNotificationsForUsers } from './notificationService.js';
 import { evaluateAutoReply } from './autoReplyEvaluator.js';
+import { classifyConversation } from './classification.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -596,6 +597,13 @@ export async function processIncomingMessage(
 
   // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed
   if (isOutbound) return;
+
+  // 5c. Auto-classify new conversations (fire-and-forget)
+  if (isNewSession) {
+    classifyConversation(sessionId, companyId, 'auto').catch((err) => {
+      console.error('Auto-classification failed:', err);
+    });
+  }
 
   // 6a. Auto-reply: fires when AI is OFF but auto-reply is enabled (first message of new session only)
   try {
