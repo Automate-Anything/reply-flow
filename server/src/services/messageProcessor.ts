@@ -6,10 +6,10 @@ import { extractSessionMemories } from './sessionMemory.js';
 import { downloadAndStore, storeBuffer } from './mediaStorage.js';
 import { extractAudioTranscript, extractDocumentText } from './mediaContentExtractor.js';
 import { downloadMediaById, fetchFullMessage, getContactProfile } from './whapi.js';
-import { cacheProfilePicture } from './profilePictureStorage.js';
 import { autoAssignConversation } from './autoAssignService.js';
 import { createNotification, createNotificationsForUsers } from './notificationService.js';
 import { evaluateAutoReply } from './autoReplyEvaluator.js';
+import { classifyConversation } from './classification.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -325,7 +325,7 @@ export async function processIncomingMessage(
   }
 
   // 1b. Fetch profile picture if not already stored (non-blocking)
-  fetchAndStoreProfilePicture(contactId, phoneNumber, channelId, companyId).catch((err) => {
+  fetchAndStoreProfilePicture(contactId, phoneNumber, channelId).catch((err) => {
     console.error('Profile picture fetch error:', err);
   });
 
@@ -427,11 +427,9 @@ export async function processIncomingMessage(
   //   (a) Echo arrives with from_me=true but message_id_normalized format doesn't match → primary dedup misses it
   //   (b) Echo arrives with from_me absent/false → treated as inbound, primary dedup misses it
   // In both cases, an outbound message with the same body already exists in the session.
-  // We run this check regardless of isOutbound — case (b) echoes are misclassified as
-  // inbound and would slip through if we only checked when isOutbound is true.
-  // Safe because we only compare against outbound messages with app_send/ai_send source,
-  // so a contact legitimately sending the same text is never suppressed.
-  {
+  // We only compare against outbound messages so a contact legitimately sending the same
+  // message twice is never suppressed.
+  if (isOutbound) {
     const windowStart = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: recentOutbound } = await supabaseAdmin
       .from('chat_messages')
@@ -448,7 +446,7 @@ export async function processIncomingMessage(
     });
 
     if (existingOutbound) {
-      console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}, isOutbound=${isOutbound}`);
+      console.log(`[webhook] Echo skipped (outbound content match): msg.id=${msg.id}, from_me=${msg.from_me}`);
       return;
     }
   }
@@ -596,6 +594,13 @@ export async function processIncomingMessage(
 
   // 6. Outbound messages (sent by the human from their phone) are fully stored — no AI needed
   if (isOutbound) return;
+
+  // 5c. Auto-classify new conversations (fire-and-forget)
+  if (isNewSession) {
+    classifyConversation(sessionId, companyId, 'auto').catch((err) => {
+      console.error('Auto-classification failed:', err);
+    });
+  }
 
   // 6a. Auto-reply: fires when AI is OFF but auto-reply is enabled (first message of new session only)
   try {
@@ -792,23 +797,20 @@ async function processMediaFromBuffer(
 export async function fetchAndStoreProfilePicture(
   contactId: string,
   phoneNumber: string,
-  channelId: number,
-  companyId: string,
+  channelId: number
 ): Promise<void> {
-  // Check if we already have a cached picture and it's fresh (< 7 days)
   const { data: contact } = await supabaseAdmin
     .from('contacts')
-    .select('profile_picture_source_url, updated_at')
+    .select('profile_picture_url, updated_at')
     .eq('id', contactId)
     .single();
 
-  if (contact?.profile_picture_source_url) {
+  if (contact?.profile_picture_url) {
     const updatedAt = new Date(contact.updated_at).getTime();
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     if (updatedAt > sevenDaysAgo) return;
   }
 
-  // Fetch channel token
   const { data: channel } = await supabaseAdmin
     .from('whatsapp_channels')
     .select('channel_token')
@@ -817,29 +819,15 @@ export async function fetchAndStoreProfilePicture(
 
   if (!channel?.channel_token) return;
 
-  // Fetch profile from Whapi
   const profile = await getContactProfile(channel.channel_token, phoneNumber);
   if (!profile) return;
 
-  const cdnUrl = profile.icon_full || profile.icon || null;
-  if (!cdnUrl) return;
+  const pictureUrl = profile.icon_full || profile.icon || null;
+  if (!pictureUrl) return;
 
-  // Skip if CDN URL hasn't changed (same picture)
-  if (cdnUrl === contact?.profile_picture_source_url) return;
-
-  // Download and cache to Supabase Storage
-  const storagePath = `${companyId}/${contactId}.jpg`;
-  const publicUrl = await cacheProfilePicture(cdnUrl, storagePath);
-  if (!publicUrl) return;
-
-  // Update contact with public URL and source URL for change detection
   await supabaseAdmin
     .from('contacts')
-    .update({
-      profile_picture_url: publicUrl,
-      profile_picture_source_url: cdnUrl,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ profile_picture_url: pictureUrl, updated_at: new Date().toISOString() })
     .eq('id', contactId);
 }
 

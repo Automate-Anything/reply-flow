@@ -4,7 +4,6 @@ import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import * as whapi from '../services/whapi.js';
-import { cacheProfilePicture } from '../services/profilePictureStorage.js';
 import { checkPlanLimit } from './billing.js';
 
 const router = Router();
@@ -17,47 +16,23 @@ async function syncConnectedChannelMetadata(
   whapiChannelId?: string
 ) {
   const userProfile = await whapi.getUserProfile(channelToken);
-  const cdnUrl = userProfile?.icon_full || userProfile?.icon || null;
+  const profilePictureUrl = userProfile?.icon_full || userProfile?.icon || null;
   const profileName = userProfile?.name || null;
-
   // Try health phone → user profile phone → manager API phone
   let resolvedPhone = phone || userProfile?.phone || null;
   if (!resolvedPhone && whapiChannelId) {
     resolvedPhone = await whapi.getChannelPhone(whapiChannelId);
   }
 
-  // Cache profile picture to Supabase Storage if we have a CDN URL
-  let profilePictureUrl: string | null = null;
-  if (cdnUrl) {
-    // Check if CDN URL changed
-    const { data: existing } = await supabaseAdmin
-      .from('whatsapp_channels')
-      .select('profile_picture_source_url')
-      .eq('id', channelId)
-      .single();
-
-    if (cdnUrl !== existing?.profile_picture_source_url) {
-      const storagePath = `channels/${companyId}/${channelId}.jpg`;
-      profilePictureUrl = await cacheProfilePicture(cdnUrl, storagePath);
-    }
-  }
-
-  const updatePayload: Record<string, unknown> = {
-    channel_status: 'connected',
-    phone_number: resolvedPhone,
-    profile_name: profileName,
-    updated_at: new Date().toISOString(),
-  };
-
-  // Only update picture fields if we have a new cached URL
-  if (profilePictureUrl) {
-    updatePayload.profile_picture_url = profilePictureUrl;
-    updatePayload.profile_picture_source_url = cdnUrl;
-  }
-
   await supabaseAdmin
     .from('whatsapp_channels')
-    .update(updatePayload)
+    .update({
+      channel_status: 'connected',
+      phone_number: resolvedPhone,
+      profile_picture_url: profilePictureUrl,
+      profile_name: profileName,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', channelId)
     .eq('company_id', companyId);
 
