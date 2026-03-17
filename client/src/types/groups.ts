@@ -43,7 +43,7 @@ export interface GroupCriteriaMatch {
   criteria_ids: string[];
   notification_ids: string[];
   created_at: string;
-  // Joined fields
-  message?: GroupChatMessage;
+  // Joined fields (Supabase returns embedded tables by their table name)
+  group_chat_messages?: GroupChatMessage;
   criteria?: GroupCriteria[];
 }

@@ -7,6 +7,7 @@ export function useGroupCriteria(groupChatId?: string | null) {
   const [loading, setLoading] = useState(true);
 
   const fetchCriteria = useCallback(async () => {
+    setLoading(true);
     try {
       const path = groupChatId
         ? `/groups/${groupChatId}/criteria`

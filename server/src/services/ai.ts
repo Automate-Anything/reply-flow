@@ -880,6 +880,32 @@ export async function sendOutsideHoursReply(
 
   const now = new Date().toISOString();
   const outboundMetadata = { source: 'ai_send', kind: 'outside_hours' };
+
+  // Unconditional: clear read state before inserting the message.
+  await supabaseAdmin
+    .from('chat_sessions')
+    .update({ marked_unread: false, last_read_at: now, updated_at: now })
+    .eq('id', sessionId);
+
+  // Conditional: update last_message fields only if this is the newest message.
+  await supabaseAdmin
+    .from('chat_sessions')
+    .update({
+      last_message: message,
+      last_message_at: now,
+      last_message_direction: 'outbound',
+      last_message_sender: 'ai',
+    })
+    .eq('id', sessionId)
+    .or(`last_message_at.is.null,last_message_at.lte.${now}`);
+
+  await supabaseAdmin
+    .from('chat_messages')
+    .update({ read: true })
+    .eq('session_id', sessionId)
+    .eq('direction', 'inbound')
+    .eq('read', false);
+
   // Insert to DB before sending so the record exists when Whapi echoes the message back,
   // preventing the echo from being saved as sender_type: 'human' in the webhook handler.
   const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
@@ -907,19 +933,6 @@ export async function sendOutsideHoursReply(
   if (whapiMessageId && insertedMsg) {
     await supabaseAdmin.from('chat_messages').update({ message_id_normalized: whapiMessageId }).eq('id', insertedMsg.id);
   }
-
-  // Only update last_message if this is still the newest message (prevents race with incoming messages)
-  await supabaseAdmin
-    .from('chat_sessions')
-    .update({
-      last_message: message,
-      last_message_at: now,
-      last_message_direction: 'outbound',
-      last_message_sender: 'ai',
-      updated_at: now,
-    })
-    .eq('id', sessionId)
-    .or(`last_message_at.is.null,last_message_at.lte.${now}`);
 }
 
 // ── Shared helper ──────────────────────────────────
@@ -956,6 +969,44 @@ async function sendAndStoreMessage(
     source: 'ai_send',
     ...(metadata ?? {}),
   };
+
+  // Step 1 (unconditional): mark conversation as read and update preview.
+  // This runs before the message INSERT so the Realtime INSERT triggers a client
+  // refetch that already sees a clean read state.
+  // marked_unread + last_read_at are unconditional — we always want to clear the
+  // unread indicator when the AI responds, regardless of message timestamp ordering.
+  await supabaseAdmin
+    .from('chat_sessions')
+    .update({
+      marked_unread: false,
+      last_read_at: now,
+      updated_at: now,
+    })
+    .eq('id', sessionId);
+
+  // Step 2 (conditional): update last_message fields only if this AI message is
+  // actually the newest — prevents a slow AI response from overwriting a newer message.
+  await supabaseAdmin
+    .from('chat_sessions')
+    .update({
+      last_message: message,
+      last_message_at: now,
+      last_message_direction: 'outbound',
+      last_message_sender: 'ai',
+    })
+    .eq('id', sessionId)
+    .or(`last_message_at.is.null,last_message_at.lte.${now}`);
+
+  // Step 3: mark all pending inbound messages as read before inserting the AI message.
+  // Realtime fires on INSERT — if we mark read after the insert, the client refetch
+  // races this update and can see a stale unread count.
+  await supabaseAdmin
+    .from('chat_messages')
+    .update({ read: true })
+    .eq('session_id', sessionId)
+    .eq('direction', 'inbound')
+    .eq('read', false);
+
   // Insert to DB before sending so the record exists when Whapi echoes the message back,
   // preventing the echo from being saved as sender_type: 'human' in the webhook handler.
   const { data: insertedMsg, error: insertError } = await supabaseAdmin.from('chat_messages').insert({
@@ -983,17 +1034,4 @@ async function sendAndStoreMessage(
   if (whapiMessageId && insertedMsg) {
     await supabaseAdmin.from('chat_messages').update({ message_id_normalized: whapiMessageId }).eq('id', insertedMsg.id);
   }
-
-  // Only update last_message if this is still the newest message (prevents race with incoming messages)
-  await supabaseAdmin
-    .from('chat_sessions')
-    .update({
-      last_message: message,
-      last_message_at: now,
-      last_message_direction: 'outbound',
-      last_message_sender: 'ai',
-      updated_at: now,
-    })
-    .eq('id', sessionId)
-    .or(`last_message_at.is.null,last_message_at.lte.${now}`);
 }

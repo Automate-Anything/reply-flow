@@ -172,6 +172,19 @@ export async function registerWebhook(
   });
 }
 
+export async function getGroupInfo(
+  channelToken: string,
+  groupId: string
+): Promise<{ name: string } | null> {
+  const gate = gateApi(channelToken);
+  try {
+    const { data } = await gate.get(`/groups/${groupId}`);
+    return { name: data.name || '' };
+  } catch {
+    return null;
+  }
+}
+
 export async function getContactProfile(
   channelToken: string,
   phone: string

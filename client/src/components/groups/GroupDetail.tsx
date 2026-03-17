@@ -3,38 +3,50 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { ArrowLeft, Plus, Loader2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useGroups } from '@/hooks/useGroups';
 import { useGroupCriteria } from '@/hooks/useGroupCriteria';
 import { useGroupMessages } from '@/hooks/useGroupMessages';
 import { useGroupRealtime } from '@/hooks/useGroupRealtime';
 import { CriteriaCard } from './CriteriaCard';
 import { CriteriaDialog } from './CriteriaDialog';
-import type { GroupCriteria, GroupChatMessage } from '@/types/groups';
+import type { GroupChat, GroupCriteria, GroupChatMessage } from '@/types/groups';
 
 interface GroupDetailProps {
   groupId: string;
   onBack: () => void;
+  groups: GroupChat[];
+  groupsLoading: boolean;
+  toggleMonitoring: (groupId: string, enabled: boolean) => void;
 }
 
-export function GroupDetail({ groupId, onBack }: GroupDetailProps) {
-  const { groups, toggleMonitoring } = useGroups();
+export function GroupDetail({ groupId, onBack, groups, groupsLoading, toggleMonitoring }: GroupDetailProps) {
   const group = groups.find((g) => g.id === groupId);
   const { criteria, createCriteria, updateCriteria, deleteCriteria } =
     useGroupCriteria(groupId);
-  const { messages, matches, loading: messagesLoading, setMessages } =
+  const { messages, matches, loading: messagesLoading, setMessages, setMatches } =
     useGroupMessages(groupId);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<GroupCriteria | null>(null);
 
-  // Real-time: append new messages and matches
+  // Real-time: append new messages and matches as they arrive
   useGroupRealtime({
     onNewMessage: (msg) => {
       if (msg.group_chat_id === groupId) {
         setMessages((prev) => [msg, ...prev]);
       }
     },
+    onNewMatch: (match) => {
+      setMatches((prev) => [match, ...prev]);
+    },
   });
+
+  if (groupsLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!group) {
     return (
@@ -55,11 +67,6 @@ export function GroupDetail({ groupId, onBack }: GroupDetailProps) {
     }
     setEditing(null);
   };
-
-  // Build a set of matched message IDs for highlighting
-  const matchedMessageIds = new Set(
-    matches.map((m) => m.group_chat_message_id)
-  );
 
   return (
     <div className="flex flex-col h-full">
@@ -127,17 +134,16 @@ export function GroupDetail({ groupId, onBack }: GroupDetailProps) {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : matches.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>No matched messages yet.</p>
+            </div>
           ) : (
             <div className="space-y-2">
-              {messages
-                .filter((m) => matchedMessageIds.has(m.id))
-                .map((msg) => (
-                  <MatchedMessageRow key={msg.id} message={msg} />
-                ))}
-              {messages.filter((m) => matchedMessageIds.has(m.id)).length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <p>No matched messages yet.</p>
-                </div>
+              {matches.map((match) =>
+                match.group_chat_messages ? (
+                  <MatchedMessageRow key={match.id} message={match.group_chat_messages} />
+                ) : null
               )}
             </div>
           )}

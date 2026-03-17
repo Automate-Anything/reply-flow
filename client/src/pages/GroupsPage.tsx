@@ -4,14 +4,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GroupsList } from '@/components/groups/GroupsList';
 import { GlobalCriteriaList } from '@/components/groups/GlobalCriteriaList';
 import { GroupDetail } from '@/components/groups/GroupDetail';
+import { useGroups } from '@/hooks/useGroups';
 
 export default function GroupsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const groupFromUrl = searchParams.get('group');
 
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(groupFromUrl);
+  const { groups, loading: groupsLoading, toggleMonitoring } = useGroups();
 
-  // When setting selectedGroupId, also update the URL:
   const selectGroup = (id: string | null) => {
     setSelectedGroupId(id);
     if (id) {
@@ -26,6 +27,9 @@ export default function GroupsPage() {
       <GroupDetail
         groupId={selectedGroupId}
         onBack={() => selectGroup(null)}
+        groups={groups}
+        groupsLoading={groupsLoading}
+        toggleMonitoring={toggleMonitoring}
       />
     );
   }
@@ -48,7 +52,12 @@ export default function GroupsPage() {
         </div>
 
         <TabsContent value="groups" className="flex-1 p-6">
-          <GroupsList onSelectGroup={selectGroup} />
+          <GroupsList
+            onSelectGroup={selectGroup}
+            groups={groups}
+            loading={groupsLoading}
+            toggleMonitoring={toggleMonitoring}
+          />
         </TabsContent>
 
         <TabsContent value="global-criteria" className="flex-1 p-6">
