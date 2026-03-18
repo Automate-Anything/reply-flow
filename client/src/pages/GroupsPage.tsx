@@ -44,7 +44,7 @@ export default function GroupsPage() {
     <div className="flex flex-col h-full">
       <div className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Groups</h1>
+          <h1 className="text-2xl font-semibold">WhatsApp Groups</h1>
           <Button
             variant="outline"
             size="sm"

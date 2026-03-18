@@ -107,7 +107,7 @@ export default function NotificationBell() {
 
     if (notification.type === 'group_criteria_match') {
       const groupChatId = notification.data?.group_chat_id as string | undefined;
-      navigate(groupChatId ? `/groups?group=${groupChatId}` : '/groups');
+      navigate(groupChatId ? `/whatsapp-groups?group=${groupChatId}` : '/whatsapp-groups');
     } else if (notification.type === 'contact_note') {
       navigate(contactId ? `/contacts?contact=${contactId}` : '/contacts');
     } else if (conversationId) {

@@ -47,7 +47,7 @@ function App() {
                   <Route path="ai-agents/:agentId" element={<AgentDetailPage />} />
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="channels/:channelId" element={<ChannelDetailPage />} />
-                  <Route path="groups" element={<GroupsPage />} />
+                  <Route path="whatsapp-groups" element={<GroupsPage />} />
 
                   <Route path="company-settings" element={<CompanySettingsPage />} />
                   <Route path="profile-settings" element={<ProfileSettingsPage />} />
