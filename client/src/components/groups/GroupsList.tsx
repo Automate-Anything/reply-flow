@@ -120,7 +120,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
               ) : (
                 <Eye className="h-4 w-4" />
               )}
-              Watch {selectedIds.length === 1 ? 'Group' : `All ${selectedIds.length} Groups`}
+              Watch {selectedIds.length === 1 ? 'Group' : allSelected ? `All ${selectedIds.length} Groups` : `${selectedIds.length} Groups`}
             </Button>
             <Button
               size="sm"
@@ -130,7 +130,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
               onClick={() => handleBulkToggle(false)}
             >
               <EyeOff className="h-4 w-4" />
-              Unwatch {selectedIds.length === 1 ? 'Group' : `All ${selectedIds.length} Groups`}
+              Unwatch {selectedIds.length === 1 ? 'Group' : allSelected ? `All ${selectedIds.length} Groups` : `${selectedIds.length} Groups`}
             </Button>
             <Button
               size="sm"
