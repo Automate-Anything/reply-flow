@@ -82,6 +82,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
   return (
     <div className="space-y-2">
       {/* Header + bulk actions */}
+      {/* Header */}
       <div className="flex items-center justify-between px-2 py-1.5">
         <label className="flex items-center gap-2.5 cursor-pointer select-none">
           <Checkbox
@@ -95,48 +96,54 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
           </span>
         </label>
 
-        <div className="flex items-center gap-1.5">
-          {selectedIds.length === 0 ? (
-            <span className="text-xs text-muted-foreground">
-              {monitoredCount} watching · {groups.length - monitoredCount} not watching
-            </span>
-          ) : (
-            <>
-              <Button
-                size="sm"
-                variant="default"
-                className="h-7 text-xs gap-1.5"
-                disabled={bulkActioning}
-                onClick={() => handleBulkToggle(true)}
-              >
-                {bulkActioning ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Eye className="h-3.5 w-3.5" />
-                )}
-                Watch
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1.5"
-                disabled={bulkActioning}
-                onClick={() => handleBulkToggle(false)}
-              >
-                <EyeOff className="h-3.5 w-3.5" />
-                Unwatch
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                disabled={bulkActioning}
-                onClick={() => setSelectedIds([])}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </>
-          )}
+        <span className="text-xs text-muted-foreground">
+          {monitoredCount} watching · {groups.length - monitoredCount} not watching
+        </span>
+      </div>
+
+      {/* Bulk action bar — visible when groups are selected */}
+      {selectedIds.length > 0 && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5 flex items-center justify-between">
+          <span className="text-sm font-medium">
+            {selectedIds.length} group{selectedIds.length !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              className="gap-1.5"
+              disabled={bulkActioning}
+              onClick={() => handleBulkToggle(true)}
+            >
+              {bulkActioning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+              Watch {selectedIds.length === 1 ? 'Group' : `All ${selectedIds.length} Groups`}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={bulkActioning}
+              onClick={() => handleBulkToggle(false)}
+            >
+              <EyeOff className="h-4 w-4" />
+              Unwatch {selectedIds.length === 1 ? 'Group' : `All ${selectedIds.length} Groups`}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={bulkActioning}
+              onClick={() => setSelectedIds([])}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
         </div>
       </div>
 
