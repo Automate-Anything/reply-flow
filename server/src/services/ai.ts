@@ -525,14 +525,10 @@ export async function shouldAIRespond(
     }
   }
 
-  // Fallback: load all entries if search returned nothing or embeddings unavailable
+  // If search returned nothing, proceed without KB context.
+  // The AI will be informed via the kbLowConfidence note to be honest about not knowing.
   if (kbData.length === 0) {
     kbFallbackUsed = true;
-    const { data: kbEntries } = await supabaseAdmin
-      .from('knowledge_base_entries')
-      .select('id, title, content, knowledge_base_id')
-      .eq('company_id', companyId);
-    kbData = (kbEntries || []) as KBEntry[];
   }
 
   // 8b. Load contact memories for returning contacts

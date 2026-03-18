@@ -107,8 +107,12 @@ export function useAISuggestion() {
         }
         setError(err instanceof Error ? err.message : 'Failed to generate suggestion');
       } finally {
-        setIsStreaming(false);
-        abortRef.current = null;
+        // Only clean up if this call is still the active one — prevents a
+        // race where an aborted call's finally overwrites a newer call's state.
+        if (abortRef.current === controller) {
+          setIsStreaming(false);
+          abortRef.current = null;
+        }
       }
     },
     [],

@@ -192,32 +192,33 @@ function buildSuggestionPrompt(
   existingText: string | undefined,
   mode: SuggestionMode,
 ): { system: string; messages: ApiMessage[] } {
-  const parts: string[] = [];
+  const systemParts: string[] = [];
 
-  parts.push('You are a helpful assistant drafting the NEXT WhatsApp message on behalf of a human agent (the "Agent"). You are ALWAYS writing as the Agent, NEVER as the Contact. Infer the nature of their relationship from the conversation — do not assume who is the buyer or seller.');
+  systemParts.push(
+    'You are a writing assistant helping someone compose their next WhatsApp message. ' +
+      'You will be given the conversation so far, where their messages are labeled "You" and the other person\'s messages are labeled "Them". ' +
+      'Your job is to write the next message FROM THE PERSPECTIVE OF "You" — the person whose messages are labeled "You". ' +
+      'Read their prior messages carefully to understand their voice, tone, and role in the conversation, then continue as them.',
+  );
 
-  // Agent personality
+  // Writing style preferences only — intentionally excludes business identity fields
+  // (business_name, business_type, business_description, custom_instructions) because
+  // those are written for the AI auto-reply bot and will cause Claude to adopt a
+  // business-representative persona instead of continuing in the human's own voice.
   if (context.agentProfile) {
-    const p = context.agentProfile;
-    const style = p.response_flow?.default_style;
-    const personalityLines: string[] = [];
-    if (p.business_name) personalityLines.push(`Business: ${p.business_name}`);
-    if (p.business_type) personalityLines.push(`Type: ${p.business_type}`);
-    if (p.business_description) personalityLines.push(`About: ${p.business_description}`);
-    if (style?.tone) personalityLines.push(`Tone: ${style.tone}`);
-    if (style?.response_length) personalityLines.push(`Length: ${style.response_length}`);
-    if (style?.emoji_usage) personalityLines.push(`Emoji usage: ${style.emoji_usage}`);
-    if (personalityLines.length > 0) {
-      parts.push('\n## Agent Profile\n' + personalityLines.join('\n'));
-    }
-    if (p.custom_instructions) {
-      parts.push('\n## Custom Instructions\n' + p.custom_instructions);
+    const style = context.agentProfile.response_flow?.default_style;
+    const styleLines: string[] = [];
+    if (style?.tone) styleLines.push(`Tone: ${style.tone}`);
+    if (style?.response_length) styleLines.push(`Length: ${style.response_length}`);
+    if (style?.emoji_usage) styleLines.push(`Emoji usage: ${style.emoji_usage}`);
+    if (styleLines.length > 0) {
+      systemParts.push('\n## Writing Style\n' + styleLines.join('\n'));
     }
   }
 
   // KB context
   if (context.kbChunks.length > 0) {
-    parts.push(
+    systemParts.push(
       '\n## Knowledge Base\nUse the following information to inform your response:\n' +
         context.kbChunks.join('\n\n'),
     );
@@ -235,12 +236,12 @@ function buildSuggestionPrompt(
     const contactLines: string[] = [];
     if (firstName) contactLines.push(`First name (manually set): ${firstName}`);
     if (c.tags?.length) contactLines.push(`Tags: ${c.tags.join(', ')}`);
-    if (contactLines.length > 0) parts.push('\n## Contact\n' + contactLines.join('\n'));
+    if (contactLines.length > 0) systemParts.push('\n## Contact\n' + contactLines.join('\n'));
   }
 
   // Session summaries
   if (context.sessionSummaries.length > 0) {
-    parts.push(
+    systemParts.push(
       '\n## Past Interactions\n' +
         context.sessionSummaries.map((s, i) => `Session ${i + 1}: ${s}`).join('\n'),
     );
@@ -262,82 +263,51 @@ function buildSuggestionPrompt(
       ? Math.round(agentMessages.reduce((a, b) => a + b, 0) / agentMessages.length)
       : null;
 
-  // Guardrails
   const lengthRule =
     avgAgentWords !== null
-      ? `- Match the Agent's message style: their recent messages average ~${avgAgentWords} word${avgAgentWords === 1 ? '' : 's'}. Be similarly brief or detailed.`
+      ? `- Match their message style: their recent messages average ~${avgAgentWords} word${avgAgentWords === 1 ? '' : 's'}. Be similarly brief or detailed.`
       : '- Default to short, direct messages unless the topic requires more detail.';
 
-  parts.push(`
+  systemParts.push(`
 ## Rules
 - Write ONLY the message text. No greetings like "Dear Customer" unless it fits the tone.
 - Do not include meta-commentary like "Here's a draft:" — just the message itself.
-- Match the language the contact is using.
+- Match the language used in the conversation.
 - Keep it natural for WhatsApp — not overly formal unless the agent profile says so.
 ${lengthRule}
-- Never pad the message with unnecessary words. If the Agent writes short replies, you write short replies.
+- Never pad the message with unnecessary words. Match the brevity of their previous messages.
 - Only use the contact's first name if it appears in the Contact section above AND this is the very first message of the conversation. Never use their name mid-conversation. If no manually-set first name is provided, never reference their name at all.
 - ${greetingAppropriate ? 'A greeting (hey/hi/hello) is appropriate since more than 24 hours have passed since the last message.' : 'Do NOT start with a greeting (hey, hi, hello) — this is an ongoing conversation.'}
 - Do NOT make assumptions about facts not established in the conversation (e.g. availability, preferences, pricing). If something is unknown, ask — don't invent it.`);
 
-  const system = parts.join('\n');
+  const system = systemParts.join('\n');
 
-  // Build alternating user/assistant messages so Claude is structurally *inside*
-  // the conversation rather than observing it as a transcript.
-  // - inbound  → role: 'user'      (the other person)
-  // - outbound (human) → role: 'assistant'  (you)
-  // - outbound (ai)    → role: 'assistant', prefixed with "[Auto-reply]"
-  // Consecutive messages from the same side are merged into one turn.
-  type Group = { role: 'user' | 'assistant'; lines: string[] };
-  const groups: Group[] = [];
-  for (const m of context.messages) {
-    const role: 'user' | 'assistant' = m.direction === 'inbound' ? 'user' : 'assistant';
+  // Build the conversation as a labeled transcript in the user message.
+  // Using "You" / "Them" labels keeps Claude clearly outside the conversation as a writer,
+  // avoiding the API role bias where the "assistant" role carries a service-provider connotation
+  // that overrides the actual persona the human is playing (e.g. customer, friend, colleague).
+  const transcriptLines = context.messages.map((m) => {
+    const label = m.direction === 'outbound' ? 'You' : 'Them';
     const prefix = m.sender_type === 'ai' ? '[Auto-reply] ' : '';
-    const body = prefix + (m.message_body || '[media]');
-    const last = groups.at(-1);
-    if (last?.role === role) {
-      last.lines.push(body);
-    } else {
-      groups.push({ role, lines: [body] });
-    }
-  }
+    return `${label}: ${prefix}${m.message_body || '[media]'}`;
+  });
+  const transcript = transcriptLines.join('\n');
 
-  const messages: ApiMessage[] = groups.map((g) => ({
-    role: g.role,
-    content: g.lines.join('\n'),
-  }));
+  let userContent = `Conversation:\n${transcript}\n\n`;
 
-  // Anthropic requires the first message to be 'user'
-  if (messages[0]?.role === 'assistant') {
-    messages.unshift({ role: 'user', content: '[Conversation started by you]' });
-  }
-
-  // Build the final instruction and attach it as a user turn
-  const lastSender = context.messages.at(-1)?.direction === 'inbound' ? 'contact' : 'agent';
-  let instruction: string;
   switch (mode) {
     case 'generate':
-      if (lastSender === 'contact') {
-        instruction = 'Write your next WhatsApp reply to their last message. Output only the message text, nothing else.';
-      } else {
-        instruction = "They haven't replied yet. Write a natural follow-up message. Output only the message text, nothing else.";
-      }
+      userContent += 'Write the next message from "You".';
       break;
     case 'complete':
-      instruction = `You started typing: "${existingText}". Continue from where you left off. Output ONLY the continuation text, nothing else.`;
+      userContent += `Complete this draft from "You" — output only the continuation, not the part already written: "${existingText}"`;
       break;
     case 'rewrite':
-      instruction = `You drafted: "${existingText}". Write a polished, complete version of what you want to say. Output only the message text, nothing else.`;
+      userContent += `Rewrite this draft in "You"'s voice: "${existingText}"`;
       break;
   }
 
-  // Append instruction to last user turn if it's already 'user', otherwise add new user turn
-  const lastApiMsg = messages.at(-1);
-  if (lastApiMsg?.role === 'user') {
-    lastApiMsg.content += `\n\n${instruction}`;
-  } else {
-    messages.push({ role: 'user', content: instruction });
-  }
+  const messages: ApiMessage[] = [{ role: 'user', content: userContent }];
 
   return { system, messages };
 }
