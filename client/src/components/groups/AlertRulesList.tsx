@@ -57,7 +57,7 @@ export function AlertRulesList({
         <div>
           <h3 className="text-base font-medium">Alert Rules</h3>
           <p className="text-sm text-muted-foreground">
-            Get notified when group messages match your criteria
+            Define what to look for in your watched groups. When a message matches, the assigned team members get notified.
           </p>
         </div>
         <Button

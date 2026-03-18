@@ -80,6 +80,11 @@ export default function GroupsPage() {
         </div>
 
         <TabsContent value="groups" className="flex-1 p-6">
+          <div className="mb-4">
+            <p className="text-sm text-muted-foreground">
+              Choose which groups to watch. Only watched groups will have their messages scanned by your alert rules.
+            </p>
+          </div>
           <GroupsList
             groups={groups}
             loading={groupsLoading}
@@ -101,6 +106,12 @@ export default function GroupsPage() {
         </TabsContent>
 
         <TabsContent value="matches" className="flex-1 p-6">
+          <div className="mb-4">
+            <h3 className="text-base font-medium">Matched Messages</h3>
+            <p className="text-sm text-muted-foreground">
+              Messages from watched groups that triggered your alert rules
+            </p>
+          </div>
           <MatchedMessagesList
             matches={matches}
             groups={groups}
