@@ -10,7 +10,7 @@ import { AlertRulesList } from '@/components/groups/AlertRulesList';
 import { MatchedMessagesList } from '@/components/groups/MatchedMessagesList';
 
 export default function GroupsPage() {
-  const { groups, loading: groupsLoading, syncing, syncGroups, toggleMonitoring } =
+  const { groups, loading: groupsLoading, syncing, syncGroups, toggleMonitoring, bulkToggleMonitoring } =
     useGroups();
   const {
     rules,
@@ -84,6 +84,7 @@ export default function GroupsPage() {
             groups={groups}
             loading={groupsLoading}
             toggleMonitoring={toggleMonitoring}
+            bulkToggleMonitoring={bulkToggleMonitoring}
           />
         </TabsContent>
 

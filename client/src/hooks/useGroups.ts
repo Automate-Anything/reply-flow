@@ -60,5 +60,14 @@ export function useGroups() {
     );
   }, []);
 
-  return { groups, loading, syncing, refetch: fetchGroups, syncGroups, toggleMonitoring };
+  const bulkToggleMonitoring = useCallback(async (groupIds: string[], enabled: boolean) => {
+    await Promise.all(
+      groupIds.map((id) => api.patch(`/groups/${id}`, { monitoring_enabled: enabled }))
+    );
+    setGroups((prev) =>
+      prev.map((g) => groupIds.includes(g.id) ? { ...g, monitoring_enabled: enabled } : g)
+    );
+  }, []);
+
+  return { groups, loading, syncing, refetch: fetchGroups, syncGroups, toggleMonitoring, bulkToggleMonitoring };
 }

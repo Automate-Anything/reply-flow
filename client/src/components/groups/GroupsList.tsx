@@ -1,7 +1,10 @@
+import { useState, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { Users } from 'lucide-react';
 import type { GroupChat } from '@/types/groups';
 
@@ -9,9 +12,36 @@ interface GroupsListProps {
   groups: GroupChat[];
   loading: boolean;
   toggleMonitoring: (groupId: string, enabled: boolean) => void;
+  bulkToggleMonitoring: (groupIds: string[], enabled: boolean) => Promise<void>;
 }
 
-export function GroupsList({ groups, loading, toggleMonitoring }: GroupsListProps) {
+export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonitoring }: GroupsListProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkActioning, setBulkActioning] = useState(false);
+
+  const allSelected = groups.length > 0 && selectedIds.length === groups.length;
+  const someSelected = selectedIds.length > 0 && selectedIds.length < groups.length;
+
+  const handleSelectAll = useCallback((checked: boolean) => {
+    setSelectedIds(checked ? groups.map((g) => g.id) : []);
+  }, [groups]);
+
+  const handleSelectOne = useCallback((groupId: string, checked: boolean) => {
+    setSelectedIds((prev) =>
+      checked ? [...prev, groupId] : prev.filter((id) => id !== groupId)
+    );
+  }, []);
+
+  const handleBulkToggle = useCallback(async (enabled: boolean) => {
+    setBulkActioning(true);
+    try {
+      await bulkToggleMonitoring(selectedIds, enabled);
+      setSelectedIds([]);
+    } finally {
+      setBulkActioning(false);
+    }
+  }, [selectedIds, bulkToggleMonitoring]);
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -49,10 +79,59 @@ export function GroupsList({ groups, loading, toggleMonitoring }: GroupsListProp
 
   return (
     <div className="space-y-2">
+      {/* Header row with Select All */}
+      <div className="flex items-center gap-3 px-4 py-2">
+        <Checkbox
+          checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+          onCheckedChange={(checked) => handleSelectAll(checked === true)}
+        />
+        <span className="text-sm text-muted-foreground">
+          {groups.length} group{groups.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-muted/50 border rounded-lg p-3 flex items-center justify-between">
+          <span className="text-sm font-medium">{selectedIds.length} selected</span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bulkActioning}
+              onClick={() => handleBulkToggle(true)}
+            >
+              Enable Monitoring
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bulkActioning}
+              onClick={() => handleBulkToggle(false)}
+            >
+              Disable Monitoring
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={bulkActioning}
+              onClick={() => setSelectedIds([])}
+            >
+              Deselect
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Group rows */}
       {groups.map((group) => (
         <Card key={group.id} className="transition-colors">
           <CardContent className="flex items-center justify-between py-4">
             <div className="flex items-center gap-3 min-w-0 flex-1">
+              <Checkbox
+                checked={selectedIds.includes(group.id)}
+                onCheckedChange={(checked) => handleSelectOne(group.id, checked === true)}
+              />
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
                 <Users className="h-5 w-5" />
               </div>
