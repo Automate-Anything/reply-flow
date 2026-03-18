@@ -71,7 +71,15 @@ The "scope" field in the UI maps directly to `group_chat_id`: null = "All Groups
 - Creating one criteria row per selected group (simple, works with current schema)
 - Adding a `group_chat_ids UUID[]` array column (schema change)
 
-**Decision:** Use option A (one row per selected group) for v1. The UI shows multi-select but creates/deletes individual rows behind the scenes. Rules created together share the same name/config — the UI groups them by name for display.
+**Decision:** Use option A (one row per selected group) for v1. The UI shows multi-select but creates/deletes individual rows behind the scenes.
+
+**Grouping key:** Add a nullable `rule_group_id UUID` column to `group_criteria`. When a rule is created with multi-group scope, all rows share the same `rule_group_id`. The UI groups rows by `rule_group_id` for display and editing. Single-scope and "All Groups" rules have `rule_group_id = NULL` and are displayed individually. This is a small schema addition (see Database Changes section below).
+
+**Editing multi-scope rules:** When a user edits a rule that spans multiple groups and changes the scope (e.g., from "Groups A, B, C" to "Groups A, C"), the implementation must:
+- Delete the row for removed groups (B)
+- Keep rows for unchanged groups (A, C), updating config if it changed
+- Insert new rows for added groups
+All rows in the group share the same `rule_group_id` and config values.
 
 ### Tab 3: Matched Messages
 
@@ -88,7 +96,9 @@ A cross-group view of all matched messages, replacing the old per-group "Matched
 - Filter by group (dropdown)
 - Filter by rule (dropdown)
 
-**Data source:** `GET /api/groups/matches` — a new endpoint that returns `group_criteria_matches` with embedded `group_chat_messages` and `group_criteria` data, scoped to the company. Paginated, newest first.
+**Data source:** `GET /api/groups/matches` — a new endpoint that returns `group_criteria_matches` with embedded `group_chat_messages` data, scoped to the company. Paginated, newest first.
+
+**Resolving rule names from `criteria_ids`:** The `group_criteria_matches` table stores `criteria_ids UUID[]` (an array), which cannot be joined via PostgREST. Strategy: the client fetches all company criteria once via `GET /api/groups/criteria` (already exists as the Alert Rules data source) and maps `criteria_ids` to rule names client-side. This avoids complex server-side array-to-join resolution.
 
 **Existing endpoint change:** The current `GET /api/groups/:id/matches` stays for backward compatibility but the new cross-group endpoint is used by the redesigned UI.
 
@@ -119,8 +129,29 @@ A cross-group view of all matched messages, replacing the old per-group "Matched
 | `client/src/hooks/useGroups.ts` | Add `syncGroups()` function |
 | `client/src/hooks/useGroupCriteria.ts` | Rename/adapt to `useAlertRules.ts`, fetch all rules (not per-group) |
 | `client/src/hooks/useGroupMessages.ts` | Replace with `useMatchedMessages.ts` for cross-group matches |
-| `client/src/hooks/useGroupRealtime.ts` | Keep, update callbacks for new state shape |
+| `client/src/hooks/useGroupRealtime.ts` | Keep, update callbacks for new state shape (remove group_chat_id filter for cross-group match subscriptions) |
+| `client/src/components/groups/CriteriaCard.tsx` | **Delete** (replaced by AlertRulesList inline rendering) |
+| `client/src/components/groups/CriteriaDialog.tsx` | **Delete** (replaced by AlertRuleDialog) |
+| `client/src/components/groups/TeamMemberMultiSelect.tsx` | **Keep** (reused by AlertRuleDialog) |
 
-### No Database Changes
+### Database Changes
 
-The existing `group_chats`, `group_criteria`, `group_criteria_matches`, and `group_chat_messages` tables support the new design without schema modifications.
+One small addition to `group_criteria`:
+
+```sql
+ALTER TABLE group_criteria ADD COLUMN rule_group_id UUID DEFAULT NULL;
+```
+
+This column links rows that belong to the same multi-scope rule. Null for single-scope and "All Groups" rules.
+
+### Sync Error Handling
+
+- Sync calls each channel independently via `Promise.allSettled` — partial success is acceptable
+- If a channel's token is expired or Whapi is down, that channel is skipped
+- Response includes per-channel success/failure: `{ groups: [...], new_count: N, errors: [{ channel_id, error }] }`
+- UI shows toast: "Synced 2 of 3 channels — 1 channel failed" for partial failures
+- Client-side: "Sync Groups" button is disabled while sync is in flight to prevent concurrent requests
+
+### Whapi Pagination
+
+If `GET /groups` returns paginated results, the sync endpoint must follow pagination until all groups are fetched. The implementation should check for a `next` cursor or similar pagination token in the Whapi response and loop until exhausted.
