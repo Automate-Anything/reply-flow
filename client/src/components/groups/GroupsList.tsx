@@ -98,7 +98,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
         <div className="flex items-center gap-1.5">
           {selectedIds.length === 0 ? (
             <span className="text-xs text-muted-foreground">
-              {monitoredCount} monitoring · {groups.length - monitoredCount} off
+              {monitoredCount} enabled · {groups.length - monitoredCount} disabled
             </span>
           ) : (
             <>
@@ -185,7 +185,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
                   variant={group.monitoring_enabled ? 'default' : 'outline'}
                   className={`text-xs ${group.monitoring_enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 hover:bg-emerald-100' : ''}`}
                 >
-                  {group.monitoring_enabled ? 'Monitoring' : 'Off'}
+                  {group.monitoring_enabled ? 'Enabled' : 'Disabled'}
                 </Badge>
                 <Switch
                   checked={group.monitoring_enabled}
