@@ -69,8 +69,8 @@ interface ConversationHeaderProps {
   onPriorityMetadataNeeded?: () => void;
   notesPanelOpen?: boolean;
   onLabelsCreated?: () => void;
-  onClassify?: () => void;
-  classifying?: boolean;
+  onOpenClassification?: () => void;
+  hasPendingSuggestions?: boolean;
 }
 
 interface LabelOption {
@@ -114,8 +114,8 @@ export default function ConversationHeader({
   onPriorityMetadataNeeded,
   notesPanelOpen,
   onLabelsCreated,
-  onClassify,
-  classifying,
+  onOpenClassification,
+  hasPendingSuggestions,
 }: ConversationHeaderProps) {
   const { companyTimezone } = useSession();
   const [allLabels, setAllLabels] = useState<LabelOption[]>([]);
@@ -471,15 +471,18 @@ export default function ConversationHeader({
         </DropdownMenu>
 
         {/* Classify with AI */}
-        {onClassify && (
+        {onOpenClassification && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClassify} disabled={classifying}>
-                  {classifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                <Button variant="ghost" size="icon" className="relative h-8 w-8" onClick={onOpenClassification}>
+                  <Wand2 className="h-4 w-4" />
+                  {hasPendingSuggestions && (
+                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary" />
+                  )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Analyze with AI</TooltipContent>
+              <TooltipContent>AI Classification</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

@@ -55,7 +55,8 @@ export default function InboxPage() {
   const [assignedUnreadCount, setAssignedUnreadCount] = useState(0);
   const needsConversationSupport = activeTab !== 'scheduled' || !!activeConversation;
   const { debugMode } = useDebugMode(needsConversationSupport);
-  const { classifying, classify } = useClassificationSuggestions(activeConversation?.id ?? null);
+  const { hasPending } = useClassificationSuggestions(activeConversation?.id ?? null);
+  const [contactPanelTab, setContactPanelTab] = useState<'info' | 'notes' | 'ai'>('info');
 
   // Draft persistence
   const draftRef = useRef<string>('');
@@ -647,8 +648,11 @@ export default function InboxPage() {
               onToggleNotes={() => setNotesPanelOpen((prev) => !prev)}
               notesPanelOpen={notesPanelOpen}
               onLabelsCreated={refreshLabels}
-              onClassify={() => { classify().catch(() => {}); }}
-              classifying={classifying}
+              onOpenClassification={() => {
+                setContactPanelTab('ai');
+                setContactPanelOpen(true);
+              }}
+              hasPendingSuggestions={hasPending}
             />
             <MessageThread
               messages={messages}
@@ -686,7 +690,11 @@ export default function InboxPage() {
             contactId={activeConversation.contact_id}
             sessionId={activeConversation.id}
             open={contactPanelOpen}
-            onClose={() => setContactPanelOpen(false)}
+            onClose={() => {
+              setContactPanelOpen(false);
+              setContactPanelTab('info');
+            }}
+            initialTab={contactPanelTab}
             previewName={activeConversation.contact_name}
             previewPhone={activeConversation.phone_number}
             previewPicture={activeConversation.profile_picture_url}

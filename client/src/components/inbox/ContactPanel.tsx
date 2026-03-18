@@ -18,7 +18,7 @@ import api from '@/lib/api';
 import { useContactNotes, type Contact, type ContactNote } from '@/hooks/useContacts';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
-import ClassificationCard from './ClassificationCard';
+import ClassificationTab from './ClassificationTab';
 
 interface ContactPanelProps {
   contactId: string | null;
@@ -30,15 +30,21 @@ interface ContactPanelProps {
   previewName?: string | null;
   previewPhone?: string | null;
   previewPicture?: string | null;
+  initialTab?: 'info' | 'notes' | 'ai';
 }
 
-export default function ContactPanel({ contactId, sessionId, open, onClose, onProfilePictureLoaded, previewName, previewPhone, previewPicture }: ContactPanelProps) {
+export default function ContactPanel({ contactId, sessionId, open, onClose, onProfilePictureLoaded, previewName, previewPhone, previewPicture, initialTab }: ContactPanelProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', company: '' });
   const [originalForm, setOriginalForm] = useState({ first_name: '', last_name: '', email: '', company: '' });
+  const [activeTab, setActiveTab] = useState(initialTab ?? 'info');
+
+  useEffect(() => {
+    if (open) setActiveTab(initialTab ?? 'info');
+  }, [open, initialTab]);
 
   const { isDirty, showDialog, guardedClose, handleKeepEditing, handleDiscard } = useUnsavedChanges(form, editing ? originalForm : null);
   useFormDirtyGuard(isDirty);
@@ -174,12 +180,13 @@ export default function ContactPanel({ contactId, sessionId, open, onClose, onPr
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : contact ? (
-          <Tabs defaultValue="info" className="w-full">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'info' | 'notes' | 'ai')} className="w-full">
             <TabsList className="w-full rounded-none border-b">
               <TabsTrigger value="info" className="flex-1">Info</TabsTrigger>
               <TabsTrigger value="notes" className="flex-1">
                 Notes {notes.length > 0 && `(${notes.length})`}
               </TabsTrigger>
+              <TabsTrigger value="ai" className="flex-1">AI</TabsTrigger>
             </TabsList>
 
             <TabsContent value="info" className="mt-0 p-4">
@@ -317,11 +324,6 @@ export default function ContactPanel({ contactId, sessionId, open, onClose, onPr
                   </Button>
                 )}
 
-                {sessionId && !editing && (
-                  <div className="mt-4 border-t pt-4">
-                    <ClassificationCard sessionId={sessionId} />
-                  </div>
-                )}
               </div>
             </TabsContent>
 
@@ -409,6 +411,10 @@ export default function ContactPanel({ contactId, sessionId, open, onClose, onPr
                   </Button>
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="ai" className="mt-0">
+              <ClassificationTab sessionId={sessionId ?? null} />
             </TabsContent>
           </Tabs>
         ) : (
