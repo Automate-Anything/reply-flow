@@ -185,14 +185,16 @@ const anthropic = env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
   : null;
 
+type ApiMessage = { role: 'user' | 'assistant'; content: string };
+
 function buildSuggestionPrompt(
   context: SuggestionContext,
   existingText: string | undefined,
   mode: SuggestionMode,
-): { system: string; userMessage: string } {
+): { system: string; messages: ApiMessage[] } {
   const parts: string[] = [];
 
-  parts.push('You are a helpful assistant drafting the NEXT WhatsApp message on behalf of a human agent (the "Agent"). You are ALWAYS writing as the Agent, NEVER as the Contact. The Agent is the business representative; the Contact is the customer.');
+  parts.push('You are a helpful assistant drafting the NEXT WhatsApp message on behalf of a human agent (the "Agent"). You are ALWAYS writing as the Agent, NEVER as the Contact. Infer the nature of their relationship from the conversation — do not assume who is the buyer or seller.');
 
   // Agent personality
   if (context.agentProfile) {
@@ -224,10 +226,16 @@ function buildSuggestionPrompt(
   // Contact context
   if (context.contact) {
     const c = context.contact;
-    const name = c.first_name || c.whatsapp_name || 'Unknown';
-    const contactLines = [`Name: ${name}`];
+    // Only use first_name if it was manually edited (differs from whatsapp_name = auto-set)
+    const isManuallyNamed =
+      c.first_name && (!c.whatsapp_name || c.first_name !== c.whatsapp_name);
+    const firstName = isManuallyNamed
+      ? c.first_name!.trim().split(/\s+/)[0] // first word only
+      : null;
+    const contactLines: string[] = [];
+    if (firstName) contactLines.push(`First name (manually set): ${firstName}`);
     if (c.tags?.length) contactLines.push(`Tags: ${c.tags.join(', ')}`);
-    parts.push('\n## Contact\n' + contactLines.join('\n'));
+    if (contactLines.length > 0) parts.push('\n## Contact\n' + contactLines.join('\n'));
   }
 
   // Session summaries
@@ -238,46 +246,100 @@ function buildSuggestionPrompt(
     );
   }
 
+  // Check if last message was more than 24 hours ago (greeting is appropriate after a gap)
+  const lastConversationMsg = context.messages.at(-1);
+  const hoursSinceLastMsg = lastConversationMsg
+    ? (Date.now() - new Date(lastConversationMsg.created_at).getTime()) / 36e5
+    : Infinity;
+  const greetingAppropriate = hoursSinceLastMsg > 24;
+
+  // Derive agent's typical message length from their outbound messages
+  const agentMessages = context.messages
+    .filter((m) => m.direction === 'outbound' && m.message_body)
+    .map((m) => m.message_body.trim().split(/\s+/).length);
+  const avgAgentWords =
+    agentMessages.length > 0
+      ? Math.round(agentMessages.reduce((a, b) => a + b, 0) / agentMessages.length)
+      : null;
+
   // Guardrails
+  const lengthRule =
+    avgAgentWords !== null
+      ? `- Match the Agent's message style: their recent messages average ~${avgAgentWords} word${avgAgentWords === 1 ? '' : 's'}. Be similarly brief or detailed.`
+      : '- Default to short, direct messages unless the topic requires more detail.';
+
   parts.push(`
 ## Rules
 - Write ONLY the message text. No greetings like "Dear Customer" unless it fits the tone.
 - Do not include meta-commentary like "Here's a draft:" — just the message itself.
 - Match the language the contact is using.
-- Keep it natural for WhatsApp — not overly formal unless the agent profile says so.`);
+- Keep it natural for WhatsApp — not overly formal unless the agent profile says so.
+${lengthRule}
+- Never pad the message with unnecessary words. If the Agent writes short replies, you write short replies.
+- Only use the contact's first name if it appears in the Contact section above AND this is the very first message of the conversation. Never use their name mid-conversation. If no manually-set first name is provided, never reference their name at all.
+- ${greetingAppropriate ? 'A greeting (hey/hi/hello) is appropriate since more than 24 hours have passed since the last message.' : 'Do NOT start with a greeting (hey, hi, hello) — this is an ongoing conversation.'}
+- Do NOT make assumptions about facts not established in the conversation (e.g. availability, preferences, pricing). If something is unknown, ask — don't invent it.`);
 
   const system = parts.join('\n');
 
-  // Build conversation history as user message
-  const historyLines = context.messages.map((m) => {
-    const label = m.direction === 'inbound' ? 'Contact' : 'Agent';
-    return `${label}: ${m.message_body || '[media]'}`;
-  });
+  // Build alternating user/assistant messages so Claude is structurally *inside*
+  // the conversation rather than observing it as a transcript.
+  // - inbound  → role: 'user'      (the other person)
+  // - outbound (human) → role: 'assistant'  (you)
+  // - outbound (ai)    → role: 'assistant', prefixed with "[Auto-reply]"
+  // Consecutive messages from the same side are merged into one turn.
+  type Group = { role: 'user' | 'assistant'; lines: string[] };
+  const groups: Group[] = [];
+  for (const m of context.messages) {
+    const role: 'user' | 'assistant' = m.direction === 'inbound' ? 'user' : 'assistant';
+    const prefix = m.sender_type === 'ai' ? '[Auto-reply] ' : '';
+    const body = prefix + (m.message_body || '[media]');
+    const last = groups.at(-1);
+    if (last?.role === role) {
+      last.lines.push(body);
+    } else {
+      groups.push({ role, lines: [body] });
+    }
+  }
 
-  let userMessage = '## Conversation\n' + historyLines.join('\n') + '\n\n';
+  const messages: ApiMessage[] = groups.map((g) => ({
+    role: g.role,
+    content: g.lines.join('\n'),
+  }));
 
-  // Determine who sent the last message to give Claude proper context
-  const lastMessage = context.messages.at(-1);
-  const lastSender = lastMessage?.direction === 'inbound' ? 'contact' : 'agent';
+  // Anthropic requires the first message to be 'user'
+  if (messages[0]?.role === 'assistant') {
+    messages.unshift({ role: 'user', content: '[Conversation started by you]' });
+  }
 
-  // Mode-specific instruction
+  // Build the final instruction and attach it as a user turn
+  const lastSender = context.messages.at(-1)?.direction === 'inbound' ? 'contact' : 'agent';
+  let instruction: string;
   switch (mode) {
     case 'generate':
       if (lastSender === 'contact') {
-        userMessage += 'Write the Agent\'s reply to the Contact\'s latest message.';
+        instruction = 'Write your next WhatsApp reply to their last message. Output only the message text, nothing else.';
       } else {
-        userMessage += 'The Agent already sent the last message(s) and the Contact has not replied yet. Write a follow-up message from the Agent — for example a nudge, clarification, or additional info. Do NOT write a response as if you were the Contact.';
+        instruction = "They haven't replied yet. Write a natural follow-up message. Output only the message text, nothing else.";
       }
       break;
     case 'complete':
-      userMessage += `The Agent has started typing: "${existingText}". Continue naturally from where they left off, writing as the Agent. Do not repeat what they wrote. Output ONLY the continuation text.`;
+      instruction = `You started typing: "${existingText}". Continue from where you left off. Output ONLY the continuation text, nothing else.`;
       break;
     case 'rewrite':
-      userMessage += `The Agent drafted: "${existingText}". Use this as direction for what the Agent wants to say, but write a polished, complete message from the Agent's perspective.`;
+      instruction = `You drafted: "${existingText}". Write a polished, complete version of what you want to say. Output only the message text, nothing else.`;
       break;
   }
 
-  return { system, userMessage };
+  // Append instruction to last user turn if it's already 'user', otherwise add new user turn
+  const lastApiMsg = messages.at(-1);
+  if (lastApiMsg?.role === 'user') {
+    lastApiMsg.content += `\n\n${instruction}`;
+  } else {
+    messages.push({ role: 'user', content: instruction });
+  }
+
+  return { system, messages };
 }
 
 // ── Streaming ─────────────────────────────────────────
@@ -304,7 +366,7 @@ export async function streamSuggestion(
 
   try {
     const context = await gatherSuggestionContext(companyId, sessionId);
-    const { system, userMessage } = buildSuggestionPrompt(context, existingText, mode);
+    const { system, messages } = buildSuggestionPrompt(context, existingText, mode);
 
     // Determine max tokens based on response length setting
     const responseLength = context.agentProfile?.response_flow?.default_style?.response_length;
@@ -316,7 +378,7 @@ export async function streamSuggestion(
       model: RESPONSE_MODEL,
       max_tokens: maxTokens,
       system,
-      messages: [{ role: 'user', content: userMessage }],
+      messages,
     });
 
     // Handle client disconnect
