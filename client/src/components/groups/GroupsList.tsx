@@ -98,7 +98,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
         <div className="flex items-center gap-1.5">
           {selectedIds.length === 0 ? (
             <span className="text-xs text-muted-foreground">
-              {monitoredCount} enabled · {groups.length - monitoredCount} disabled
+              {monitoredCount} watching · {groups.length - monitoredCount} not watching
             </span>
           ) : (
             <>
@@ -114,7 +114,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
                 ) : (
                   <Eye className="h-3.5 w-3.5" />
                 )}
-                Enable
+                Watch
               </Button>
               <Button
                 size="sm"
@@ -124,7 +124,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
                 onClick={() => handleBulkToggle(false)}
               >
                 <EyeOff className="h-3.5 w-3.5" />
-                Disable
+                Unwatch
               </Button>
               <Button
                 size="icon"
@@ -185,7 +185,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
                   variant={group.monitoring_enabled ? 'default' : 'outline'}
                   className={`text-xs ${group.monitoring_enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 hover:bg-emerald-100' : ''}`}
                 >
-                  {group.monitoring_enabled ? 'Enabled' : 'Disabled'}
+                  {group.monitoring_enabled ? 'Watching' : 'Not watching'}
                 </Badge>
                 <Switch
                   checked={group.monitoring_enabled}
