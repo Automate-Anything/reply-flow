@@ -185,6 +185,46 @@ export async function getGroupInfo(
   }
 }
 
+export async function listGroups(
+  channelToken: string
+): Promise<Array<{ id: string; name: string; participants_count?: number }>> {
+  const gate = gateApi(channelToken);
+  const allGroups: Array<{ id: string; name: string; participants_count?: number }> = [];
+
+  try {
+    let offset = 0;
+    const limit = 100;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data } = await gate.get('/groups', {
+        params: { count: limit, offset },
+      });
+
+      const groups = data.groups || data || [];
+      if (!Array.isArray(groups) || groups.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const g of groups) {
+        allGroups.push({
+          id: g.id,
+          name: g.name || '',
+          participants_count: g.participants?.length ?? undefined,
+        });
+      }
+
+      offset += groups.length;
+      hasMore = groups.length === limit;
+    }
+  } catch (err) {
+    console.error('[whapi] Failed to list groups:', err);
+  }
+
+  return allGroups;
+}
+
 export async function getContactProfile(
   channelToken: string,
   phone: string
