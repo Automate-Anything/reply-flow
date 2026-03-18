@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { Users } from 'lucide-react';
+import { Users, Eye, EyeOff, X, Loader2 } from 'lucide-react';
 import type { GroupChat } from '@/types/groups';
 
 interface GroupsListProps {
@@ -77,94 +77,125 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
     );
   }
 
+  const monitoredCount = groups.filter((g) => g.monitoring_enabled).length;
+
   return (
     <div className="space-y-2">
-      {/* Header row with Select All */}
-      <div className="flex items-center gap-3 px-4 py-2">
-        <Checkbox
-          checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-          onCheckedChange={(checked) => handleSelectAll(checked === true)}
-        />
-        <span className="text-sm text-muted-foreground">
-          {groups.length} group{groups.length !== 1 ? 's' : ''}
-        </span>
+      {/* Header + bulk actions */}
+      <div className="flex items-center justify-between px-2 py-1.5">
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <Checkbox
+            checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+            onCheckedChange={(checked) => handleSelectAll(checked === true)}
+          />
+          <span className="text-sm font-medium text-muted-foreground">
+            {selectedIds.length > 0
+              ? `${selectedIds.length} of ${groups.length} selected`
+              : `${groups.length} groups`}
+          </span>
+        </label>
+
+        <div className="flex items-center gap-1.5">
+          {selectedIds.length === 0 ? (
+            <span className="text-xs text-muted-foreground">
+              {monitoredCount} monitoring · {groups.length - monitoredCount} off
+            </span>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="default"
+                className="h-7 text-xs gap-1.5"
+                disabled={bulkActioning}
+                onClick={() => handleBulkToggle(true)}
+              >
+                {bulkActioning ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+                Enable
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                disabled={bulkActioning}
+                onClick={() => handleBulkToggle(false)}
+              >
+                <EyeOff className="h-3.5 w-3.5" />
+                Disable
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                disabled={bulkActioning}
+                onClick={() => setSelectedIds([])}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Bulk action bar */}
-      {selectedIds.length > 0 && (
-        <div className="bg-muted/50 border rounded-lg p-3 flex items-center justify-between">
-          <span className="text-sm font-medium">{selectedIds.length} selected</span>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={bulkActioning}
-              onClick={() => handleBulkToggle(true)}
-            >
-              Enable Monitoring
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={bulkActioning}
-              onClick={() => handleBulkToggle(false)}
-            >
-              Disable Monitoring
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={bulkActioning}
-              onClick={() => setSelectedIds([])}
-            >
-              Deselect
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Group rows */}
-      {groups.map((group) => (
-        <Card key={group.id} className="transition-colors">
-          <CardContent className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <Checkbox
-                checked={selectedIds.includes(group.id)}
-                onCheckedChange={(checked) => handleSelectOne(group.id, checked === true)}
-              />
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
-                <Users className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium truncate">
-                    {group.group_name || group.group_jid}
-                  </span>
-                  {(group.criteria_count ?? 0) > 0 && (
-                    <Badge variant="secondary" className="shrink-0">
-                      {group.criteria_count} rule{group.criteria_count !== 1 ? 's' : ''}
-                    </Badge>
-                  )}
+      {groups.map((group) => {
+        const isSelected = selectedIds.includes(group.id);
+        return (
+          <Card
+            key={group.id}
+            className={`transition-colors cursor-pointer ${isSelected ? 'ring-1 ring-primary/30 bg-primary/[0.02]' : ''}`}
+            onClick={() => handleSelectOne(group.id, !isSelected)}
+          >
+            <CardContent className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={(checked) => handleSelectOne(group.id, checked === true)}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
+                  <Users className="h-4 w-4" />
                 </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  {group.channel_name ? `${group.channel_name} · ` : ''}
-                  {group.group_jid}
-                </p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm truncate">
+                      {group.group_name || group.group_jid}
+                    </span>
+                    {(group.criteria_count ?? 0) > 0 && (
+                      <Badge variant="secondary" className="shrink-0 text-xs">
+                        {group.criteria_count} rule{group.criteria_count !== 1 ? 's' : ''}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {group.channel_name ? `${group.channel_name} · ` : ''}
+                    {group.group_jid}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2 ml-4 shrink-0">
-              <span className="text-xs text-muted-foreground">
-                {group.monitoring_enabled ? 'Monitoring' : 'Off'}
-              </span>
-              <Switch
-                checked={group.monitoring_enabled}
-                onCheckedChange={(enabled) => toggleMonitoring(group.id, enabled)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              <div
+                className="flex items-center gap-2 ml-4 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Badge
+                  variant={group.monitoring_enabled ? 'default' : 'outline'}
+                  className={`text-xs ${group.monitoring_enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 hover:bg-emerald-100' : ''}`}
+                >
+                  {group.monitoring_enabled ? 'Monitoring' : 'Off'}
+                </Badge>
+                <Switch
+                  checked={group.monitoring_enabled}
+                  onCheckedChange={(enabled) => toggleMonitoring(group.id, enabled)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
