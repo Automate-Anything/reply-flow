@@ -144,9 +144,6 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
         </div>
       )}
 
-        </div>
-      </div>
-
       {/* Group rows */}
       {groups.map((group) => {
         const isSelected = selectedIds.includes(group.id);
