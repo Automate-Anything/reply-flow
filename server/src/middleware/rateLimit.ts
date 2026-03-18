@@ -42,6 +42,6 @@ export const suggestionLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req as unknown as { userId?: string }).userId || req.ip || 'unknown',
+  keyGenerator: (req) => (req as unknown as { userId?: string }).userId || 'unknown',
   message: { error: 'Suggestion rate limit reached. Please slow down.' },
 });
