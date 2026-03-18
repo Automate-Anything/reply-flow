@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, RefreshCw, Users, Bell, MessageSquare } from 'lucide-react';
 import { useGroups } from '@/hooks/useGroups';
 import { useAlertRules } from '@/hooks/useAlertRules';
 import { useMatchedMessages } from '@/hooks/useMatchedMessages';
@@ -32,7 +33,6 @@ export default function GroupsPage() {
     refetch: refetchMatches,
   } = useMatchedMessages();
 
-  // Realtime updates for new matches
   useGroupRealtime({
     onNewMatch: () => {
       refetchMatches();
@@ -40,46 +40,76 @@ export default function GroupsPage() {
     },
   });
 
+  const watchingCount = groups.filter((g) => g.monitoring_enabled).length;
+
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b px-6 py-4">
+      {/* Header */}
+      <div className="border-b px-6 py-5">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">WhatsApp Groups</h1>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold">WhatsApp Groups</h1>
+              {!groupsLoading && groups.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {watchingCount} of {groups.length} groups watched
+                </p>
+              )}
+            </div>
+          </div>
           <Button
             variant="outline"
             size="sm"
             onClick={syncGroups}
             disabled={syncing}
+            className="gap-2"
           >
             {syncing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className="h-4 w-4" />
             )}
             Sync Groups
           </Button>
         </div>
       </div>
 
+      {/* Tabs */}
       <Tabs defaultValue="groups" className="flex-1 flex flex-col">
         <div className="border-b px-6">
           <TabsList>
-            <TabsTrigger value="groups">
-              Groups{!groupsLoading && groups.length > 0 ? ` (${groups.length})` : ''}
+            <TabsTrigger value="groups" className="gap-1.5">
+              <Users className="h-3.5 w-3.5" />
+              Groups
+              {!groupsLoading && groups.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                  {groups.length}
+                </Badge>
+              )}
             </TabsTrigger>
-            <TabsTrigger value="rules">
-              Alert Rules{!rulesLoading && rules.length > 0 ? ` (${rules.length})` : ''}
+            <TabsTrigger value="rules" className="gap-1.5">
+              <Bell className="h-3.5 w-3.5" />
+              Alert Rules
+              {!rulesLoading && rules.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                  {rules.length}
+                </Badge>
+              )}
             </TabsTrigger>
-            <TabsTrigger value="matches">Matched Messages</TabsTrigger>
+            <TabsTrigger value="matches" className="gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5" />
+              Matched Messages
+            </TabsTrigger>
           </TabsList>
         </div>
 
         <TabsContent value="groups" className="flex-1 p-6">
-          <div className="mb-4">
-            <p className="text-sm text-muted-foreground">
-              Choose which groups to watch. Only watched groups will have their messages scanned by your alert rules.
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Choose which groups to watch. Only watched groups will have their messages scanned by your alert rules.
+          </p>
           <GroupsList
             groups={groups}
             loading={groupsLoading}
