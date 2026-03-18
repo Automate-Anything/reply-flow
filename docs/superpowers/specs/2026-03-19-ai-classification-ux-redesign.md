@@ -104,7 +104,7 @@ When "Custom settings" is selected, additional fields appear:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| Mode | Select | (inherits) | "Suggest & Confirm" / "Auto-Apply" |
+| Mode | Select | (inherits) | "Suggest & Confirm" / "Auto-Apply" (stored as `'suggest'` / `'auto_apply'`, matching `companies.classification_mode`) |
 | Auto-classify new conversations | Toggle | (inherits) | Override company default |
 | Channel-specific rules | Textarea | Empty | Label: "These rules are used *in addition to* company-level rules." |
 
@@ -180,7 +180,8 @@ ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN
   'message_assigned', 'message_accessible',
   'snooze_set', 'schedule_set', 'schedule_sent',
   'status_change', 'contact_note',
-  'handoff', 'group_criteria_match',
+  'handoff',
+  'group_criteria_match',
   -- new:
   'classification'
 ));
@@ -246,9 +247,9 @@ In `messageProcessor.ts`, the existing `isNewSession` check stays, but reads con
 - `ChannelClassificationSettings.tsx` — Channel-level config card
 
 ### Modified Components
-- `ContactPanel.tsx` — Add third tab "AI". Convert from uncontrolled `<Tabs defaultValue="info">` to controlled `<Tabs value={activeTab} onValueChange={setActiveTab}>`. Accept new prop `initialTab?: 'info' | 'notes' | 'ai'` that sets the initial tab when the panel opens (defaults to `'info'`). Reset to `initialTab` when panel opens/closes.
-- `ConversationHeader.tsx` — Wand button calls a new `onOpenClassification` callback (instead of `onClassify`). Add badge dot for pending suggestions.
-- `InboxPage.tsx` — New state: `contactPanelTab`. Wand button sets `contactPanelTab = 'ai'` and opens the panel. Contact name click sets `contactPanelTab = 'info'` and opens the panel. Pass `initialTab={contactPanelTab}` to `ContactPanel`.
+- `ContactPanel.tsx` — Add third tab "AI". Convert from uncontrolled `<Tabs defaultValue="info">` to controlled `<Tabs value={activeTab} onValueChange={setActiveTab}>`. Accept new prop `initialTab?: 'info' | 'notes' | 'ai'` — when this prop changes, sync internal `activeTab` state to it (via `useEffect`). Defaults to `'info'`.
+- `ConversationHeader.tsx` — Wand button calls a new `onOpenClassification` callback (replaces `onClassify`). The old `onClassify` prop and direct `classify()` call are removed — manual classification is now triggered only via the Analyze button inside `ClassificationTab`. Add badge dot for pending suggestions.
+- `InboxPage.tsx` — New state: `contactPanelTab` (default `'info'`). Wand button handler: sets `contactPanelTab = 'ai'` and opens the panel (passes `onOpenClassification` to `ConversationHeader` instead of the old `onClassify`). Contact name click: sets `contactPanelTab = 'info'` and opens the panel. Panel `onClose` handler: resets `contactPanelTab = 'info'` so re-opening defaults to Info. Pass `initialTab={contactPanelTab}` to `ContactPanel`.
 
 ### Removed Components
 - `ClassificationCard.tsx` — Replaced by `ClassificationTab.tsx`
