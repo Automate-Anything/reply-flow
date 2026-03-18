@@ -7,7 +7,6 @@ export interface GroupChat {
   monitoring_enabled: boolean;
   created_at: string;
   updated_at: string;
-  // Joined fields from API
   channel_name?: string;
   criteria_count?: number;
 }
@@ -26,7 +25,9 @@ export interface GroupChatMessage {
 
 export interface GroupCriteria {
   id: string;
+  company_id?: string;
   group_chat_id: string | null;
+  rule_group_id: string | null;
   name: string;
   match_type: 'keyword' | 'ai';
   keyword_config: { keywords: string[]; operator: 'and' | 'or' };
@@ -37,13 +38,32 @@ export interface GroupCriteria {
   updated_at: string;
 }
 
+export interface AlertRule {
+  id: string;
+  rule_group_id: string | null;
+  name: string;
+  match_type: 'keyword' | 'ai';
+  keyword_config: { keywords: string[]; operator: 'and' | 'or' };
+  ai_description: string | null;
+  notify_user_ids: string[];
+  is_enabled: boolean;
+  scope: string[] | null;
+  scope_names?: string[];
+  created_at: string;
+}
+
 export interface GroupCriteriaMatch {
   id: string;
+  company_id?: string;
   group_chat_message_id: string;
   criteria_ids: string[];
-  notification_ids: string[];
+  notification_ids?: string[];
   created_at: string;
-  // Joined fields (Supabase returns embedded tables by their table name)
   group_chat_messages?: GroupChatMessage;
-  criteria?: GroupCriteria[];
+}
+
+export interface SyncResult {
+  groups: GroupChat[];
+  new_count: number;
+  errors: Array<{ channel_id: number; error: string }>;
 }
