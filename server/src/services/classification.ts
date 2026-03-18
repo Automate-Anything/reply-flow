@@ -118,22 +118,22 @@ async function fetchAvailableEntities(companyId: string): Promise<AvailableEntit
         .from('conversation_priorities')
         .select('id, name, is_default')
         .eq('company_id', companyId)
-        .is('deleted_at', null),
+        .eq('is_deleted', false),
       supabaseAdmin
         .from('conversation_statuses')
         .select('id, name, is_default')
         .eq('company_id', companyId)
-        .is('deleted_at', null),
+        .eq('is_deleted', false),
       supabaseAdmin
         .from('contact_tags')
         .select('id, name')
         .eq('company_id', companyId)
-        .is('deleted_at', null),
+        .eq('is_deleted', false),
       supabaseAdmin
         .from('contact_lists')
         .select('id, name')
         .eq('company_id', companyId)
-        .is('deleted_at', null),
+        .eq('is_deleted', false),
     ]);
 
   return {
