@@ -120,7 +120,7 @@ export function useAlertRules(groups: GroupChat[]) {
           name: values.name || rule.name,
           match_type: values.match_type || rule.match_type,
           keyword_config: values.keyword_config || rule.keyword_config,
-          ai_description: values.ai_description ?? rule.ai_description,
+          ai_description: (values.ai_description ?? rule.ai_description) || undefined,
           notify_user_ids: values.notify_user_ids || rule.notify_user_ids,
           scope: values.scope,
         });
