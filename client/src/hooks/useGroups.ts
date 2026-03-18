@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { GroupChat } from '@/types/groups';
 
 export function useGroups() {
   const [groups, setGroups] = useState<GroupChat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const hasAutoSynced = useRef(false);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -21,6 +24,35 @@ export function useGroups() {
     fetchGroups();
   }, [fetchGroups]);
 
+  const syncGroups = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const { data } = await api.post('/groups/sync');
+      setGroups(data.groups || []);
+      if (data.new_count > 0) {
+        toast.success(`Synced — ${data.new_count} new group${data.new_count > 1 ? 's' : ''} found`);
+      } else {
+        toast.success('All groups up to date');
+      }
+      if (data.errors?.length > 0) {
+        toast.error(`${data.errors.length} channel${data.errors.length > 1 ? 's' : ''} failed to sync`);
+      }
+    } catch (err) {
+      console.error('Failed to sync groups:', err);
+      toast.error('Failed to sync groups');
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
+  // Auto-sync on first visit if no groups exist
+  useEffect(() => {
+    if (!loading && groups.length === 0 && !hasAutoSynced.current) {
+      hasAutoSynced.current = true;
+      syncGroups();
+    }
+  }, [loading, groups.length, syncGroups]);
+
   const toggleMonitoring = useCallback(async (groupId: string, enabled: boolean) => {
     await api.patch(`/groups/${groupId}`, { monitoring_enabled: enabled });
     setGroups((prev) =>
@@ -28,5 +60,5 @@ export function useGroups() {
     );
   }, []);
 
-  return { groups, loading, refetch: fetchGroups, toggleMonitoring };
+  return { groups, loading, syncing, refetch: fetchGroups, syncGroups, toggleMonitoring };
 }
