@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { getGroupInfo } from '../services/whapi.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
+router.use(requireAuth);
 
 // ── Static routes FIRST (before any /:id parameterized routes) ──
 
