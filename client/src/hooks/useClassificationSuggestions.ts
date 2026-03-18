@@ -40,6 +40,7 @@ export function useClassificationSuggestions(sessionId: string | null) {
   const [suggestions, setSuggestions] = useState<ClassificationSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [classifying, setClassifying] = useState(false);
+  const hasPending = suggestions.some((s) => s.status === 'pending');
 
   const fetchSuggestions = useCallback(async () => {
     if (!sessionId) {
@@ -97,6 +98,7 @@ export function useClassificationSuggestions(sessionId: string | null) {
     suggestions,
     loading,
     classifying,
+    hasPending,
     classify,
     accept,
     dismiss,
