@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { Users, Eye, EyeOff, X, Loader2, AlertTriangle } from 'lucide-react';
+import { Users, Eye, EyeOff, Loader2, AlertTriangle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import type { GroupChat } from '@/types/groups';
 

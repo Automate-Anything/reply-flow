@@ -576,7 +576,7 @@ export async function classifyConversation(
     ? channelSettings.classification_mode
     : company.classification_mode ?? 'suggest';
 
-  const effectiveAutoClassify = override === 'custom' && channelSettings?.classification_auto_classify !== null
+  const effectiveAutoClassify = override === 'custom' && channelSettings != null && channelSettings.classification_auto_classify !== null
     ? channelSettings.classification_auto_classify
     : company.classification_auto_classify ?? false;
 
@@ -704,11 +704,11 @@ export async function classifyConversation(
         : `AI has suggestions for ${contactName}`;
 
       const appliedItems: string[] = [];
-      if (filtered.labels?.length) appliedItems.push(...filtered.labels.map((l) => l.name));
-      if (filtered.priority) appliedItems.push(`Priority: ${filtered.priority.name}`);
-      if (filtered.status) appliedItems.push(`Status: ${filtered.status.name}`);
-      if (filtered.contact_tags?.length) appliedItems.push(...filtered.contact_tags.map((t) => t.name));
-      if (filtered.contact_lists?.length) appliedItems.push(...filtered.contact_lists.map((l) => l.name));
+      if (filtered.labels?.length) appliedItems.push(...filtered.labels.map((l) => l.name ?? l.id));
+      if (filtered.priority) appliedItems.push(`Priority: ${filtered.priority.name ?? filtered.priority.id}`);
+      if (filtered.status) appliedItems.push(`Status: ${filtered.status.name ?? filtered.status.id}`);
+      if (filtered.contact_tags?.length) appliedItems.push(...filtered.contact_tags.map((t) => t.name ?? t.id));
+      if (filtered.contact_lists?.length) appliedItems.push(...filtered.contact_lists.map((l) => l.name ?? l.id));
 
       const body = isAutoApply && appliedItems.length > 0
         ? `Applied: ${appliedItems.join(', ')}`
