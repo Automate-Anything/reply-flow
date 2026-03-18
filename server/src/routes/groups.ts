@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
-import { getGroupInfo } from '../services/whapi.js';
+import { getGroupInfo, listGroups } from '../services/whapi.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -114,6 +114,7 @@ router.post('/criteria', async (req, res, next) => {
       ai_description,
       notify_user_ids,
       is_enabled,
+      rule_group_id,
     } = req.body;
 
     const { data, error } = await supabaseAdmin
@@ -127,6 +128,7 @@ router.post('/criteria', async (req, res, next) => {
         ai_description: ai_description || null,
         notify_user_ids: notify_user_ids || [],
         is_enabled: is_enabled ?? true,
+        rule_group_id: rule_group_id || null,
       })
       .select()
       .single();
@@ -189,6 +191,169 @@ router.delete('/criteria/:id', async (req, res, next) => {
 
     if (error) throw error;
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /groups/sync — Sync groups from Whapi for all connected channels
+router.post('/sync', async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+
+    const { data: channels, error: chErr } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('id, channel_token')
+      .eq('company_id', companyId)
+      .eq('channel_status', 'connected');
+
+    if (chErr) throw chErr;
+    if (!channels || channels.length === 0) {
+      return res.json({ groups: [], new_count: 0, errors: [] });
+    }
+
+    const allGroups: any[] = [];
+    const errors: Array<{ channel_id: number; error: string }> = [];
+
+    const results = await Promise.allSettled(
+      channels.map(async (ch) => {
+        const groups = await listGroups(ch.channel_token);
+        return { channel: ch, groups };
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const { channel, groups } = result.value;
+        for (const g of groups) {
+          allGroups.push({
+            company_id: companyId,
+            channel_id: channel.id,
+            group_jid: g.id,
+            group_name: g.name || null,
+          });
+        }
+      } else {
+        errors.push({
+          channel_id: 0,
+          error: result.reason?.message || 'Unknown error',
+        });
+      }
+    }
+
+    let newCount = 0;
+    if (allGroups.length > 0) {
+      const { data: existing } = await supabaseAdmin
+        .from('group_chats')
+        .select('group_jid, channel_id')
+        .eq('company_id', companyId);
+
+      const existingSet = new Set(
+        (existing || []).map((e: any) => `${e.channel_id}:${e.group_jid}`)
+      );
+
+      const newGroups = allGroups.filter(
+        (g) => !existingSet.has(`${g.channel_id}:${g.group_jid}`)
+      );
+
+      if (newGroups.length > 0) {
+        const { error: insertErr } = await supabaseAdmin
+          .from('group_chats')
+          .insert(newGroups);
+        if (insertErr) throw insertErr;
+        newCount = newGroups.length;
+      }
+
+      const namesToUpdate = allGroups.filter(
+        (g) => g.group_name && existingSet.has(`${g.channel_id}:${g.group_jid}`)
+      );
+      for (const g of namesToUpdate) {
+        await supabaseAdmin
+          .from('group_chats')
+          .update({ group_name: g.group_name, updated_at: new Date().toISOString() })
+          .eq('company_id', companyId)
+          .eq('channel_id', g.channel_id)
+          .eq('group_jid', g.group_jid)
+          .is('group_name', null);
+      }
+    }
+
+    const { data: groups, error: fetchErr } = await supabaseAdmin
+      .from('group_chats')
+      .select('*, whatsapp_channels(channel_name)')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false });
+
+    if (fetchErr) throw fetchErr;
+
+    const enriched = (groups || []).map((g: any) => ({
+      ...g,
+      channel_name: g.whatsapp_channels?.channel_name ?? null,
+      whatsapp_channels: undefined,
+    }));
+
+    res.json({ groups: enriched, new_count: newCount, errors });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /groups/all-criteria — List ALL criteria for the company (global + group-specific)
+router.get('/all-criteria', async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+
+    const { data, error } = await supabaseAdmin
+      .from('group_criteria')
+      .select('*')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ criteria: data || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /groups/all-matches — Cross-group matched messages
+router.get('/all-matches', async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { limit = '50', offset = '0', group_id, criteria_id } = req.query;
+
+    let query = supabaseAdmin
+      .from('group_criteria_matches')
+      .select('*, group_chat_messages (*)', { count: 'exact' })
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false })
+      .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+    if (group_id && typeof group_id === 'string') {
+      const { data: msgIds } = await supabaseAdmin
+        .from('group_chat_messages')
+        .select('id')
+        .eq('group_chat_id', group_id)
+        .eq('company_id', companyId);
+
+      const ids = (msgIds || []).map((m: any) => m.id);
+      if (ids.length === 0) {
+        return res.json({ matches: [], count: 0 });
+      }
+      query = query.in('group_chat_message_id', ids);
+    }
+
+    const { data: matches, error, count } = await query;
+    if (error) throw error;
+
+    let result = matches || [];
+    if (criteria_id && typeof criteria_id === 'string') {
+      result = result.filter((m: any) =>
+        m.criteria_ids && m.criteria_ids.includes(criteria_id)
+      );
+    }
+
+    res.json({ matches: result, count });
   } catch (err) {
     next(err);
   }
