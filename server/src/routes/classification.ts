@@ -148,44 +148,141 @@ router.post('/suggestions/:suggestionId/accept-partial', requirePermission('conv
   }
 });
 
-// GET /settings — get company classification mode
-router.get('/settings', requirePermission('company_settings', 'view'), async (req, res, next) => {
+// GET /company-settings — get all company classification config
+router.get('/company-settings', requirePermission('company_settings', 'view'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-
     const { data, error } = await supabaseAdmin
       .from('companies')
-      .select('classification_mode')
+      .select('classification_enabled, classification_mode, classification_auto_classify, classification_rules')
       .eq('id', companyId)
       .single();
 
     if (error) throw error;
-
-    res.json({ classification_mode: data?.classification_mode ?? null });
+    res.json(data);
   } catch (err) {
     next(err);
   }
 });
 
-// PUT /settings — update company classification mode
-router.put('/settings', requirePermission('company_settings', 'edit'), async (req, res, next) => {
+// PUT /company-settings — update company classification config
+router.put('/company-settings', requirePermission('company_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { classification_mode } = req.body as { classification_mode?: string };
+    const { classification_enabled, classification_mode, classification_auto_classify, classification_rules } = req.body;
 
-    if (classification_mode !== 'auto_apply' && classification_mode !== 'suggest') {
-      res.status(400).json({ error: 'classification_mode must be "auto_apply" or "suggest".' });
+    const update: Record<string, unknown> = {};
+    if (typeof classification_enabled === 'boolean') update.classification_enabled = classification_enabled;
+    if (classification_mode === 'suggest' || classification_mode === 'auto_apply') update.classification_mode = classification_mode;
+    if (typeof classification_auto_classify === 'boolean') update.classification_auto_classify = classification_auto_classify;
+    if (typeof classification_rules === 'string') update.classification_rules = classification_rules;
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({ error: 'No valid fields to update.' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin.from('companies').update(update).eq('id', companyId);
+    if (error) throw error;
+    res.json({ status: 'ok' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /channel-settings/:channelId — get channel classification config
+router.get('/channel-settings/:channelId', requirePermission('company_settings', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const channelId = req.params.channelId as string;
+
+    const { data, error } = await supabaseAdmin
+      .from('channel_agent_settings')
+      .select('classification_override, classification_mode, classification_auto_classify, classification_rules')
+      .eq('channel_id', channelId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (error) throw error;
+    res.json(data || { classification_override: 'company_defaults', classification_mode: null, classification_auto_classify: null, classification_rules: null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /channel-settings/:channelId — update channel classification config
+router.put('/channel-settings/:channelId', requirePermission('company_settings', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const channelId = req.params.channelId as string;
+    const { classification_override, classification_mode, classification_auto_classify, classification_rules } = req.body;
+
+    const update: Record<string, unknown> = {};
+    if (['company_defaults', 'custom', 'disabled'].includes(classification_override)) update.classification_override = classification_override;
+    if (classification_mode === 'suggest' || classification_mode === 'auto_apply' || classification_mode === null) update.classification_mode = classification_mode;
+    if (typeof classification_auto_classify === 'boolean' || classification_auto_classify === null) update.classification_auto_classify = classification_auto_classify;
+    if (typeof classification_rules === 'string' || classification_rules === null) update.classification_rules = classification_rules;
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({ error: 'No valid fields to update.' });
       return;
     }
 
     const { error } = await supabaseAdmin
-      .from('companies')
-      .update({ classification_mode })
-      .eq('id', companyId);
+      .from('channel_agent_settings')
+      .update(update)
+      .eq('channel_id', channelId)
+      .eq('company_id', companyId);
 
     if (error) throw error;
+    res.json({ status: 'ok' });
+  } catch (err) {
+    next(err);
+  }
+});
 
-    res.json({ status: 'ok', classification_mode });
+// GET /status/:sessionId — resolved config + channel info for the AI tab
+router.get('/status/:sessionId', requirePermission('conversations', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const sessionId = req.params.sessionId as string;
+
+    const { data: session } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('channel_id')
+      .eq('id', sessionId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (!session) {
+      res.status(404).json({ error: 'Session not found.' });
+      return;
+    }
+
+    const { data: companyData } = await supabaseAdmin
+      .from('companies')
+      .select('classification_enabled, classification_mode, classification_auto_classify')
+      .eq('id', companyId)
+      .single();
+
+    const { data: channelSettingsData } = await supabaseAdmin
+      .from('channel_agent_settings')
+      .select('classification_override, classification_mode, classification_auto_classify')
+      .eq('channel_id', session.channel_id)
+      .eq('company_id', companyId)
+      .single();
+
+    const channelOverride = channelSettingsData?.classification_override ?? 'company_defaults';
+    const enabled = companyData?.classification_enabled && channelOverride !== 'disabled';
+
+    res.json({
+      enabled,
+      channel_id: session.channel_id,
+      mode: channelOverride === 'custom' && channelSettingsData?.classification_mode
+        ? channelSettingsData.classification_mode
+        : companyData?.classification_mode ?? 'suggest',
+      override: channelOverride,
+    });
   } catch (err) {
     next(err);
   }

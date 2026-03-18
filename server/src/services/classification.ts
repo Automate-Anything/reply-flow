@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
+import { createNotificationsForUsers } from './notificationService.js';
 import type {
   ClassificationSuggestion,
   ClassificationSuggestions,
@@ -544,41 +545,51 @@ export async function classifyConversation(
     contact_id: string;
   };
 
-  // 2. Fetch channel_agent_settings → agent_id → ai_agents.profile_data.classification
+  // 2. Resolve classification config from company + channel settings
+  const { data: company } = await supabaseAdmin
+    .from('companies')
+    .select('classification_enabled, classification_mode, classification_auto_classify, classification_rules')
+    .eq('id', companyId)
+    .single();
+
+  if (!company?.classification_enabled) {
+    console.log('[classify] BAIL: company classification disabled');
+    return null;
+  }
+
   const { data: channelSettings } = await supabaseAdmin
     .from('channel_agent_settings')
-    .select('agent_id')
+    .select('classification_override, classification_mode, classification_auto_classify, classification_rules')
     .eq('channel_id', channelId)
     .eq('company_id', companyId)
     .single();
 
-  if (!channelSettings?.agent_id) {
+  const override = channelSettings?.classification_override ?? 'company_defaults';
+
+  if (override === 'disabled') {
+    console.log('[classify] BAIL: channel classification disabled');
     return null;
   }
 
-  const { data: agent } = await supabaseAdmin
-    .from('ai_agents')
-    .select('profile_data')
-    .eq('id', channelSettings.agent_id)
-    .eq('company_id', companyId)
-    .single();
+  // Resolve effective config: channel custom overrides company defaults
+  const effectiveMode = override === 'custom' && channelSettings?.classification_mode
+    ? channelSettings.classification_mode
+    : company.classification_mode ?? 'suggest';
 
-  const profileData = agent?.profile_data as Record<string, unknown> | null;
-  const classificationConfig = profileData?.classification as
-    | { enabled?: boolean; auto_classify_new?: boolean; rules?: string }
-    | undefined;
+  const effectiveAutoClassify = override === 'custom' && channelSettings?.classification_auto_classify !== null
+    ? channelSettings.classification_auto_classify
+    : company.classification_auto_classify ?? false;
 
-  // 3. Return null if classification not enabled
-  if (!classificationConfig?.enabled) {
+  // For auto trigger, skip if auto-classify is disabled
+  if (trigger === 'auto' && !effectiveAutoClassify) {
+    console.log('[classify] BAIL: auto-classify disabled');
     return null;
   }
 
-  // 3b. For auto trigger, skip if auto_classify_new is explicitly disabled
-  if (trigger === 'auto' && classificationConfig.auto_classify_new === false) {
-    return null;
-  }
-
-  const rules = classificationConfig.rules ?? '';
+  // Rules: company rules + channel rules (additive)
+  const companyRules = company.classification_rules ?? '';
+  const channelRules = (override === 'custom' ? channelSettings?.classification_rules : null) ?? '';
+  const rules = [companyRules, channelRules].filter(Boolean).join('\n\n');
 
   // 4. Dedup check for auto trigger
   if (trigger === 'auto') {
@@ -671,14 +682,51 @@ export async function classifyConversation(
     return null;
   }
 
-  // 9. If company.classification_mode === 'auto_apply', apply immediately
-  const { data: company } = await supabaseAdmin
-    .from('companies')
-    .select('classification_mode')
-    .eq('id', companyId)
-    .single();
+  // Notify company members about classification
+  if (trigger === 'auto') {
+    const { data: members } = await supabaseAdmin
+      .from('company_members')
+      .select('user_id')
+      .eq('company_id', companyId);
 
-  if ((company as Record<string, unknown> | null)?.classification_mode === 'auto_apply') {
+    if (members && members.length > 0) {
+      const { data: contactData } = await supabaseAdmin
+        .from('contacts')
+        .select('first_name, last_name')
+        .eq('id', contactId)
+        .single();
+
+      const contactName = [contactData?.first_name, contactData?.last_name].filter(Boolean).join(' ') || 'Unknown';
+      const isAutoApply = effectiveMode === 'auto_apply';
+
+      const title = isAutoApply
+        ? `AI classified ${contactName}`
+        : `AI has suggestions for ${contactName}`;
+
+      const appliedItems: string[] = [];
+      if (filtered.labels?.length) appliedItems.push(...filtered.labels.map((l) => l.name));
+      if (filtered.priority) appliedItems.push(`Priority: ${filtered.priority.name}`);
+      if (filtered.status) appliedItems.push(`Status: ${filtered.status.name}`);
+      if (filtered.contact_tags?.length) appliedItems.push(...filtered.contact_tags.map((t) => t.name));
+      if (filtered.contact_lists?.length) appliedItems.push(...filtered.contact_lists.map((l) => l.name));
+
+      const body = isAutoApply && appliedItems.length > 0
+        ? `Applied: ${appliedItems.join(', ')}`
+        : undefined;
+
+      createNotificationsForUsers(
+        companyId,
+        members.map((m: { user_id: string }) => m.user_id),
+        'classification',
+        title,
+        body,
+        { conversation_id: sessionId, channel_id: channelId }
+      ).catch((err) => console.error('Classification notification failed:', err));
+    }
+  }
+
+  // 9. If effective mode is auto_apply, apply immediately
+  if (effectiveMode === 'auto_apply') {
     await applySuggestionItems(filtered, sessionId, contactId, companyId);
     await supabaseAdmin
       .from('classification_suggestions')

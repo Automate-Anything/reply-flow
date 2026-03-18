@@ -21,6 +21,7 @@ const PREFERENCE_DEFAULTS: Record<string, boolean> = {
   contact_note: true,
   handoff: true,
   group_criteria_match: true,
+  classification: true,
 };
 
 /**
