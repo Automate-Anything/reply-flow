@@ -54,12 +54,9 @@ export function AlertRulesList({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-base font-medium">Alert Rules</h3>
-          <p className="text-sm text-muted-foreground">
-            Define what to look for in your watched groups. When a message matches, the assigned team members get notified.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Define what to look for in your watched groups. When a message matches, the assigned team members get notified.
+        </p>
         <Button
           size="sm"
           onClick={() => {

@@ -44,12 +44,7 @@ export default function GroupsPage() {
     <div className="flex flex-col h-full">
       <div className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Groups</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Monitor WhatsApp group chats and get alerted on matching messages
-            </p>
-          </div>
+          <h1 className="text-2xl font-semibold">Groups</h1>
           <Button
             variant="outline"
             size="sm"
@@ -106,12 +101,9 @@ export default function GroupsPage() {
         </TabsContent>
 
         <TabsContent value="matches" className="flex-1 p-6">
-          <div className="mb-4">
-            <h3 className="text-base font-medium">Matched Messages</h3>
-            <p className="text-sm text-muted-foreground">
-              Messages from watched groups that triggered your alert rules
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Messages from watched groups that triggered your alert rules
+          </p>
           <MatchedMessagesList
             matches={matches}
             groups={groups}
