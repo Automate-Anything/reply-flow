@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { Users, Eye, EyeOff, X, Loader2 } from 'lucide-react';
+import { Users, Eye, EyeOff, X, Loader2, AlertTriangle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import type { GroupChat } from '@/types/groups';
 
 interface GroupsListProps {
@@ -172,6 +173,20 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
                       <Badge variant="secondary" className="shrink-0 text-xs">
                         {group.criteria_count} rule{group.criteria_count !== 1 ? 's' : ''}
                       </Badge>
+                    )}
+                    {!group.monitoring_enabled && (group.criteria_count ?? 0) > 0 && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">This group has alert rules but isn't being watched.<br />Rules won't fire until you start watching it.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">

@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Pencil, Trash2, Globe, Target } from 'lucide-react';
+import { Plus, Pencil, Trash2, Globe, Target, AlertTriangle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { AlertRuleDialog } from './AlertRuleDialog';
 import type { AlertRule, GroupChat } from '@/types/groups';
 
@@ -95,7 +96,15 @@ export function AlertRulesList({
         </Card>
       ) : (
         <div className="space-y-2">
-          {rules.map((rule) => (
+          {rules.map((rule) => {
+            // Check if this rule has unwatched groups
+            const watchedGroupIds = new Set(groups.filter((g) => g.monitoring_enabled).map((g) => g.id));
+            const hasUnwatchedTargets = rule.scope !== null && rule.scope.some((id) => !watchedGroupIds.has(id));
+            const allTargetsUnwatched = rule.scope !== null && rule.scope.every((id) => !watchedGroupIds.has(id));
+            const noGroupsWatched = groups.every((g) => !g.monitoring_enabled);
+            const showWarning = rule.scope === null ? noGroupsWatched : hasUnwatchedTargets;
+
+            return (
             <Card key={rule.id} className="transition-colors hover:bg-accent/50">
               <CardContent className="flex items-center justify-between py-4">
                 <div className="min-w-0 flex-1">
@@ -120,6 +129,31 @@ export function AlertRulesList({
                         </>
                       )}
                     </Badge>
+                    {showWarning && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="flex items-center gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
+                              <AlertTriangle className="h-3 w-3" />
+                              {rule.scope === null
+                                ? 'No groups watched'
+                                : allTargetsUnwatched
+                                  ? 'Target groups not watched'
+                                  : 'Some targets not watched'}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">
+                              {rule.scope === null
+                                ? 'None of your groups are being watched. This rule won\'t fire until you watch at least one group.'
+                                : allTargetsUnwatched
+                                  ? 'All groups this rule targets are not being watched. It won\'t fire until you start watching them.'
+                                  : 'Some groups this rule targets are not being watched. The rule will only fire for watched groups.'}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 truncate">
                     {rule.match_type === 'keyword'
@@ -157,7 +191,8 @@ export function AlertRulesList({
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
