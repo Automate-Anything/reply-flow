@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from './whapi.js';
+import { getProvider } from './providers/index.js';
 import { createNotification } from './notificationService.js';
 import { checkRateLimit, incrementRateCounter, check24HourWindow, checkContentSafety, checkDuplicateContent, hashMessageBody, logComplianceMetric, getResponseRateStatus } from './complianceUtils.js';
 import { simulateBeforeSend } from './sendSimulator.js';
@@ -47,7 +48,7 @@ async function processScheduledMessages() {
 
         const { data: channel } = await supabaseAdmin
           .from('channels')
-          .select('channel_token')
+          .select('channel_token, channel_type')
           .eq('id', session.channel_id)
           .eq('channel_status', 'connected')
           .single();
@@ -113,11 +114,8 @@ async function processScheduledMessages() {
         });
 
         // Send the message
-        const result = await whapi.sendTextMessage(channel.channel_token, chatId, msg.message_body);
-        const resultRecord = result as Record<string, unknown> & {
-          message?: { id?: string };
-          message_id?: string;
-        };
+        const provider = getProvider(channel.channel_type || 'whatsapp');
+        const result = await provider.sendMessage(channel as any, session.chat_id, msg.message_body);
 
         // Update message status
         const now = new Date().toISOString();
@@ -126,7 +124,7 @@ async function processScheduledMessages() {
           .update({
             status: 'sent',
             message_ts: now,
-            message_id_normalized: resultRecord.message?.id || resultRecord.message_id || null,
+            message_id_normalized: result.messageId || null,
             scheduled_for: null,
           })
           .eq('id', msg.id);

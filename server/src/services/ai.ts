@@ -12,6 +12,7 @@ import { isDebugModeEnabled } from './debugMode.js';
 import { downloadFromStorage } from './mediaStorage.js';
 import { sendHandoffNotification } from './handoffNotifier.js';
 import * as whapi from './whapi.js';
+import { getProvider } from './providers/index.js';
 import { checkRateLimit, incrementRateCounter, check24HourWindow, logComplianceMetric, hashMessageBody, getResponseRateStatus } from './complianceUtils.js';
 import { simulateBeforeSend } from './sendSimulator.js';
 
@@ -951,16 +952,12 @@ export async function sendOutsideHoursReply(
 
   const { data: ch } = await supabaseAdmin
     .from('channels')
-    .select('channel_token')
+    .select('channel_token, channel_type')
     .eq('id', channelId)
     .eq('channel_status', 'connected')
     .single();
 
   if (!ch) return;
-
-  const chatId = session.chat_id.includes('@')
-    ? session.chat_id
-    : `${session.chat_id}@s.whatsapp.net`;
 
   const now = new Date().toISOString();
   const outboundMetadata = { source: 'ai_send', kind: 'outside_hours' };
@@ -1010,12 +1007,12 @@ export async function sendOutsideHoursReply(
 
   if (insertError) throw insertError;
 
-  const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
-  console.log('[ai] whapi send result:', JSON.stringify(result));
+  const provider = getProvider(ch.channel_type || 'whatsapp');
+  const result = await provider.sendMessage(ch as any, session.chat_id, message);
+  console.log('[ai] provider send result:', JSON.stringify(result));
 
-  const whapiMessageId = (result as Record<string, unknown> & { message?: { id?: string } })?.message?.id || (result as Record<string, string>)?.message_id || null;
-  if (whapiMessageId && insertedMsg) {
-    await supabaseAdmin.from('chat_messages').update({ message_id_normalized: whapiMessageId }).eq('id', insertedMsg.id);
+  if (result.messageId && insertedMsg) {
+    await supabaseAdmin.from('chat_messages').update({ message_id_normalized: result.messageId }).eq('id', insertedMsg.id);
   }
 }
 
@@ -1037,16 +1034,12 @@ async function sendAndStoreMessage(
 
   const { data: ch } = await supabaseAdmin
     .from('channels')
-    .select('channel_token')
+    .select('channel_token, channel_type')
     .eq('id', session.channel_id)
     .eq('channel_status', 'connected')
     .single();
 
   if (!ch) return;
-
-  const chatId = session.chat_id.includes('@')
-    ? session.chat_id
-    : `${session.chat_id}@s.whatsapp.net`;
 
   const now = new Date().toISOString();
   const outboundMetadata = {
@@ -1111,11 +1104,11 @@ async function sendAndStoreMessage(
 
   if (insertError) throw insertError;
 
-  const result = await whapi.sendTextMessage(ch.channel_token, chatId, message);
-  console.log('[ai] whapi send result:', JSON.stringify(result));
+  const provider = getProvider(ch.channel_type || 'whatsapp');
+  const result = await provider.sendMessage(ch as any, session.chat_id, message);
+  console.log('[ai] provider send result:', JSON.stringify(result));
 
-  const whapiMessageId = (result as Record<string, unknown> & { message?: { id?: string } })?.message?.id || (result as Record<string, string>)?.message_id || null;
-  if (whapiMessageId && insertedMsg) {
-    await supabaseAdmin.from('chat_messages').update({ message_id_normalized: whapiMessageId }).eq('id', insertedMsg.id);
+  if (result.messageId && insertedMsg) {
+    await supabaseAdmin.from('chat_messages').update({ message_id_normalized: result.messageId }).eq('id', insertedMsg.id);
   }
 }

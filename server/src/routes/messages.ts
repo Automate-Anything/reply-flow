@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from '../services/whapi.js';
+import { getProvider } from '../services/providers/index.js';
 import { getSignedUrl, downloadAndStore, storeBuffer } from '../services/mediaStorage.js';
 import { createNotification } from '../services/notificationService.js';
 import { convertToOggOpus } from '../services/audioConverter.js';
@@ -65,13 +66,13 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
     // Get channel token via the session's channel
     const { data: channel } = await supabaseAdmin
       .from('channels')
-      .select('channel_token')
+      .select('channel_token, channel_type')
       .eq('id', session.channel_id)
       .eq('channel_status', 'connected')
       .single();
 
     if (!channel) {
-      res.status(400).json({ error: 'No connected WhatsApp channel for this conversation' });
+      res.status(400).json({ error: 'No connected channel for this conversation' });
       return;
     }
 
@@ -132,13 +133,12 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
       ? `Same message sent to ${dupeCheck.matchCount}+ contacts in the last hour`
       : undefined;
 
-    // Send via Whapi
-    const chatId = session.chat_id.includes('@')
-      ? session.chat_id
-      : `${session.chat_id}@s.whatsapp.net`;
-
-    const result = await whapi.sendTextMessage(channel.channel_token, chatId, body, whapiQuotedId);
-    console.log('[send] whapi result:', JSON.stringify(result));
+    // Send via channel provider
+    const provider = getProvider(channel.channel_type || 'whatsapp');
+    const result = await provider.sendMessage(channel as any, session.chat_id, body, {
+      quotedMessageId: whapiQuotedId,
+    });
+    console.log('[send] provider result:', JSON.stringify(result));
 
     incrementRateCounter(session.channel_id);
     logComplianceMetric(session.channel_id, companyId, {
@@ -164,7 +164,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
         phone_number: session.phone_number,
         message_body: body,
         message_type: 'text',
-        message_id_normalized: (result as Record<string, unknown> & { message?: { id?: string } })?.message?.id || (result as Record<string, string>)?.message_id || null,
+        message_id_normalized: result.messageId || null,
         direction: 'outbound',
         sender_type: 'human',
         status: 'sent',
