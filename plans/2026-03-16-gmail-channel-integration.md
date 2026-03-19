@@ -2,21 +2,37 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Transform Reply Flow from a WhatsApp-only inbox into an omnichannel platform supporting WhatsApp and Gmail, with a three-tab inbox (All Channels / WhatsApp / Gmail).
+**Goal:** Transform Reply Flow from a WhatsApp-only inbox into a **hybrid omnichannel platform** supporting WhatsApp and Gmail. Users can use each channel independently (dedicated WhatsApp / Gmail inbox tabs with channel-specific features) while also having omnichannel capabilities (All Channels tab, cross-channel contact linking, shared AI classification, unified contact history).
 
-**Architecture:** Six phases, each independently deployable. Phase 1 abstracts the DB and server to be channel-agnostic. Phase 2 adds Gmail backend (OAuth, Pub/Sub, send/receive). Phase 3 de-WhatsApp-ifies all UI copy and API routes. Phase 4 builds the three-tab omnichannel inbox. Phase 5 adds the email composer and email message rendering. Phase 6 adds cross-channel features (contact linking, channel switching, collision detection).
+**Architecture:** Seven phases, each independently deployable:
+- **Phase 1** — abstracts DB and server to be channel-agnostic
+- **Phase 1B** — abstracts the compliance/safety system for multi-channel support
+- **Phase 2** — adds Gmail backend (OAuth, Pub/Sub, send/receive)
+- **Phase 3** — de-WhatsApp-ifies UI copy and API routes
+- **Phase 4** — builds the three-tab hybrid inbox (All Channels / WhatsApp / Gmail)
+- **Phase 5** — adds email composer and email message rendering
+- **Phase 6** — adds cross-channel features (contact linking, shared history)
 
-**Tech Stack:** React 19 + TypeScript + Vite, Express 5, Supabase (Postgres + RLS), `googleapis` + `google-auth-library` (Gmail API), `@tiptap/react` + `@tiptap/starter-kit` (rich text editor), `juice` (CSS inlining for email HTML), `nodemailer/lib/mail-composer` (MIME construction).
+**Tech Stack:** React 19 + TypeScript + Vite, Express 5, Supabase (Postgres + RLS), `googleapis` + `google-auth-library` (Gmail API), `@tiptap/react` + `@tiptap/starter-kit` (rich text editor), `juice` (CSS inlining for email HTML), `nodemailer/lib/mail-composer` (MIME construction), `dompurify` (HTML sanitization for inbound email).
+
+**Last updated:** 2026-03-19 — re-audited after compliance system (migration 069), AI classification (migrations 065-068), and group chat monitoring (migration 063) were added.
 
 **Dependencies between phases:**
 ```
-Phase 1 (Channel Abstraction) ──→ Phase 2 (Gmail Backend) ──→ Phase 5 (Email Composer)
-         │                                    │
-         ├──→ Phase 3 (De-WhatsApp UI)        ├──→ Phase 6 (Cross-Channel)
-         │                                    │
-         └──→ Phase 4 (Omnichannel Inbox) ────┘
+Phase 1 (Channel Abstraction) ──→ Phase 1B (Compliance Abstraction) ──→ Phase 2 (Gmail Backend) ──→ Phase 5 (Email Composer)
+         │                                                                        │
+         ├──→ Phase 3 (De-WhatsApp UI)                                            ├──→ Phase 6 (Cross-Channel)
+         │                                                                        │
+         └──→ Phase 4 (Hybrid Inbox) ─────────────────────────────────────────────┘
 ```
-Phases 3 and 4 can run in parallel after Phase 1. Phase 5 needs Phase 2. Phase 6 needs Phases 2 + 4.
+Phases 3 and 4 can run in parallel after Phase 1. Phase 1B can run in parallel with Phases 3/4 (different files). Phase 5 needs Phase 2. Phase 6 needs Phases 2 + 4.
+
+**Hybrid inbox design:**
+- **All Channels tab** — unified view of all conversations, channel icons on each item
+- **WhatsApp tab** — WhatsApp-only with reactions, voice notes, stickers, delivery status
+- **Gmail tab** — email-only with subject lines, CC/BCC, rich text, threaded email cards
+- **Shared across channels** — AI classification, contact panel, labels, priorities, status, notes, canned responses, scheduled messages
+- **Cross-channel** — same contact can have both WhatsApp and email conversations; contact panel shows all
 
 ---
 
@@ -28,7 +44,7 @@ Rename `whatsapp_channels` → `channels` with a `channel_type` column. Create a
 ### File Map
 
 **Database:**
-- Create: `supabase/migrations/063_channel_abstraction.sql`
+- Create: `supabase/migrations/070_channel_abstraction.sql`
 
 **Server — New files:**
 - Create: `server/src/services/channelProvider.ts` — `ChannelProvider` interface + dispatcher
@@ -65,12 +81,12 @@ Rename `whatsapp_channels` → `channels` with a `channel_type` column. Create a
 ### Task 1.1: Database Migration — Rename Table + Add `channel_type`
 
 **Files:**
-- Create: `supabase/migrations/063_channel_abstraction.sql`
+- Create: `supabase/migrations/070_channel_abstraction.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- 063_channel_abstraction.sql
+-- 070_channel_abstraction.sql
 -- Rename whatsapp_channels to channels and add channel_type column
 
 -- 1. Rename the table
@@ -129,7 +145,7 @@ Run: `source server/.env && pg_dump --schema-only --schema=public "$SUPABASE_DB_
 - [ ] **Step 3: Commit**
 
 ```bash
-git add supabase/migrations/063_channel_abstraction.sql
+git add supabase/migrations/070_channel_abstraction.sql
 git commit -m "feat: rename whatsapp_channels to channels, add channel_type column"
 ```
 
@@ -637,6 +653,84 @@ Run: `npm run dev` and verify:
 ```bash
 git add -A
 git commit -m "refactor: complete channel abstraction - all existing WhatsApp functionality preserved"
+```
+
+---
+
+## Phase 1B: Compliance & Safety System Abstraction
+
+### Goal
+Abstract the WhatsApp-specific compliance system to support multiple channel types. After this phase, compliance checks dispatch through a channel-type-aware layer, and email channels have their own compliance rules.
+
+> **Context (added 2026-03-19):** Since the original plan was written, a full compliance system was added (migration 069): rate limiting (60 msgs/hr), 24-hour conversation window enforcement, content safety checks, duplicate detection, response rate tracking with auto-throttle, and a human-like send simulator with typing/recording presence. All WhatsApp-specific. Gmail needs: different rate limits, no 24h window, no typing indicators, different content safety thresholds.
+
+### File Map
+
+**Server:**
+- Modify: `server/src/services/complianceUtils.ts` (210 lines) — add `channelType` param to all functions
+- Modify: `server/src/services/sendSimulator.ts` (136 lines) — no-op for email
+- Modify: `server/src/routes/compliance.ts` (490 lines) — channel-type-aware endpoints
+- Modify: `server/src/routes/messages.ts` — pass `channel_type` to compliance checks
+- Modify: `server/src/services/ai.ts` — pass `channel_type` to compliance checks
+- Modify: `server/src/services/scheduler.ts` — pass `channel_type` to compliance checks
+- Modify: `server/src/services/messageProcessor.ts` — pass `channel_type` to compliance checks
+
+**Client:**
+- Modify: `client/src/components/inbox/MessageInput.tsx` (793 lines) — hide 24h window UI for email
+- Modify: `client/src/components/settings/sections/ComplianceTab.tsx` (374 lines) — hide WhAPI safety meter for email
+
+---
+
+### Task 1B.1: Make complianceUtils Channel-Aware
+
+- Modify: `server/src/services/complianceUtils.ts`
+- Modify: `server/src/services/sendSimulator.ts`
+
+- [ ] **Step 1: Add channelType parameter** — Add `channelType: 'whatsapp' | 'email' = 'whatsapp'` (default = 'whatsapp' for zero regressions) to `checkRateLimit` (email: 120/hr vs 60), `check24HourWindow` (email: always true), `checkContentSafety` (email: skip URL warnings), `getResponseRateStatus` (email: 5% threshold vs 10%).
+
+- [ ] **Step 2: sendSimulator no-op for email** — Early return when `channelType === 'email'` (no typing indicators).
+
+- [ ] **Step 3: Update all callers** — In `messages.ts`, `ai.ts`, `scheduler.ts`, `messageProcessor.ts`, pass `channel.channel_type` to every compliance function call.
+
+- [ ] **Step 4: Build and verify** — `npm run build`
+
+- [ ] **Step 5: Commit**
+```bash
+git add server/src/services/complianceUtils.ts server/src/services/sendSimulator.ts server/src/routes/messages.ts server/src/services/ai.ts server/src/services/scheduler.ts server/src/services/messageProcessor.ts
+git commit -m "refactor: make compliance system channel-type-aware"
+```
+
+---
+
+### Task 1B.2: Make Compliance Routes Channel-Aware
+
+- Modify: `server/src/routes/compliance.ts`
+
+- [ ] **Step 1: Update endpoints** — Safety meter: return null for non-WhatsApp. Health: include `channel_type` in response. Window status: return `withinWindow: true` for email.
+
+- [ ] **Step 2: Commit**
+```bash
+git add server/src/routes/compliance.ts
+git commit -m "refactor: make compliance routes channel-type-aware"
+```
+
+---
+
+### Task 1B.3: Make Client Compliance UI Channel-Aware
+
+- Modify: `client/src/components/inbox/MessageInput.tsx`
+- Modify: `client/src/components/settings/sections/ComplianceTab.tsx`
+
+- [ ] **Step 1: MessageInput** — Skip 24h window fetch for email. Hide window expiration banner for email.
+
+- [ ] **Step 2: ComplianceTab** — Show WhAPI safety meter only for WhatsApp. Show email health placeholder for email. Hide 24h window section for email.
+
+- [ ] **Step 3: Build and verify** — `npm run build`
+
+- [ ] **Step 4: Commit**
+```bash
+git add client/src/components/inbox/MessageInput.tsx client/src/components/settings/sections/ComplianceTab.tsx
+git commit -m "refactor: make compliance UI channel-type-aware"
 ```
 
 ---
@@ -1924,11 +2018,11 @@ git commit -m "refactor: replace all WhatsApp-specific UI text with generic chan
 **Files:**
 - Modify: `client/src/components/contacts/ContactForm.tsx`
 - Modify: `client/src/components/contacts/ImportWizard.tsx`
-- Modify: `supabase/migrations/064_contact_email_identifier.sql`
+- Modify: `supabase/migrations/071_contact_email_identifier.sql`
 
 - [ ] **Step 1: Create migration to make phone_number nullable**
 
-Create `supabase/migrations/064_contact_email_identifier.sql`:
+Create `supabase/migrations/071_contact_email_identifier.sql`:
 
 ```sql
 -- Allow contacts without phone numbers (email-only contacts)
@@ -1975,16 +2069,16 @@ const hasIdentifier = phoneIsMapped || emailIsMapped;
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/064_contact_email_identifier.sql client/src/components/contacts/ContactForm.tsx client/src/components/contacts/ImportWizard.tsx
+git add supabase/migrations/071_contact_email_identifier.sql client/src/components/contacts/ContactForm.tsx client/src/components/contacts/ImportWizard.tsx
 git commit -m "feat: make phone_number optional, allow email-only contacts"
 ```
 
 ---
 
-## Phase 4: Omnichannel Inbox UI
+## Phase 4: Hybrid Inbox UI
 
 ### Goal
-Add the three-tab inbox system (All Channels / WhatsApp / Gmail). Add channel icons to conversation items. Add channel filter support.
+Add the three-tab hybrid inbox system: **All Channels** (omnichannel view), **WhatsApp** (independent WhatsApp experience), **Gmail** (independent email experience). Each channel-specific tab shows only that channel's conversations with features tailored to it. The "All Channels" tab shows everything with channel icons. Add channel filter support to the API.
 
 ### File Map
 
@@ -2093,7 +2187,7 @@ if (req.query.channel_type) {
 
 **Note:** If the Supabase PostgREST nested filter doesn't work as expected, the alternative is to add a denormalized `channel_type` column to `chat_sessions` directly:
 ```sql
--- Fallback: add to migration 063
+-- Fallback: add to migration 070
 ALTER TABLE public.chat_sessions ADD COLUMN channel_type TEXT DEFAULT 'whatsapp';
 UPDATE public.chat_sessions s SET channel_type = c.channel_type
   FROM public.channels c WHERE s.channel_id = c.id;
@@ -2651,7 +2745,7 @@ git commit -m "feat: adaptive message thread - chat bubbles for WhatsApp, email 
 ## Phase 6: Cross-Channel Features
 
 ### Goal
-Add contact auto-linking across channels, "Other Conversations" sidebar in contact panel, and collision detection ("Sarah is replying...").
+Enable the omnichannel side of the hybrid experience: automatic contact linking across channels (WhatsApp contact emails in, we auto-link), "Other Conversations" in the contact panel showing all conversations with a contact across all channels, and the Gmail connection UI.
 
 ### File Map
 
@@ -2911,18 +3005,48 @@ git commit -m "feat: channel-type-aware detail view (WhatsApp QR vs Gmail OAuth)
 
 After all phases are complete, verify:
 
+**WhatsApp regression:**
 - [ ] Existing WhatsApp channels still connect, send, and receive messages
+- [ ] WhatsApp compliance features still work: rate limiting, 24h window, safety meter, send simulation
+- [ ] WhatsApp AI classification suggestions still appear and work
+- [ ] WhatsApp group chat monitoring still works (migration 063 feature)
+
+**Gmail integration:**
 - [ ] Gmail OAuth flow connects successfully
 - [ ] Inbound emails appear in the inbox under the Gmail tab
-- [ ] Outbound email replies have correct threading (show in same thread in recipient's Gmail)
-- [ ] Three inbox tabs work correctly with proper filtering
-- [ ] Channel icons appear on conversation items in "All Channels" tab
-- [ ] Email composer shows rich text toolbar, CC/BCC, subject
-- [ ] Email messages render as full-width cards (not chat bubbles)
+- [ ] Outbound email replies have correct threading (show in same Gmail thread)
+- [ ] Email HTML bodies are sanitized (no XSS via DOMPurify)
+- [ ] Gmail watch() renewals run on schedule
+
+**Hybrid inbox (independent + omnichannel):**
+- [ ] Three tabs work correctly: All Channels, WhatsApp, Gmail
+- [ ] WhatsApp tab shows only WhatsApp conversations with WhatsApp features
+- [ ] Gmail tab shows only email conversations with email features
+- [ ] All Channels tab shows everything with channel icons
+- [ ] Tabs only appear for channel types the company has connected
+- [ ] Channel icons on conversation items in the All Channels tab
+
+**Cross-channel features:**
 - [ ] Contact panel shows "Other Conversations" across channels
 - [ ] Email contacts auto-link to existing WhatsApp contacts by email match
-- [ ] Channels page shows both WhatsApp and Gmail channels
-- [ ] Channel detail view adapts to channel type
+- [ ] AI classification works for email conversations (same as WhatsApp)
+- [ ] Shared features work across channels: labels, priorities, notes, scheduled messages
+
+**Email-specific UI:**
+- [ ] Email composer shows rich text toolbar, CC/BCC, subject
+- [ ] Email messages render as full-width cards (not chat bubbles)
+- [ ] Channels page shows both WhatsApp and Gmail with appropriate icons
+- [ ] Channel detail view adapts: QR for WhatsApp, OAuth for Gmail
+
+**Compliance (cross-channel):**
+- [ ] Rate limiting: 120/hr for email, 60/hr for WhatsApp
+- [ ] 24h window check skipped for email channels
+- [ ] Content safety: URL warnings suppressed for email
+- [ ] Send simulation skipped for email (no typing indicators)
+- [ ] ComplianceTab shows WhAPI safety meter only for WhatsApp
+- [ ] MessageInput compliance warnings show/hide correctly per channel type
+
+**General:**
 - [ ] Billing counts channels generically (not "WhatsApp channels")
-- [ ] AI agent responds to emails with appropriate formatting
-- [ ] Gmail watch() renewals run on schedule
+- [ ] AI agent responds to emails with professional formatting
+- [ ] Prompt builder uses email-appropriate instructions for email channels
