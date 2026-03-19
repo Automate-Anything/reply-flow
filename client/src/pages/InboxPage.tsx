@@ -486,13 +486,6 @@ export default function InboxPage() {
     );
   };
 
-  const combinedTabBar = (
-    <>
-      {channelTabBar}
-      {tabBar}
-    </>
-  );
-
   const showConversationList = activeTab !== 'scheduled';
 
   const channelTabBar = connectedChannelTypes.length > 1 ? (
@@ -582,6 +575,13 @@ export default function InboxPage() {
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  );
+
+  const combinedTabBar = (
+    <>
+      {channelTabBar}
+      {tabBar}
+    </>
   );
 
   if (!pageReady) {
