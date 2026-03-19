@@ -386,3 +386,26 @@ export async function forwardMessage(channelToken: string, messageId: string, to
   const { data } = await gate.post(`/messages/${messageId}`, { to });
   return data;
 }
+
+// ── Presence & Read Receipts ─────────────────────────────────────────────────
+
+export async function setTypingPresence(channelToken: string, chatId: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.put(`/presences/${chatId}`, { presence: 'typing' });
+}
+
+export async function setRecordingPresence(channelToken: string, chatId: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.put(`/presences/${chatId}`, { presence: 'recording' });
+}
+
+export async function markMessageAsRead(channelToken: string, messageId: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  // Note: verify exact body format with WhAPI docs — may need {"status": "read"}
+  await gate.put(`/messages/${messageId}`);
+}
+
+export async function setOnlinePresence(channelToken: string): Promise<void> {
+  const gate = gateApi(channelToken);
+  await gate.put('/presences/me', { presence: 'available' });
+}
