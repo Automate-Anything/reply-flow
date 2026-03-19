@@ -137,11 +137,11 @@ export default function ContactForm({
     }
     setError('');
     setPhoneError('');
-    if (!form.phone_number.trim()) {
-      setPhoneError('Phone number is required');
+    if (!form.phone_number.trim() && !form.email.trim()) {
+      setError('At least one of Phone or Email is required');
       return;
     }
-    if (!isValidPhoneNumber(form.phone_number)) {
+    if (form.phone_number.trim() && !isValidPhoneNumber(form.phone_number)) {
       setPhoneError('Invalid phone number for the selected country');
       return;
     }
@@ -213,7 +213,7 @@ export default function ContactForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Phone Number *</Label>
+              <Label>Phone Number</Label>
               <PhoneInput
                 value={form.phone_number}
                 onChange={(val) => {

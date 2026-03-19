@@ -219,8 +219,10 @@ export default function ImportWizard({
     })),
   ];
 
-  // Check if phone_number is mapped
+  // Check if at least one identifier (phone or email) is mapped
   const phoneIsMapped = Object.values(mappings).includes('phone_number');
+  const emailIsMapped = Object.values(mappings).includes('email');
+  const hasIdentifier = phoneIsMapped || emailIsMapped;
 
   // ── Mapped field names for preview table ──────────────────────────────────
 
@@ -318,9 +320,9 @@ export default function ImportWizard({
                 <p className="text-sm text-muted-foreground">
                   {parseResult.totalRows} rows found. Map your file columns to contact fields.
                 </p>
-                {!phoneIsMapped && (
+                {!hasIdentifier && (
                   <Badge variant="destructive" className="text-xs">
-                    Phone Number must be mapped
+                    Phone Number or Email must be mapped
                   </Badge>
                 )}
               </div>
@@ -581,7 +583,7 @@ export default function ImportWizard({
           </div>
           <div className="flex gap-2">
             {step === 1 && (
-              <Button size="sm" onClick={() => setStep(2)} disabled={!phoneIsMapped}>
+              <Button size="sm" onClick={() => setStep(2)} disabled={!hasIdentifier}>
                 Next
                 <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
               </Button>
