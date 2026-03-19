@@ -25,6 +25,7 @@ export interface Conversation {
   last_message_direction: string | null;
   last_message_sender: string | null;
   status: string;
+  channel_type: string | null;
   priority: string;
   is_archived: boolean;
   is_starred: boolean;
@@ -52,6 +53,7 @@ export interface ConversationFilters {
   status?: string[];
   assignee?: string[];
   priority?: string[];
+  channel_type?: 'whatsapp' | 'email';
   starred?: boolean;
   snoozed?: boolean;
   archived?: boolean;
@@ -115,6 +117,7 @@ export function useConversations(
       if (filters?.snoozed) params.set('snoozed', 'true');
       if (filters?.archived) params.set('archived', 'true');
       if (filters?.unread) params.set('unread', 'true');
+      if (filters?.channel_type) params.set('channel_type', filters.channel_type);
       if (filters?.sort) params.set('sort', filters.sort);
       if (filters?.labelId) params.set('labelId', filters.labelId);
       const { data } = await api.get(`/conversations?${params}`);

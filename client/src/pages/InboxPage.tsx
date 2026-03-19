@@ -5,6 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { getChannelConfig } from '@/lib/channelTypes';
 import { usePageReady } from '@/hooks/usePageReady';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useConversations, type Conversation, type ConversationFilters } from '@/hooks/useConversations';
@@ -57,6 +58,15 @@ export default function InboxPage() {
   const { debugMode } = useDebugMode(needsConversationSupport);
   const { hasPending } = useClassificationSuggestions(activeConversation?.id ?? null);
   const [contactPanelTab, setContactPanelTab] = useState<'info' | 'notes' | 'ai'>('info');
+  const [channelFilter, setChannelFilter] = useState<string>('all');
+  const [connectedChannelTypes, setConnectedChannelTypes] = useState<string[]>([]);
+
+  // Fetch connected channel types for the channel tabs
+  useEffect(() => {
+    api.get('/conversations/channel-types')
+      .then(res => setConnectedChannelTypes(res.data))
+      .catch(() => setConnectedChannelTypes(['whatsapp']));
+  }, []);
 
   // Draft persistence
   const draftRef = useRef<string>('');
@@ -64,11 +74,15 @@ export default function InboxPage() {
 
   // Merge tab-specific filters
   const effectiveFilters = useMemo(() => {
-    if (activeTab === 'snoozed') return { ...filters, snoozed: true };
-    if (activeTab === 'assigned') return { ...filters, assignee: ['me'] };
-    if (activeTab === 'archived') return { ...filters, archived: true };
-    return filters;
-  }, [activeTab, filters]);
+    const base = { ...filters };
+    if (channelFilter !== 'all') {
+      base.channel_type = channelFilter as 'whatsapp' | 'email';
+    }
+    if (activeTab === 'snoozed') return { ...base, snoozed: true };
+    if (activeTab === 'assigned') return { ...base, assignee: ['me'] };
+    if (activeTab === 'archived') return { ...base, archived: true };
+    return base;
+  }, [activeTab, filters, channelFilter]);
 
   const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
     useConversations(search, effectiveFilters);
@@ -472,7 +486,43 @@ export default function InboxPage() {
     );
   };
 
+  const combinedTabBar = (
+    <>
+      {channelTabBar}
+      {tabBar}
+    </>
+  );
+
   const showConversationList = activeTab !== 'scheduled';
+
+  const channelTabBar = connectedChannelTypes.length > 1 ? (
+    <div className="flex border-b px-2 gap-1">
+      <button
+        className={cn('px-3 py-1.5 text-sm font-medium rounded-t',
+          channelFilter === 'all' ? 'bg-background border-b-2 border-primary' : 'text-muted-foreground'
+        )}
+        onClick={() => setChannelFilter('all')}
+      >
+        All Channels
+      </button>
+      {connectedChannelTypes.map(type => {
+        const config = getChannelConfig(type);
+        const Icon = config.icon;
+        return (
+          <button
+            key={type}
+            className={cn('px-3 py-1.5 text-sm font-medium rounded-t flex items-center gap-1.5',
+              channelFilter === type ? 'bg-background border-b-2 border-primary' : 'text-muted-foreground'
+            )}
+            onClick={() => setChannelFilter(type)}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {config.label}
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
 
   const tabBar = (
     <div className="flex items-center gap-1">
@@ -596,7 +646,7 @@ export default function InboxPage() {
               statuses={conversationStatuses}
               priorities={conversationPriorities}
               onPriorityMetadataNeeded={() => setPriorityMetadataNeeded(true)}
-              tabBar={tabBar}
+              tabBar={combinedTabBar}
             />
           ) : inboxToolsOpen ? (
             <InboxToolsPanel onClose={() => setInboxToolsOpen(false)} />
@@ -625,7 +675,7 @@ export default function InboxPage() {
               statuses={conversationStatuses}
               priorities={conversationPriorities}
               onPriorityMetadataNeeded={() => setPriorityMetadataNeeded(true)}
-              tabBar={tabBar}
+              tabBar={combinedTabBar}
             />
           )}
         </div>
@@ -660,6 +710,7 @@ export default function InboxPage() {
               loading={msgsLoading}
               sessionId={activeConversation.id}
               channelId={activeConversation.channel_id ?? undefined}
+              channelType={activeConversation.channel_type ?? undefined}
               contactName={activeConversation.contact_name || activeConversation.phone_number}
               contactAvatarUrl={activeConversation.profile_picture_url}
               onSend={handleSend}

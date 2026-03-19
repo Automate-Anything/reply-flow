@@ -36,7 +36,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
     let query = supabaseAdmin
       .from('chat_sessions')
       .select(
-        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url)'
+        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url), channel:channel_id(channel_type)'
       )
       .eq('company_id', companyId)
       .is('deleted_at', null);
@@ -75,6 +75,21 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
     // Channel filter
     if (channelId) {
       query = query.eq('channel_id', Number(channelId));
+    }
+
+    // Channel type filter (e.g. 'whatsapp' or 'email')
+    if (req.query.channel_type) {
+      const { data: typedChannels } = await supabaseAdmin
+        .from('channels')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('channel_type', req.query.channel_type as string);
+      const typedIds = (typedChannels || []).map((c: any) => c.id);
+      if (typedIds.length === 0) {
+        res.json({ sessions: [], count: 0 });
+        return;
+      }
+      query = query.in('channel_id', typedIds);
     }
 
     const assigneeValues = typeof assignee === 'string'
@@ -227,6 +242,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
         unread_count: unreadMap[s.id] || 0,
         contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
         profile_picture_url: (s.contact as Record<string, unknown>)?.profile_picture_url || null,
+        channel_type: (s.channel as Record<string, unknown>)?.channel_type || null,
         labels:
           s.conversation_labels
             ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
@@ -252,6 +268,22 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
   }
 });
 
+// Get connected channel types for this company (used by channel tabs in the inbox)
+router.get('/channel-types', requirePermission('conversations', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { data } = await supabaseAdmin
+      .from('channels')
+      .select('channel_type')
+      .eq('company_id', companyId)
+      .eq('channel_status', 'connected');
+    const types = [...new Set((data || []).map((c: any) => c.channel_type).filter(Boolean))];
+    res.json(types);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get a single conversation by ID (used for notification deep-links when the
 // conversation isn't in the currently-filtered list, e.g. snoozed or archived)
 router.get('/:sessionId', requirePermission('conversations', 'view'), async (req, res, next) => {
@@ -262,7 +294,7 @@ router.get('/:sessionId', requirePermission('conversations', 'view'), async (req
     const { data: session, error } = await supabaseAdmin
       .from('chat_sessions')
       .select(
-        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url)'
+        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url), channel:channel_id(channel_type)'
       )
       .eq('id', sessionId as string)
       .eq('company_id', companyId)
@@ -313,6 +345,7 @@ router.get('/:sessionId', requirePermission('conversations', 'view'), async (req
       unread_count: unreadRows?.length || 0,
       contact_session_count: contactSessionCount,
       profile_picture_url: (session.contact as Record<string, unknown>)?.profile_picture_url || null,
+      channel_type: (session.channel as Record<string, unknown>)?.channel_type || null,
       labels:
         session.conversation_labels
           ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
