@@ -41,6 +41,7 @@ import classificationRouter from './routes/classification.js';
 import complianceRouter from './routes/compliance.js';
 import gmailRouter from './routes/gmail.js';
 import { handleGoogleCallback } from './routes/gmail.js';
+import gmailWebhookRouter from './routes/gmailWebhook.js';
 import { startScheduler } from './services/scheduler.js';
 import { startAvailabilityScheduler } from './services/availabilityScheduler.js';
 import { startPayoutScheduler } from './cron/affiliatePayouts.js';
@@ -88,6 +89,9 @@ app.use(express.json({ limit: '12mb' }));
 // Whapi webhook must receive the raw parsed JSON without sanitization —
 // register it BEFORE sanitizeBody so link_preview payloads aren't modified.
 app.use('/api/whatsapp/webhook', webhookLimiter, webhookRouter);
+
+// Gmail Pub/Sub webhook — no auth, registered before sanitizeBody
+app.use('/api/webhooks/gmail', webhookLimiter, gmailWebhookRouter);
 
 app.use(sanitizeBody);
 
