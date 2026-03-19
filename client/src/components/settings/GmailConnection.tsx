@@ -8,7 +8,7 @@ interface GmailConnectionProps {
   onCreated: () => void;
 }
 
-export default function GmailConnection({ onCreated }: GmailConnectionProps) {
+export default function GmailConnection(_props: GmailConnectionProps) {
   const [channelName, setChannelName] = useState('');
   const [loading, setLoading] = useState(false);
 

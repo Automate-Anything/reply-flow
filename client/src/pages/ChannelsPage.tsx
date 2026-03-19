@@ -138,7 +138,6 @@ export default function ChannelsPage() {
   const [channelsLoading, setLoading] = useState(!cachedChannels);
   const [healthMap, setHealthMap] = useState<Map<number, ChannelHealthEntry>>(new Map());
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
-  const [connectingGmail, setConnectingGmail] = useState(false);
   const [showWhatsAppFlow, setShowWhatsAppFlow] = useState(false);
   const [showGmailFlow, setShowGmailFlow] = useState(false);
   const pageReady = usePageReady();
@@ -211,19 +210,6 @@ export default function ChannelsPage() {
   useEffect(() => {
     fetchChannels(!cachedChannels);
   }, [fetchChannels]);
-
-  const handleConnectGmail = async () => {
-    setConnectingGmail(true);
-    try {
-      const { data } = await api.post('/channels/gmail/connect', { channelName: 'Gmail' });
-      if (data.authUrl) {
-        window.location.href = data.authUrl;
-      }
-    } catch {
-      toast.error('Failed to start Gmail connection');
-      setConnectingGmail(false);
-    }
-  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6 animate-in fade-in duration-150">
