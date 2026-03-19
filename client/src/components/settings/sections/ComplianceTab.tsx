@@ -259,11 +259,11 @@ export default function ComplianceTab({ channelId }: Props) {
         </div>
       )}
 
-      {/* ── 5. WhAPI Safety Meter ─────────────────────────────────────────── */}
+      {/* ── 5. Account Safety Score ─────────────────────────────────────── */}
       <div className="rounded-lg border p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">WhAPI Safety Meter</p>
+            <p className="text-sm font-semibold">Account Safety Score</p>
             {safety?.fetched_at && (
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Last refreshed {formatTimestamp(safety.fetched_at)}
@@ -285,19 +285,19 @@ export default function ComplianceTab({ channelId }: Props) {
         {safety && (safety.risk_factor !== null || safety.risk_factor_contacts !== null || safety.risk_factor_chats !== null) ? (
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-              <p className="text-sm text-foreground">Risk Factor</p>
+              <p className="text-sm text-foreground">Overall Risk</p>
               <p className={`text-sm font-semibold ${riskFactorColor(safety.risk_factor)}`}>
                 {riskFactorLabel(safety.risk_factor)}
               </p>
             </div>
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-              <p className="text-sm text-foreground">Risk Factor (Contacts)</p>
+              <p className="text-sm text-foreground">Contact Coverage</p>
               <p className={`text-sm font-semibold ${riskFactorColor(safety.risk_factor_contacts)}`}>
                 {riskFactorLabel(safety.risk_factor_contacts)}
               </p>
             </div>
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-              <p className="text-sm text-foreground">Risk Factor (Chats)</p>
+              <p className="text-sm text-foreground">Response Rate</p>
               <p className={`text-sm font-semibold ${riskFactorColor(safety.risk_factor_chats)}`}>
                 {riskFactorLabel(safety.risk_factor_chats)}
               </p>
@@ -313,7 +313,7 @@ export default function ComplianceTab({ channelId }: Props) {
           </div>
         ) : (
           <p className="mt-3 text-xs text-muted-foreground">
-            No safety scores available. Click Refresh to fetch scores from WhAPI.
+            No safety scores available. Click Refresh to fetch your account safety score.
           </p>
         )}
       </div>
