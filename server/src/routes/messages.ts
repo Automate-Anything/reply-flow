@@ -10,6 +10,11 @@ import { getSignedUrl, downloadAndStore, storeBuffer } from '../services/mediaSt
 import { createNotification } from '../services/notificationService.js';
 import { convertToOggOpus } from '../services/audioConverter.js';
 import { extractAudioTranscript } from '../services/mediaContentExtractor.js';
+import {
+  checkRateLimit, incrementRateCounter, check24HourWindow,
+  checkContentSafety, checkDuplicateContent, hashMessageBody,
+  logComplianceMetric,
+} from '../services/complianceUtils.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -95,6 +100,36 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
       }
     }
 
+    // 1. Rate limit check
+    const rateCheck = checkRateLimit(session.channel_id, companyId);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({
+        error: 'rate_limit_exceeded',
+        remaining: 0,
+        limit: rateCheck.limit,
+        resetsAt: rateCheck.resetsAt,
+      });
+    }
+
+    // 2. 24-hour window check
+    const windowCheck = await check24HourWindow(sessionId);
+    if (!windowCheck.allowed) {
+      return res.status(403).json({
+        error: '24h_window_expired',
+        message: '24-hour conversation window has expired. Waiting for customer to message.',
+        lastInboundAt: windowCheck.lastInboundAt,
+      });
+    }
+
+    // 3. Content safety (warnings only, don't block)
+    const safetyCheck = await checkContentSafety(body, sessionId);
+
+    // 4. Duplicate content check (warning only)
+    const dupeCheck = await checkDuplicateContent(session.channel_id, body);
+    const duplicateWarning = dupeCheck.isDuplicate
+      ? `Same message sent to ${dupeCheck.matchCount}+ contacts in the last hour`
+      : undefined;
+
     // Send via Whapi
     const chatId = session.chat_id.includes('@')
       ? session.chat_id
@@ -102,6 +137,13 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
 
     const result = await whapi.sendTextMessage(channel.channel_token, chatId, body, whapiQuotedId);
     console.log('[send] whapi result:', JSON.stringify(result));
+
+    incrementRateCounter(session.channel_id);
+    logComplianceMetric(session.channel_id, companyId, {
+      type: 'message_sent',
+      path: 'manual',
+      hash: hashMessageBody(body),
+    });
 
     // Store in DB
     const outboundMetadata = {
@@ -158,7 +200,15 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
       .eq('direction', 'inbound')
       .eq('read', false);
 
-    res.json({ message });
+    res.json({
+      message,
+      compliance: {
+        warnings: [...safetyCheck.warnings, ...(duplicateWarning ? [duplicateWarning] : [])],
+        remaining: rateCheck.remaining - 1,
+        limit: rateCheck.limit,
+        resetsAt: rateCheck.resetsAt,
+      },
+    });
   } catch (err) {
     next(err);
   }
