@@ -17,6 +17,7 @@ import {
 import { Loader2, Smartphone, Mail, Plus, CheckCircle2, CircleX, QrCode, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
+import GmailConnection from '@/components/settings/GmailConnection';
 import { formatChannelName, getStatusConfig, getCardBorder, type ChannelInfo } from '@/components/settings/channelHelpers';
 import { getChannelConfig } from '@/lib/channelTypes';
 import { cn } from '@/lib/utils';
@@ -139,6 +140,7 @@ export default function ChannelsPage() {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [showWhatsAppFlow, setShowWhatsAppFlow] = useState(false);
+  const [showGmailFlow, setShowGmailFlow] = useState(false);
   const pageReady = usePageReady();
   const loading = channelsLoading || !pageReady;
   const { subscription, loading: subLoading } = useSubscription();
@@ -380,6 +382,11 @@ export default function ChannelsPage() {
           {showWhatsAppFlow && !atLimit && (
             <WhatsAppConnection onCreated={() => { setShowWhatsAppFlow(false); fetchChannels(); }} />
           )}
+
+          {/* Inline Gmail flow (shown when user picks Gmail from the dialog) */}
+          {showGmailFlow && !atLimit && (
+            <GmailConnection onCreated={() => { setShowGmailFlow(false); fetchChannels(); }} />
+          )}
         </div>
       )}
 
@@ -412,15 +419,13 @@ export default function ChannelsPage() {
             </button>
             <button
               className="flex items-center gap-4 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
-              onClick={handleConnectGmail}
-              disabled={connectingGmail}
+              onClick={() => {
+                setConnectDialogOpen(false);
+                setShowGmailFlow(true);
+              }}
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/40">
-                {connectingGmail ? (
-                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                ) : (
-                  <Mail className="h-5 w-5 text-blue-600" />
-                )}
+                <Mail className="h-5 w-5 text-blue-600" />
               </div>
               <div>
                 <p className="text-sm font-medium">Gmail</p>
