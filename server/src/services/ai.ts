@@ -12,7 +12,7 @@ import { isDebugModeEnabled } from './debugMode.js';
 import { downloadFromStorage } from './mediaStorage.js';
 import { sendHandoffNotification } from './handoffNotifier.js';
 import * as whapi from './whapi.js';
-import { checkRateLimit, incrementRateCounter, check24HourWindow, logComplianceMetric, hashMessageBody } from './complianceUtils.js';
+import { checkRateLimit, incrementRateCounter, check24HourWindow, logComplianceMetric, hashMessageBody, getResponseRateStatus } from './complianceUtils.js';
 import { simulateBeforeSend } from './sendSimulator.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
@@ -758,9 +758,11 @@ export async function generateAndSendAIReply(
 
   const channelId = sessionForChannel?.channel_id;
 
-  // Rate limit check
+  // Rate limit check (with response-rate throttle)
   if (channelId) {
-    const rateCheck = checkRateLimit(channelId, companyId);
+    const responseRate = await getResponseRateStatus(channelId, companyId);
+    const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
+    const rateCheck = checkRateLimit(channelId, companyId, effectiveLimit);
     if (!rateCheck.allowed) {
       logComplianceMetric(channelId, companyId, { type: 'rate_limit_hit', path: 'ai_agent' });
       return;

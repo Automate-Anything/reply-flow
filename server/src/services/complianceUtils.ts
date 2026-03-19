@@ -152,6 +152,14 @@ export async function getResponseRateStatus(
 ): Promise<{ rate: number; warning: boolean; throttled: boolean }> {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
+  // Get all session IDs for this channel so we can scope the inbound count
+  const { data: sessionRows } = await supabaseAdmin
+    .from('chat_sessions')
+    .select('id')
+    .eq('channel_id', channelId);
+
+  const sessionIds = (sessionRows || []).map((r) => r.id);
+
   const [outbound, inbound] = await Promise.all([
     supabaseAdmin
       .from('compliance_metrics')
@@ -159,11 +167,14 @@ export async function getResponseRateStatus(
       .eq('channel_id', channelId)
       .eq('event_type', 'message_sent')
       .gte('created_at', sevenDaysAgo),
-    supabaseAdmin
-      .from('chat_messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('direction', 'inbound')
-      .gte('message_ts', sevenDaysAgo),
+    sessionIds.length > 0
+      ? supabaseAdmin
+          .from('chat_messages')
+          .select('id', { count: 'exact', head: true })
+          .in('session_id', sessionIds)
+          .eq('direction', 'inbound')
+          .gte('message_ts', sevenDaysAgo)
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const outCount = outbound.count ?? 0;

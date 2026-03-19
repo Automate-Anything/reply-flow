@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import * as whapi from './whapi.js';
 import { createNotification } from './notificationService.js';
-import { checkRateLimit, incrementRateCounter, check24HourWindow, checkContentSafety, checkDuplicateContent, hashMessageBody, logComplianceMetric } from './complianceUtils.js';
+import { checkRateLimit, incrementRateCounter, check24HourWindow, checkContentSafety, checkDuplicateContent, hashMessageBody, logComplianceMetric, getResponseRateStatus } from './complianceUtils.js';
 import { simulateBeforeSend } from './sendSimulator.js';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -63,7 +63,10 @@ async function processScheduledMessages() {
         // --- Compliance checks ---
 
         // Rate limit check — if exceeded, reset to scheduled and skip
-        const rateResult = checkRateLimit(session.channel_id, msg.company_id);
+        // Also check response rate for throttling (< 10% response rate → 50% limit)
+        const responseRate = await getResponseRateStatus(session.channel_id, msg.company_id);
+        const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
+        const rateResult = checkRateLimit(session.channel_id, msg.company_id, effectiveLimit);
         if (!rateResult.allowed) {
           console.warn(`Rate limit exceeded for channel ${session.channel_id}, deferring message ${msg.id}`);
           await supabaseAdmin

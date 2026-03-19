@@ -13,7 +13,7 @@ import { extractAudioTranscript } from '../services/mediaContentExtractor.js';
 import {
   checkRateLimit, incrementRateCounter, check24HourWindow,
   checkContentSafety, checkDuplicateContent, hashMessageBody,
-  logComplianceMetric,
+  logComplianceMetric, getResponseRateStatus,
 } from '../services/complianceUtils.js';
 
 const router = Router();
@@ -100,8 +100,10 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
       }
     }
 
-    // 1. Rate limit check
-    const rateCheck = checkRateLimit(session.channel_id, companyId);
+    // 1. Rate limit check (with response-rate throttle)
+    const responseRate = await getResponseRateStatus(session.channel_id, companyId);
+    const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
+    const rateCheck = checkRateLimit(session.channel_id, companyId, effectiveLimit);
     if (!rateCheck.allowed) {
       return res.status(429).json({
         error: 'rate_limit_exceeded',

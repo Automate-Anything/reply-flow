@@ -11,7 +11,7 @@ import { autoAssignConversation } from './autoAssignService.js';
 import { createNotification, createNotificationsForUsers } from './notificationService.js';
 import { evaluateAutoReply } from './autoReplyEvaluator.js';
 import { classifyConversation } from './classification.js';
-import { checkRateLimit, incrementRateCounter, logComplianceMetric } from './complianceUtils.js';
+import { checkRateLimit, incrementRateCounter, logComplianceMetric, getResponseRateStatus } from './complianceUtils.js';
 import { simulateBeforeSend } from './sendSimulator.js';
 
 /**
@@ -637,7 +637,9 @@ export async function processIncomingMessage(
   try {
     const autoReply = await evaluateAutoReply(companyId, channelId, isNewSession);
     if (autoReply.shouldReply && autoReply.message && autoReply.channelId) {
-      const rateCheck = checkRateLimit(channelId, companyId);
+      const responseRate = await getResponseRateStatus(channelId, companyId);
+      const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
+      const rateCheck = checkRateLimit(channelId, companyId, effectiveLimit);
       if (rateCheck.allowed) {
         (async () => {
           // Fetch channel token for simulation (typing indicators / read receipts)
