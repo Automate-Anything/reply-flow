@@ -786,7 +786,7 @@ export async function generateAndSendAIReply(
 
   if (channelId) {
     const { data: ch } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token')
       .eq('id', channelId)
       .eq('channel_status', 'connected')
@@ -950,7 +950,7 @@ export async function sendOutsideHoursReply(
   if (!session) return;
 
   const { data: ch } = await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .select('channel_token')
     .eq('id', channelId)
     .eq('channel_status', 'connected')
@@ -1036,7 +1036,7 @@ async function sendAndStoreMessage(
   if (!session || !session.channel_id) return;
 
   const { data: ch } = await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .select('channel_token')
     .eq('id', session.channel_id)
     .eq('channel_status', 'connected')

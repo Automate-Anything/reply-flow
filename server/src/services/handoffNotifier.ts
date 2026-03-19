@@ -30,7 +30,7 @@ export async function sendHandoffNotification(
   // If no one is assigned, fall back to the channel owner
   if (!targetUserId && session.channel_id) {
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('user_id')
       .eq('id', session.channel_id)
       .eq('company_id', companyId)

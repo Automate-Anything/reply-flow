@@ -3,6 +3,7 @@ export interface ChatSession {
   user_id: string;
   company_id: string;
   channel_id: number | null;
+  channel_type?: 'whatsapp' | 'email';
   contact_id: string | null;
   chat_id: string;
   phone_number: string;

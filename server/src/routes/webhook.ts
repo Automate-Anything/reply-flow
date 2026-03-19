@@ -68,7 +68,7 @@ router.post('/', async (req, res) => {
     }
 
     const { data: channel, error: channelError } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, user_id, company_id, channel_status, phone_number')
       .eq('channel_id', whapiChannelId)
       .eq('channel_status', 'connected')

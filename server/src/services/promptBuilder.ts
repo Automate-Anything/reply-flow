@@ -1,5 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 
+export type ChannelType = 'whatsapp' | 'email';
+
 export interface AudienceSegment {
   label: string;
   description?: string;
@@ -120,15 +122,24 @@ const DEFAULT_EMOJI_DESCRIPTIONS: Record<string, string> = {
   moderate: 'Feel free to use emojis to add personality and friendliness.',
 };
 
+const CHANNEL_INSTRUCTIONS: Record<ChannelType, string> = {
+  whatsapp: 'You are chatting via WhatsApp. Keep messages concise and mobile-friendly.',
+  email: 'You are communicating via email. Use professional formatting with greeting and sign-off.',
+};
+
 const DEFAULT_CORE_RULES = `## Core Rules
-- You are chatting via WhatsApp. Keep messages appropriate for mobile messaging.
+- {channel_instruction}
 - Never reveal that you are an AI unless directly asked.
 - If you don't know the answer to something, be honest about it rather than making up information.
 - Never share sensitive business information like internal processes, pricing strategies, or employee details unless explicitly covered in the knowledge base.
 - If a conversation requires human attention (complaints, complex issues, urgent matters), politely let the customer know that a team member will follow up.`;
 
+function getCoreRules(template: string, channelType: ChannelType = 'whatsapp'): string {
+  return template.replace('{channel_instruction}', CHANNEL_INSTRUCTIONS[channelType]);
+}
+
 const DEFAULT_IDENTITY: Record<string, string> = {
-  business: 'You are the AI-powered WhatsApp assistant for {name}. You represent this business in customer conversations — answering questions, providing information, and ensuring every customer feels heard and helped.',
+  business: 'You are the AI-powered messaging assistant for {name}. You represent this business in customer conversations — answering questions, providing information, and ensuring every customer feels heard and helped.',
 };
 
 const DEFAULT_LANGUAGE: Record<string, string> = {
@@ -366,6 +377,7 @@ function buildResponseFlowPrompt(
   t: PromptTemplateCache,
   channelOverrides?: ChannelOverrides,
   onSection?: OnSectionCallback,
+  channelType: ChannelType = 'whatsapp',
 ): string {
   const flow = profile.response_flow!;
   const parts: string[] = [];
@@ -407,7 +419,7 @@ function buildResponseFlowPrompt(
   }
 
   // Core rules
-  track('CoreRules', t.coreRules);
+  track('CoreRules', getCoreRules(t.coreRules, channelType));
 
   return parts.join('\n\n');
 }
@@ -436,6 +448,7 @@ function buildLegacyPrompt(
   t: PromptTemplateCache,
   channelOverrides?: ChannelOverrides,
   onSection?: OnSectionCallback,
+  channelType: ChannelType = 'whatsapp',
 ): string {
   const parts: string[] = [];
 
@@ -470,7 +483,7 @@ function buildLegacyPrompt(
     track('ChannelInstructions', `## Channel-Specific Instructions\n${channelOverrides.custom_instructions}`);
   }
 
-  track('CoreRules', t.coreRules);
+  track('CoreRules', getCoreRules(t.coreRules, channelType));
   return parts.join('\n\n');
 }
 
@@ -517,6 +530,7 @@ export async function buildScenarioResponsePrompt(
   matchedScenarioLabel: string | null,
   channelOverrides?: ChannelOverrides,
   onSection?: OnSectionCallback,
+  channelType: ChannelType = 'whatsapp',
 ): Promise<string> {
   const t = await getPromptTemplates();
   const flow = profile.response_flow!;
@@ -630,7 +644,7 @@ export async function buildScenarioResponsePrompt(
   }
 
   // Core rules
-  track('CoreRules', t.coreRules);
+  track('CoreRules', getCoreRules(t.coreRules, channelType));
 
   return parts.join('\n\n');
 }
@@ -642,12 +656,13 @@ export async function buildSystemPrompt(
   kbEntries: KBEntry[] = [],
   channelOverrides?: ChannelOverrides,
   onSection?: OnSectionCallback,
+  channelType: ChannelType = 'whatsapp',
 ): Promise<string> {
   const t = await getPromptTemplates();
   // New scenario-based flow
   if (profile.response_flow) {
-    return buildResponseFlowPrompt(profile, kbEntries, t, channelOverrides, onSection);
+    return buildResponseFlowPrompt(profile, kbEntries, t, channelOverrides, onSection, channelType);
   }
   // Legacy flat fields
-  return buildLegacyPrompt(profile, kbEntries, t, channelOverrides, onSection);
+  return buildLegacyPrompt(profile, kbEntries, t, channelOverrides, onSection, channelType);
 }

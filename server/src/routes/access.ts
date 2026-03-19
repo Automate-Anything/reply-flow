@@ -57,7 +57,7 @@ router.get('/channels/:channelId', async (req, res, next) => {
 
     // Get channel owner
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('user_id')
       .eq('id', channelId)
       .eq('company_id', companyId)

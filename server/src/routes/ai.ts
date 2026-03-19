@@ -1270,7 +1270,7 @@ router.put('/channel-settings/:channelId', requirePermission('ai_settings', 'edi
     } = req.body;
 
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id')
       .eq('id', channelId)
       .eq('company_id', companyId)

@@ -16,7 +16,7 @@ router.get('/', async (req, res, next) => {
     // Fetch groups with channel name join and criteria count
     const { data: groups, error } = await supabaseAdmin
       .from('group_chats')
-      .select('*, whatsapp_channels(channel_name)')
+      .select('*, channels(channel_name)')
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
@@ -41,8 +41,8 @@ router.get('/', async (req, res, next) => {
 
     const enriched = (groups || []).map((g: any) => ({
       ...g,
-      channel_name: g.whatsapp_channels?.channel_name ?? null,
-      whatsapp_channels: undefined,
+      channel_name: g.channels?.channel_name ?? null,
+      channels: undefined,
       criteria_count: (countMap.get(g.id) || 0) + globalCriteriaCount,
     }));
 
@@ -52,7 +52,7 @@ router.get('/', async (req, res, next) => {
       // Get channel tokens for the unnamed groups
       const channelIds = [...new Set(unnamed.map((g: any) => g.channel_id))];
       const { data: channels } = await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .select('id, channel_token')
         .in('id', channelIds);
 
@@ -202,7 +202,7 @@ router.post('/sync', async (req, res, next) => {
     const companyId = req.companyId!;
 
     const { data: channels, error: chErr } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, channel_token')
       .eq('company_id', companyId)
       .eq('channel_status', 'connected');
@@ -280,7 +280,7 @@ router.post('/sync', async (req, res, next) => {
 
     const { data: groups, error: fetchErr } = await supabaseAdmin
       .from('group_chats')
-      .select('*, whatsapp_channels(channel_name)')
+      .select('*, channels(channel_name)')
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
@@ -288,8 +288,8 @@ router.post('/sync', async (req, res, next) => {
 
     const enriched = (groups || []).map((g: any) => ({
       ...g,
-      channel_name: g.whatsapp_channels?.channel_name ?? null,
-      whatsapp_channels: undefined,
+      channel_name: g.channels?.channel_name ?? null,
+      channels: undefined,
     }));
 
     res.json({ groups: enriched, new_count: newCount, errors });

@@ -206,7 +206,7 @@ export async function processIncomingMessage(
   if (msg.type === 'link_preview' && !msg.link_preview) {
     try {
       const { data: ch } = await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .select('channel_token')
         .eq('id', channelId)
         .single();
@@ -506,7 +506,7 @@ export async function processIncomingMessage(
   if (!mediaLink && mediaId && mediaMimeType) {
     try {
       const { data: ch } = await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .select('channel_token')
         .eq('id', channelId)
         .single();
@@ -644,7 +644,7 @@ export async function processIncomingMessage(
         (async () => {
           // Fetch channel token for simulation (typing indicators / read receipts)
           const { data: channelRow } = await supabaseAdmin
-            .from('whatsapp_channels')
+            .from('channels')
             .select('channel_token')
             .eq('id', channelId)
             .single();
@@ -869,7 +869,7 @@ export async function fetchAndStoreProfilePicture(
 
   // Fetch channel token
   const { data: channel } = await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .select('channel_token')
     .eq('id', channelId)
     .single();

@@ -200,7 +200,7 @@ export async function triggerAutoTopup(companyId: string): Promise<void> {
 // ────────────────────────────────────────────────────────────────────────────
 export async function extendAllCompanyChannels(companyId: string, days: number): Promise<void> {
   const { data: channels } = await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .select('channel_id')
     .eq('company_id', companyId);
 

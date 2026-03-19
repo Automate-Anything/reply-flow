@@ -31,7 +31,7 @@ async function syncConnectedChannelMetadata(
   if (cdnUrl) {
     // Check if CDN URL changed
     const { data: existing } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('profile_picture_source_url')
       .eq('id', channelId)
       .single();
@@ -56,7 +56,7 @@ async function syncConnectedChannelMetadata(
   }
 
   await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .update(updatePayload)
     .eq('id', channelId)
     .eq('company_id', companyId);
@@ -86,7 +86,7 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
 
     // 3. Save to DB with pending status
     const { data: insertedRow, error: dbError } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .insert({
         company_id: companyId,
         user_id: req.userId,
@@ -157,7 +157,7 @@ router.post('/create-channel', requirePermission('channels', 'create'), async (r
     whapi.waitForReady(channel.token, 120_000)
       .then(async () => {
         await supabaseAdmin
-          .from('whatsapp_channels')
+          .from('channels')
           .update({ channel_status: 'awaiting_scan', updated_at: new Date().toISOString() })
           .eq('id', insertedRow.id);
       })
@@ -179,7 +179,7 @@ router.post('/cancel-provisioning', requirePermission('channels', 'delete'), asy
     const companyId = req.companyId!;
 
     const { data: pendingChannels, error } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, channel_id, channel_token')
       .eq('company_id', companyId)
       .eq('channel_status', 'pending');
@@ -191,7 +191,7 @@ router.post('/cancel-provisioning', requirePermission('channels', 'delete'), asy
       try { await whapi.logoutChannel(ch.channel_token); } catch { /* ignore */ }
       try { await whapi.deleteChannel(ch.channel_id); } catch { /* ignore */ }
       await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .delete()
         .eq('id', ch.id)
         .eq('company_id', companyId);
@@ -215,7 +215,7 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
 
   try {
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token, channel_id')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
@@ -256,7 +256,7 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
           const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
           await whapi.registerWebhook(channel.channel_token, webhookUrl);
           await supabaseAdmin
-            .from('whatsapp_channels')
+            .from('channels')
             .update({ webhook_registered: true })
             .eq('id', Number(channelId));
         } catch {
@@ -288,7 +288,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
     }
 
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token, channel_id, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
@@ -321,7 +321,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
           );
         } else {
           await supabaseAdmin
-            .from('whatsapp_channels')
+            .from('channels')
             .update({
               channel_status: newStatus,
               updated_at: new Date().toISOString(),
@@ -333,7 +333,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
           const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
           await whapi.registerWebhook(channel.channel_token, webhookUrl);
           await supabaseAdmin
-            .from('whatsapp_channels')
+            .from('channels')
             .update({ webhook_registered: true })
             .eq('id', Number(channelId));
         }
@@ -387,13 +387,13 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
         await whapi.registerWebhook(channel.channel_token, webhookUrl);
         await supabaseAdmin
-          .from('whatsapp_channels')
+          .from('channels')
           .update({ webhook_registered: true })
           .eq('id', Number(channelId));
       }
     } else if (!isConnected && channel.channel_status === 'connected') {
       await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .update({ channel_status: 'disconnected', updated_at: new Date().toISOString() })
         .eq('id', Number(channelId));
     }
@@ -424,7 +424,7 @@ router.get('/channels', requirePermission('channels', 'view'), async (req, res, 
     }
 
     const { data: channels, error } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
       .in('id', accessibleIds)
       .eq('company_id', companyId)
@@ -453,7 +453,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
     const userId = req.userId!;
 
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
@@ -482,7 +482,7 @@ router.post('/logout', requirePermission('channels', 'edit'), async (req, res, n
     }
 
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token')
       .eq('id', channelId)
       .eq('company_id', companyId)
@@ -496,7 +496,7 @@ router.post('/logout', requirePermission('channels', 'edit'), async (req, res, n
     await whapi.logoutChannel(channel.channel_token);
 
     await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .update({
         channel_status: 'disconnected',
         webhook_registered: false,
@@ -522,7 +522,7 @@ router.delete('/delete-channel', requirePermission('channels', 'delete'), async 
     }
 
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_id, channel_token')
       .eq('id', channelId)
       .eq('company_id', companyId)
@@ -543,7 +543,7 @@ router.delete('/delete-channel', requirePermission('channels', 'delete'), async 
     await whapi.deleteChannel(channel.channel_id);
 
     await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .delete()
       .eq('id', channelId)
       .eq('company_id', companyId);

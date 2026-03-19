@@ -211,7 +211,7 @@ router.delete('/', async (req, res, next) => {
 
     // 1. Clean up WhatsApp channels via Whapi
     const { data: channels } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_id, channel_token')
       .eq('company_id', companyId);
 

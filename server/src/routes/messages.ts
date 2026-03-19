@@ -64,7 +64,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
 
     // Get channel token via the session's channel
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token')
       .eq('id', session.channel_id)
       .eq('channel_status', 'connected')
@@ -261,7 +261,7 @@ router.post('/send-voice', requirePermission('messages', 'create'), (req, res, n
 
     // Get channel token
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token')
       .eq('id', session.channel_id)
       .eq('channel_status', 'connected')
@@ -427,7 +427,7 @@ router.post('/:messageId/retry-voice', requirePermission('messages', 'create'), 
     }
 
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token')
       .eq('id', session.channel_id)
       .eq('channel_status', 'connected')
@@ -791,7 +791,7 @@ router.get('/:messageId/media', requirePermission('messages', 'view'), async (re
     }
 
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token')
       .eq('id', session.channel_id)
       .single();
@@ -894,7 +894,7 @@ async function getMessageWithChannel(messageId: string, companyId: string) {
   if (!session?.channel_id) return { msg, channelToken: null };
 
   const { data: channel } = await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .select('channel_token')
     .eq('id', session.channel_id)
     .eq('channel_status', 'connected')
@@ -1051,7 +1051,7 @@ router.post('/:messageId/forward', requirePermission('messages', 'create'), asyn
     // Forward via Whapi (fire-and-forget)
     if (origSession?.channel_id && originalMsg.message_id_normalized) {
       const { data: channel } = await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .select('channel_token')
         .eq('id', origSession.channel_id)
         .eq('channel_status', 'connected')

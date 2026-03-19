@@ -59,7 +59,7 @@ export async function checkPlanLimit(
   const addonQty = addonRow?.quantity ?? 0;
   const included = baseIncluded + addonQty;
 
-  const table = resource === 'channels' ? 'whatsapp_channels' : 'ai_agents';
+  const table = resource === 'channels' ? 'channels' : 'ai_agents';
   const { count } = await supabaseAdmin
     .from(table)
     .select('id', { count: 'exact', head: true })
@@ -608,7 +608,7 @@ router.get('/usage', requirePermission('billing', 'view'), async (req, res, next
     const includedAgents = baseAgents + (agentAddon?.quantity ?? 0);
 
     const { count: channelsUsed } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id', { count: 'exact', head: true })
       .eq('company_id', companyId);
 

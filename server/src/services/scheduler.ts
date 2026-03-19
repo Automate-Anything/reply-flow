@@ -46,7 +46,7 @@ async function processScheduledMessages() {
         }
 
         const { data: channel } = await supabaseAdmin
-          .from('whatsapp_channels')
+          .from('channels')
           .select('channel_token')
           .eq('id', session.channel_id)
           .eq('channel_status', 'connected')

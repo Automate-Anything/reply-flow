@@ -1043,7 +1043,7 @@ router.get('/:contactId/sessions', requirePermission('contacts', 'view'), async 
     const channelNameMap: Record<string, string> = {};
     if (channelIds.length > 0) {
       const { data: channels } = await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .select('id, display_name')
         .in('id', channelIds);
       for (const ch of channels || []) {

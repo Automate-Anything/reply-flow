@@ -25,7 +25,7 @@ export async function getChannelAccess(
 ): Promise<AccessLevel | null> {
   // Check if user is channel owner
   const { data: channel } = await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .select('user_id')
     .eq('id', channelId)
     .eq('company_id', companyId)
@@ -81,9 +81,9 @@ export async function getConversationAccess(
     resolvedChannelId = session.channel_id;
   }
 
-  // Owner check + channel gateway in one query (avoid double whatsapp_channels lookup)
+  // Owner check + channel gateway in one query (avoid double channels lookup)
   const { data: channel } = await supabaseAdmin
-    .from('whatsapp_channels')
+    .from('channels')
     .select('user_id')
     .eq('id', resolvedChannelId)
     .eq('company_id', companyId)
@@ -92,7 +92,7 @@ export async function getConversationAccess(
   if (!channel) return null;
   if (channel.user_id === userId) return 'manage';
 
-  // Channel gateway — inline the resolution to avoid re-querying whatsapp_channels
+  // Channel gateway — inline the resolution to avoid re-querying channels
   const { data: channelPerms } = await supabaseAdmin
     .from('channel_permissions')
     .select('user_id, access_level')
@@ -145,7 +145,7 @@ export async function getAccessibleChannelIds(
   ] = await Promise.all([
     // Channels user owns
     supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id')
       .eq('company_id', companyId)
       .eq('user_id', userId),

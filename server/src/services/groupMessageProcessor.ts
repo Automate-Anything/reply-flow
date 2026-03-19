@@ -15,7 +15,7 @@ async function syncGroupName(
 ): Promise<void> {
   try {
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('channel_token')
       .eq('id', channelId)
       .single();

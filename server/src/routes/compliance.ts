@@ -84,7 +84,7 @@ router.get('/channels/health', async (req, res, next) => {
 
     // Fetch all channels for this company
     const { data: channels, error: channelsErr } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, channel_status')
       .eq('company_id', companyId);
 
@@ -176,7 +176,7 @@ router.get('/channels/:channelId/rate-limit', async (req, res, next) => {
 
     // Verify channel belongs to company
     const { data: channel, error: channelErr } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id')
       .eq('id', channelId)
       .eq('company_id', companyId)
@@ -217,7 +217,7 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
 
     // Verify channel belongs to company
     const { data: channel, error: channelErr } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, channel_status')
       .eq('id', channelId)
       .eq('company_id', companyId)
@@ -321,7 +321,7 @@ router.get('/channels/:channelId/safety-meter', async (req, res, next) => {
 
     // Verify channel belongs to company and get token
     const { data: channel, error: channelErr } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id, channel_token')
       .eq('id', channelId)
       .eq('company_id', companyId)
@@ -425,7 +425,7 @@ router.get('/channels/:channelId/events', async (req, res, next) => {
 
     // Verify channel belongs to company
     const { data: channel, error: channelErr } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id')
       .eq('id', channelId)
       .eq('company_id', companyId)

@@ -129,7 +129,7 @@ export async function computeUsersLosingAccess(
 
     // Channel owner
     const { data: channel } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('user_id')
       .eq('id', channelId)
       .single();

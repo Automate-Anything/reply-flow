@@ -13,14 +13,14 @@ router.post('/', async (req, res) => {
 
     // Ensure a WhatsApp channel exists
     const { data: existingChannels } = await supabaseAdmin
-      .from('whatsapp_channels')
+      .from('channels')
       .select('id')
       .eq('company_id', companyId)
       .limit(1);
 
     if (!existingChannels || existingChannels.length === 0) {
       await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .insert({
           user_id: userId,
           company_id: companyId,
@@ -32,7 +32,7 @@ router.post('/', async (req, res) => {
         });
     } else {
       await supabaseAdmin
-        .from('whatsapp_channels')
+        .from('channels')
         .update({ phone_number: '+18455550100', channel_status: 'connected' })
         .eq('id', existingChannels[0].id);
     }
