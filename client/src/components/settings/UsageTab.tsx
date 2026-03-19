@@ -19,6 +19,7 @@ interface UsageData {
   agents: UsageMetric;
   messages: UsageMetric;
   kb_pages: UsageMetric;
+  ai_suggestions: UsageMetric;
 }
 
 interface Plan {
@@ -137,7 +138,7 @@ export default function UsageTab() {
   const u = usage!;
 
   const totalOverageCents =
-    (u.messages.overage_cost_cents ?? 0) + (u.kb_pages.overage_cost_cents ?? 0);
+    (u.messages.overage_cost_cents ?? 0) + (u.kb_pages.overage_cost_cents ?? 0) + (u.ai_suggestions?.overage_cost_cents ?? 0);
 
   return (
     <div className="space-y-6">
@@ -184,6 +185,13 @@ export default function UsageTab() {
             overageCostCents={u.messages.overage_cost_cents}
           />
           <UsageBar
+            label="AI Suggestions"
+            used={u.ai_suggestions?.used ?? 0}
+            included={u.ai_suggestions?.included ?? 0}
+            overage={u.ai_suggestions?.overage}
+            overageCostCents={u.ai_suggestions?.overage_cost_cents}
+          />
+          <UsageBar
             label="Knowledge Base Pages"
             used={u.kb_pages.used}
             included={u.kb_pages.included}
@@ -206,6 +214,12 @@ export default function UsageTab() {
                   <p className="text-muted-foreground">
                     Messages: {u.messages.overage!.toLocaleString()} extra —{' '}
                     {formatCents(u.messages.overage_cost_cents!)}
+                  </p>
+                )}
+                {(u.ai_suggestions?.overage ?? 0) > 0 && (
+                  <p className="text-muted-foreground">
+                    AI suggestions: {u.ai_suggestions.overage!.toLocaleString()} extra —{' '}
+                    {formatCents(u.ai_suggestions.overage_cost_cents!)}
                   </p>
                 )}
                 {(u.kb_pages.overage ?? 0) > 0 && (

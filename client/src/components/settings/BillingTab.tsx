@@ -60,9 +60,11 @@ interface Plan {
   kbPages: number;
   kbTokens: string;
   messages: number;
+  aiSuggestions: number;
   overageMessage: string;
   overagePage: string;
   overagePageBulk: string;
+  overageSuggestion: string;
   popular?: boolean;
 }
 
@@ -77,9 +79,11 @@ const PLANS: Plan[] = [
     kbPages: 5,
     kbTokens: '10,000',
     messages: 500,
-    overageMessage: '$0.03',
+    aiSuggestions: 50,
+    overageMessage: '$0.035',
     overagePage: '$0.05',
     overagePageBulk: '$5 / 100 pages',
+    overageSuggestion: '$0.025',
   },
   {
     id: 'pro',
@@ -91,9 +95,11 @@ const PLANS: Plan[] = [
     kbPages: 50,
     kbTokens: '100,000',
     messages: 1000,
-    overageMessage: '$0.02',
+    aiSuggestions: 150,
+    overageMessage: '$0.03',
     overagePage: '$0.04',
     overagePageBulk: '$4 / 100 pages',
+    overageSuggestion: '$0.02',
     popular: true,
   },
   {
@@ -106,9 +112,11 @@ const PLANS: Plan[] = [
     kbPages: 200,
     kbTokens: '400,000',
     messages: 2000,
-    overageMessage: '$0.015',
+    aiSuggestions: 400,
+    overageMessage: '$0.025',
     overagePage: '$0.03',
     overagePageBulk: '$3 / 100 pages',
+    overageSuggestion: '$0.015',
   },
 ];
 
@@ -629,6 +637,24 @@ export default function BillingTab() {
                       {plan.messages.toLocaleString()} messages / month
                     </p>
                   </div>
+                  <div className="rounded-lg bg-muted/50 p-3">
+                    <p className="text-xs font-medium text-muted-foreground">AI suggestions included</p>
+                    <p className="mt-0.5 text-sm font-semibold">
+                      {plan.aiSuggestions} AI suggestions / month
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {plan.overageSuggestion} per extra suggestion
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Features
+                  </p>
+                  <ul className="space-y-2">
+                    <PlanFeature label="Auto classification (labels, priority, tags)" />
+                  </ul>
                 </div>
 
                 {/* Plan action button */}
@@ -696,6 +722,7 @@ export default function BillingTab() {
                   <th className="pb-2 text-left font-medium text-muted-foreground">Plan</th>
                   <th className="pb-2 text-left font-medium text-muted-foreground">Extra Message</th>
                   <th className="pb-2 text-left font-medium text-muted-foreground">Extra KB Page</th>
+                  <th className="pb-2 text-left font-medium text-muted-foreground">Extra AI Suggestion</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -712,6 +739,10 @@ export default function BillingTab() {
                       <span className="ml-2 text-xs text-muted-foreground">
                         ({plan.overagePageBulk})
                       </span>
+                    </td>
+                    <td className="py-3">
+                      <span className="font-semibold">{plan.overageSuggestion}</span>
+                      <span className="text-muted-foreground"> per suggestion</span>
                     </td>
                   </tr>
                 ))}
@@ -829,7 +860,7 @@ export default function BillingTab() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold">Add-ons</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Expand your plan with additional channels or agents. Billed monthly, prorated from purchase date.
+              Expand your plan with additional channels, agents, or monitoring. Billed monthly, prorated from purchase date.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -914,6 +945,27 @@ export default function BillingTab() {
                 </div>
               );
             })}
+
+            {/* Groups Monitoring add-on */}
+            <div className="mt-4 space-y-3">
+              <p className="text-sm font-medium">Groups Monitoring</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {([
+                  { tier: 'Basic', groups: 5, evaluations: '5,000', price: 8 },
+                  { tier: 'Pro', groups: 15, evaluations: '15,000', price: 18 },
+                  { tier: 'Scale', groups: 30, evaluations: '30,000', price: 30 },
+                ] as const).map((t) => (
+                  <div key={t.tier} className="rounded-lg border p-3 space-y-1">
+                    <p className="text-sm font-semibold">{t.tier}</p>
+                    <p className="text-xs text-muted-foreground">{t.groups} groups · {t.evaluations} AI evaluations/mo</p>
+                    <p className="text-sm font-semibold">${t.price}/mo</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Keyword-only alert rules are free and unlimited — AI evaluations are only consumed by AI-type alert rules.
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}

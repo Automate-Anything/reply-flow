@@ -24,9 +24,11 @@ interface Plan {
   kbPages: number;
   kbTokens: string;
   messages: number;
+  aiSuggestions: number;
   overageMessage: string;
   overagePage: string;
   overagePageBulk: string;
+  overageSuggestion: string;
   popular?: boolean;
 }
 
@@ -41,9 +43,11 @@ const PLANS: Plan[] = [
     kbPages: 5,
     kbTokens: '10,000',
     messages: 500,
-    overageMessage: '$0.03',
+    aiSuggestions: 50,
+    overageMessage: '$0.035',
     overagePage: '$0.05',
     overagePageBulk: '$5 / 100 pages',
+    overageSuggestion: '$0.025',
   },
   {
     id: 'pro',
@@ -55,9 +59,11 @@ const PLANS: Plan[] = [
     kbPages: 50,
     kbTokens: '100,000',
     messages: 1000,
-    overageMessage: '$0.02',
+    aiSuggestions: 150,
+    overageMessage: '$0.03',
     overagePage: '$0.04',
     overagePageBulk: '$4 / 100 pages',
+    overageSuggestion: '$0.02',
     popular: true,
   },
   {
@@ -70,9 +76,11 @@ const PLANS: Plan[] = [
     kbPages: 200,
     kbTokens: '400,000',
     messages: 2000,
-    overageMessage: '$0.015',
+    aiSuggestions: 400,
+    overageMessage: '$0.025',
     overagePage: '$0.03',
     overagePageBulk: '$3 / 100 pages',
+    overageSuggestion: '$0.015',
   },
 ];
 
@@ -344,6 +352,24 @@ export default function BillingPage() {
                     {plan.messages.toLocaleString()} messages / month
                   </p>
                 </div>
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">AI suggestions included</p>
+                  <p className="mt-0.5 text-sm font-semibold">
+                    {plan.aiSuggestions} AI suggestions / month
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {plan.overageSuggestion} per extra suggestion
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Features
+                </p>
+                <ul className="space-y-2">
+                  <PlanFeature label="Auto classification (labels, priority, tags)" />
+                </ul>
               </div>
 
               <Button
@@ -389,6 +415,7 @@ export default function BillingPage() {
                   <th className="pb-2 text-left font-medium text-muted-foreground">Plan</th>
                   <th className="pb-2 text-left font-medium text-muted-foreground">Extra Message</th>
                   <th className="pb-2 text-left font-medium text-muted-foreground">Extra KB Page</th>
+                  <th className="pb-2 text-left font-medium text-muted-foreground">Extra AI Suggestion</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -405,6 +432,10 @@ export default function BillingPage() {
                       <span className="ml-2 text-xs text-muted-foreground">
                         ({plan.overagePageBulk})
                       </span>
+                    </td>
+                    <td className="py-3">
+                      <span className="font-semibold">{plan.overageSuggestion}</span>
+                      <span className="text-muted-foreground"> per suggestion</span>
                     </td>
                   </tr>
                 ))}

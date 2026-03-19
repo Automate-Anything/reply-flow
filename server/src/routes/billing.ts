@@ -580,6 +580,8 @@ router.get('/usage', requirePermission('billing', 'view'), async (req, res, next
       kb_pages: number;
       overage_message_cents: number;
       overage_page_cents: number;
+      ai_suggestions_per_month: number;
+      overage_suggestion_cents: number;
     };
 
     // During a trial, enforce fixed trial limits instead of the full plan limits
@@ -588,6 +590,7 @@ router.get('/usage', requirePermission('billing', 'view'), async (req, res, next
     const baseAgents = isTrialing ? TRIAL_LIMITS.agents : plan.agents;
     const includedMessages = isTrialing ? TRIAL_LIMITS.messages_per_month : plan.messages_per_month;
     const includedKbPages = isTrialing ? TRIAL_LIMITS.kb_pages : plan.kb_pages;
+    const includedSuggestions = isTrialing ? 0 : (plan.ai_suggestions_per_month ?? 0);
 
     // Add purchased add-ons to base channel/agent limits
     const [{ data: channelAddon }, { data: agentAddon }] = await Promise.all([
@@ -638,11 +641,21 @@ router.get('/usage', requirePermission('billing', 'view'), async (req, res, next
     );
     const kbPagesUsed = Math.ceil(totalChars / 8000);
 
+    // Count AI suggestions used in current billing period
+    const { count: suggestionsUsed } = await supabaseAdmin
+      .from('ai_suggestions')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('created_at', sub.current_period_start)
+      .lte('created_at', sub.current_period_end);
+
     // Overage is $0 during trial (no billing for overages while trialing)
     const messageOverage = isTrialing ? 0 : Math.max(0, (messagesUsed ?? 0) - includedMessages);
     const kbPageOverage = isTrialing ? 0 : Math.max(0, kbPagesUsed - includedKbPages);
+    const suggestionOverage = isTrialing ? 0 : Math.max(0, (suggestionsUsed ?? 0) - includedSuggestions);
     const messageOverageCost = messageOverage * plan.overage_message_cents;
     const kbPageOverageCost = kbPageOverage * plan.overage_page_cents;
+    const suggestionOverageCost = suggestionOverage * (plan.overage_suggestion_cents ?? 0);
 
     res.json({
       subscription: sub,
@@ -661,6 +674,12 @@ router.get('/usage', requirePermission('billing', 'view'), async (req, res, next
           included: includedKbPages,
           overage: kbPageOverage,
           overage_cost_cents: kbPageOverageCost,
+        },
+        ai_suggestions: {
+          used: suggestionsUsed ?? 0,
+          included: includedSuggestions,
+          overage: suggestionOverage,
+          overage_cost_cents: suggestionOverageCost,
         },
       },
     });
