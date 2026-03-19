@@ -144,6 +144,39 @@ export async function checkDuplicateContent(
   return { isDuplicate: matchCount >= 10, matchCount };
 }
 
+// --- Response Rate Tracking ---
+
+export async function getResponseRateStatus(
+  channelId: number | string,
+  companyId: string
+): Promise<{ rate: number; warning: boolean; throttled: boolean }> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [outbound, inbound] = await Promise.all([
+    supabaseAdmin
+      .from('compliance_metrics')
+      .select('id', { count: 'exact', head: true })
+      .eq('channel_id', channelId)
+      .eq('event_type', 'message_sent')
+      .gte('created_at', sevenDaysAgo),
+    supabaseAdmin
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('direction', 'inbound')
+      .gte('message_ts', sevenDaysAgo),
+  ]);
+
+  const outCount = outbound.count ?? 0;
+  const inCount = inbound.count ?? 0;
+  const rate = outCount > 0 ? inCount / outCount : 1;
+
+  return {
+    rate: Math.round(rate * 100),
+    warning: rate < 0.3,
+    throttled: rate < 0.1,
+  };
+}
+
 // --- Metric Logging ---
 
 export function logComplianceMetric(
