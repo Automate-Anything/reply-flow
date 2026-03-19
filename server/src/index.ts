@@ -38,6 +38,7 @@ import affiliateAuthRouter from './routes/affiliateAuth.js';
 import affiliatePortalRouter from './routes/affiliatePortal.js';
 import affiliateAdminRouter from './routes/affiliateAdmin.js';
 import classificationRouter from './routes/classification.js';
+import complianceRouter from './routes/compliance.js';
 import { startScheduler } from './services/scheduler.js';
 import { startAvailabilityScheduler } from './services/availabilityScheduler.js';
 import { startPayoutScheduler } from './cron/affiliatePayouts.js';
@@ -130,6 +131,7 @@ app.use('/api/affiliate/admin', affiliateAdminRouter);
 app.use('/api/affiliate', affiliateAuthRouter);
 app.use('/api/affiliate', affiliatePortalRouter);
 app.use('/api/classification', classificationRouter);
+app.use('/api/compliance', complianceRouter);
 
 app.use(errorHandler);
 
