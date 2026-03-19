@@ -85,7 +85,7 @@ router.get('/channels/health', async (req, res, next) => {
     // Fetch all channels for this company
     const { data: channels, error: channelsErr } = await supabaseAdmin
       .from('channels')
-      .select('id, channel_status')
+      .select('id, channel_status, channel_type')
       .eq('company_id', companyId);
 
     if (channelsErr) throw channelsErr;
@@ -109,7 +109,7 @@ router.get('/channels/health', async (req, res, next) => {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const results = await Promise.all(
-      channels.map(async (channel: { id: number; channel_status: string }) => {
+      channels.map(async (channel: { id: number; channel_status: string; channel_type: string | null }) => {
         // Count outbound messages in last 7 days
         const { count: outboundCount } = await supabaseAdmin
           .from('chat_messages')
@@ -131,7 +131,8 @@ router.get('/channels/health', async (req, res, next) => {
         const responseRate7d = outbound7d > 0 ? (inbound7d / outbound7d) * 100 : null;
 
         // Rate limit utilization
-        const rateLimitInfo = checkRateLimit(channel.id, companyId);
+        const channelType = (channel.channel_type === 'email' ? 'email' : 'whatsapp') as 'whatsapp' | 'email';
+        const rateLimitInfo = checkRateLimit(channel.id, companyId, undefined, channelType);
         const utilization = ((rateLimitInfo.limit - rateLimitInfo.remaining) / rateLimitInfo.limit) * 100;
 
         const safety = safetyMap.get(channel.id);
@@ -147,6 +148,7 @@ router.get('/channels/health', async (req, res, next) => {
         return {
           channelId: channel.id,
           channelStatus: channel.channel_status,
+          channel_type: channel.channel_type ?? 'whatsapp',
           healthScore: score,
           healthStatus: status,
           responseRate7d,
@@ -177,7 +179,7 @@ router.get('/channels/:channelId/rate-limit', async (req, res, next) => {
     // Verify channel belongs to company
     const { data: channel, error: channelErr } = await supabaseAdmin
       .from('channels')
-      .select('id')
+      .select('id, channel_type')
       .eq('id', channelId)
       .eq('company_id', companyId)
       .maybeSingle();
@@ -188,7 +190,8 @@ router.get('/channels/:channelId/rate-limit', async (req, res, next) => {
       return;
     }
 
-    const rateLimitInfo = checkRateLimit(channelId, companyId);
+    const channelType = (channel.channel_type === 'email' ? 'email' : 'whatsapp') as 'whatsapp' | 'email';
+    const rateLimitInfo = checkRateLimit(channelId, companyId, undefined, channelType);
     const utilization = ((rateLimitInfo.limit - rateLimitInfo.remaining) / rateLimitInfo.limit) * 100;
 
     res.json({
@@ -218,7 +221,7 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
     // Verify channel belongs to company
     const { data: channel, error: channelErr } = await supabaseAdmin
       .from('channels')
-      .select('id, channel_status')
+      .select('id, channel_status, channel_type')
       .eq('id', channelId)
       .eq('company_id', companyId)
       .maybeSingle();
@@ -228,6 +231,8 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
       res.status(404).json({ error: 'Channel not found' });
       return;
     }
+
+    const channelType = (channel.channel_type === 'email' ? 'email' : 'whatsapp') as 'whatsapp' | 'email';
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -260,7 +265,7 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
     const inbound7d = inboundResult.count ?? 0;
     const responseRate7d = outbound7d > 0 ? (inbound7d / outbound7d) * 100 : null;
 
-    const rateLimitInfo = checkRateLimit(channelId, companyId);
+    const rateLimitInfo = checkRateLimit(channelId, companyId, undefined, channelType);
     const utilization = ((rateLimitInfo.limit - rateLimitInfo.remaining) / rateLimitInfo.limit) * 100;
 
     const safety = safetyResult.data;
@@ -277,6 +282,7 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
     res.json({
       channelId,
       channelStatus: channel.channel_status,
+      channel_type: channel.channel_type ?? 'whatsapp',
       healthScore: score,
       healthStatus: status,
       groupCount: groupCountResult.count ?? 0,
@@ -322,7 +328,7 @@ router.get('/channels/:channelId/safety-meter', async (req, res, next) => {
     // Verify channel belongs to company and get token
     const { data: channel, error: channelErr } = await supabaseAdmin
       .from('channels')
-      .select('id, channel_token')
+      .select('id, channel_token, channel_type')
       .eq('id', channelId)
       .eq('company_id', companyId)
       .maybeSingle();
@@ -330,6 +336,12 @@ router.get('/channels/:channelId/safety-meter', async (req, res, next) => {
     if (channelErr) throw channelErr;
     if (!channel) {
       res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+
+    // Safety meter is WhatsApp-specific (WhAPI)
+    if (channel.channel_type !== 'whatsapp' && channel.channel_type !== null) {
+      res.json({ score: null, message: 'Safety meter is WhatsApp-specific' });
       return;
     }
 
@@ -426,7 +438,7 @@ router.get('/channels/:channelId/events', async (req, res, next) => {
     // Verify channel belongs to company
     const { data: channel, error: channelErr } = await supabaseAdmin
       .from('channels')
-      .select('id')
+      .select('id, channel_type')
       .eq('id', channelId)
       .eq('company_id', companyId)
       .maybeSingle();
@@ -474,11 +486,36 @@ router.get('/sessions/:sessionId/window-status', async (req, res, next) => {
       return;
     }
 
-    const windowStatus = await check24HourWindow(sessionId);
+    // Look up channel type for this session
+    let channelType: 'whatsapp' | 'email' = 'whatsapp';
+    if (session.channel_id) {
+      const { data: channel } = await supabaseAdmin
+        .from('channels')
+        .select('channel_type')
+        .eq('id', session.channel_id)
+        .maybeSingle();
+      if (channel?.channel_type === 'email') channelType = 'email';
+    }
+
+    // 24-hour window only applies to WhatsApp
+    if (channelType !== 'whatsapp') {
+      res.json({
+        sessionId,
+        channelId: session.channel_id,
+        channelType,
+        allowed: true,
+        expiresAt: null,
+        lastInboundAt: null,
+      });
+      return;
+    }
+
+    const windowStatus = await check24HourWindow(sessionId, channelType);
 
     res.json({
       sessionId,
       channelId: session.channel_id,
+      channelType,
       ...windowStatus,
     });
   } catch (err) {
