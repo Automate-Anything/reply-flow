@@ -39,6 +39,8 @@ import affiliatePortalRouter from './routes/affiliatePortal.js';
 import affiliateAdminRouter from './routes/affiliateAdmin.js';
 import classificationRouter from './routes/classification.js';
 import complianceRouter from './routes/compliance.js';
+import gmailRouter from './routes/gmail.js';
+import { handleGoogleCallback } from './routes/gmail.js';
 import { startScheduler } from './services/scheduler.js';
 import { startAvailabilityScheduler } from './services/availabilityScheduler.js';
 import { startPayoutScheduler } from './cron/affiliatePayouts.js';
@@ -93,6 +95,9 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Google OAuth callback — no auth middleware (user is redirected here from Google)
+app.get('/api/auth/google/callback', handleGoogleCallback);
+
 // Apply general rate limit to all other API routes
 app.use('/api', apiLimiter);
 
@@ -132,6 +137,7 @@ app.use('/api/affiliate', affiliateAuthRouter);
 app.use('/api/affiliate', affiliatePortalRouter);
 app.use('/api/classification', classificationRouter);
 app.use('/api/compliance', complianceRouter);
+app.use('/api/channels/gmail', gmailRouter);
 
 app.use(errorHandler);
 
