@@ -29,6 +29,7 @@ import AccessManager from '@/components/access/AccessManager';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import ScheduleSection from './sections/ScheduleSection';
 import AutoReplySection from './sections/AutoReplySection';
+import ComplianceTab from './sections/ComplianceTab';
 import ChannelAgentContactList from './ChannelAgentContactList';
 import type { ScheduleMode } from '@/hooks/useCompanyAI';
 import type { ChannelInfo } from './channelHelpers';
@@ -494,6 +495,7 @@ export default function ChannelDetailPage() {
               Access
             </TabsTrigger>
           )}
+          <TabsTrigger value="compliance" className="flex-1">Compliance</TabsTrigger>
         </TabsList>
 
         {/* Connection Tab */}
@@ -934,6 +936,11 @@ export default function ChannelDetailPage() {
             />
           </TabsContent>
         )}
+
+        {/* Compliance Tab */}
+        <TabsContent value="compliance" className="mt-1 space-y-5">
+          <ComplianceTab channelId={numericChannelId} companyId={''} />
+        </TabsContent>
 
       </Tabs>
     </div>

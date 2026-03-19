@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
-import { Send, Zap, Clock, CalendarClock, X, ExternalLink } from 'lucide-react';
+import { Send, Zap, Clock, CalendarClock, X, ExternalLink, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
@@ -17,9 +17,30 @@ import { VoiceRecordingBar } from './VoiceRecordingBar';
 import { toast } from 'sonner';
 import { useAISuggestion } from '@/hooks/useAISuggestion';
 import { AISuggestionButton, type AISuggestionButtonHandle } from './AISuggestionButton';
+import api from '@/lib/api';
+
+interface ComplianceResult {
+  warnings: string[];
+  remaining: number;
+  limit: number;
+  resetsAt: string;
+}
+
+interface RateLimitInfo {
+  remaining: number;
+  limit: number;
+  resetsAt: string;
+  utilization: number;
+}
+
+interface WindowStatus {
+  allowed: boolean;
+  expiresAt: string | null;
+  lastInboundAt: string | null;
+}
 
 interface MessageInputProps {
-  onSend: (body: string) => Promise<unknown>;
+  onSend: (body: string) => Promise<{ compliance?: ComplianceResult } | void>;
   onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   disabled?: boolean;
@@ -40,7 +61,19 @@ function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }
   ];
 }
 
-export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId: _channelId }: MessageInputProps) {
+/** Format time remaining until an ISO timestamp */
+function formatTimeUntil(isoString: string): string {
+  const ms = new Date(isoString).getTime() - Date.now();
+  if (ms <= 0) return '0m';
+  const totalMinutes = Math.ceil(ms / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+}
+
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
@@ -53,6 +86,78 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
   const [customDate, setCustomDate] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { responses } = useCannedResponses();
+
+  // ── Compliance state ──────────────────────────────────────────────────────
+  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
+  const [windowStatus, setWindowStatus] = useState<WindowStatus | null>(null);
+  const [complianceWarnings, setComplianceWarnings] = useState<string[]>([]);
+  const warningDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchRateLimit = useCallback(async () => {
+    if (!channelId) return;
+    try {
+      const { data } = await api.get(`/compliance/channels/${channelId}/rate-limit`);
+      setRateLimit(data as RateLimitInfo);
+    } catch {
+      // Non-critical — fail silently
+    }
+  }, [channelId]);
+
+  const fetchWindowStatus = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const { data } = await api.get(`/compliance/sessions/${sessionId}/window-status`);
+      setWindowStatus(data as WindowStatus);
+    } catch {
+      // Non-critical — fail silently
+    }
+  }, [sessionId]);
+
+  // Fetch on mount
+  useEffect(() => {
+    fetchRateLimit();
+    fetchWindowStatus();
+  }, [fetchRateLimit, fetchWindowStatus]);
+
+  const dismissComplianceWarnings = useCallback(() => {
+    setComplianceWarnings([]);
+    if (warningDismissTimer.current) {
+      clearTimeout(warningDismissTimer.current);
+      warningDismissTimer.current = null;
+    }
+  }, []);
+
+  // Show compliance warnings and auto-dismiss after 10s
+  const showWarnings = useCallback((warnings: string[]) => {
+    if (warnings.length === 0) return;
+    setComplianceWarnings(warnings);
+    if (warningDismissTimer.current) clearTimeout(warningDismissTimer.current);
+    warningDismissTimer.current = setTimeout(() => {
+      setComplianceWarnings([]);
+      warningDismissTimer.current = null;
+    }, 10_000);
+  }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (warningDismissTimer.current) clearTimeout(warningDismissTimer.current);
+    };
+  }, []);
+
+  // Derived compliance state
+  const rateLimitExhausted = rateLimit !== null && rateLimit.remaining <= 0;
+  const windowExpired = windowStatus !== null && !windowStatus.allowed;
+  const sendBlocked = rateLimitExhausted || windowExpired;
+
+  const rateLimitColorClass = useMemo(() => {
+    if (!rateLimit || rateLimit.limit === 0) return 'text-muted-foreground';
+    const used = rateLimit.limit - rateLimit.remaining;
+    const pct = (used / rateLimit.limit) * 100;
+    if (pct >= 90) return 'text-destructive';
+    if (pct >= 75) return 'text-yellow-500';
+    return 'text-muted-foreground';
+  }, [rateLimit]);
 
   // ── Voice recording ──────────────────────────────────────────────────────
   const [isRecordingLocked, setIsRecordingLocked] = useState(false);
@@ -179,7 +284,18 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
       textareaRef.current.style.height = 'auto';
     }
     try {
-      await onSend(trimmed);
+      const result = await onSend(trimmed);
+      // Handle compliance data from send response
+      if (result?.compliance) {
+        const { warnings, remaining, limit, resetsAt } = result.compliance;
+        // Update rate limit counter from response
+        setRateLimit((prev) =>
+          prev ? { ...prev, remaining, limit, resetsAt, utilization: ((limit - remaining) / limit) * 100 } : prev
+        );
+        showWarnings(warnings);
+      }
+      // Refresh rate limit after send
+      fetchRateLimit();
       // Don't call onDraftChange here — handleSend in InboxPage already
       // clears the draft before the await to prevent race conditions.
     } catch {
@@ -329,6 +445,49 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
 
   return (
     <div className="relative z-10 border-t bg-background">
+      {/* 24h window expired banner */}
+      {windowExpired && (
+        <div className="flex items-center gap-2 border-b bg-yellow-50 px-3 py-2 dark:bg-yellow-950/30">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-400" />
+          <p className="flex-1 text-xs text-yellow-800 dark:text-yellow-300">
+            24-hour window expired. Waiting for customer to message.
+          </p>
+        </div>
+      )}
+
+      {/* 24h window active countdown — shown only when less than 3 hours remain */}
+      {!windowExpired && windowStatus?.allowed && windowStatus.expiresAt && (() => {
+        const ms = new Date(windowStatus.expiresAt).getTime() - Date.now();
+        if (ms > 3 * 3_600_000) return null;
+        return (
+          <div className="flex items-center gap-2 border-b bg-yellow-50/60 px-3 py-1.5 dark:bg-yellow-950/20">
+            <AlertTriangle className="h-3 w-3 shrink-0 text-yellow-500" />
+            <p className="text-[11px] text-yellow-700 dark:text-yellow-400">
+              Window expires in {formatTimeUntil(windowStatus.expiresAt)}
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* Compliance warnings banner */}
+      {complianceWarnings.length > 0 && (
+        <div className="flex items-start gap-2 border-b bg-yellow-50 px-3 py-2 dark:bg-yellow-950/30">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-400" />
+          <div className="flex-1">
+            {complianceWarnings.map((w, i) => (
+              <p key={i} className="text-xs text-yellow-800 dark:text-yellow-300">{w}</p>
+            ))}
+          </div>
+          <button
+            onClick={dismissComplianceWarnings}
+            className="shrink-0 rounded p-0.5 hover:bg-yellow-100 dark:hover:bg-yellow-900"
+            aria-label="Dismiss warnings"
+          >
+            <X className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
+          </button>
+        </div>
+      )}
+
       {/* Link preview banner */}
       {typedLinkPreview && !previewDismissed && (
         <div className="border-b px-4 py-3">
@@ -476,7 +635,7 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
           setTimeout(() => setShowQuickReplies(false), 200);
         }}
         placeholder="Type a message... (/ for quick replies)"
-        disabled={disabled || sending}
+        disabled={disabled || sending || sendBlocked}
         readOnly={isSuggestionStreaming}
         rows={1}
         className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -495,14 +654,29 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
 
       {hasText ? (
         <PlanGate>
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={!hasText || disabled || sending}
-            className="h-9 w-9 shrink-0"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-col items-center gap-0.5">
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={!hasText || disabled || sending || sendBlocked}
+              className="h-9 w-9 shrink-0"
+              title={
+                rateLimitExhausted && rateLimit
+                  ? `Limit reached — resets in ${formatTimeUntil(rateLimit.resetsAt)}`
+                  : undefined
+              }
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+            {/* Rate limit counter */}
+            {rateLimit && (
+              <span className={cn('text-[10px] leading-none tabular-nums', rateLimitColorClass)}>
+                {rateLimitExhausted
+                  ? `Resets ${formatTimeUntil(rateLimit.resetsAt)}`
+                  : `${rateLimit.remaining} left`}
+              </span>
+            )}
+          </div>
         </PlanGate>
       ) : (
         typeof MediaRecorder !== 'undefined' && (
@@ -533,7 +707,7 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
           <Button
             size="icon"
             variant="ghost"
-            disabled={!hasText || disabled || sending}
+            disabled={!hasText || disabled || sending || windowExpired}
             className="h-9 w-9 shrink-0"
             title="Schedule message"
           >
