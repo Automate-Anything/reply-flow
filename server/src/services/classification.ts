@@ -146,6 +146,39 @@ async function fetchAvailableEntities(companyId: string): Promise<AvailableEntit
   };
 }
 
+// ── Structured Rules → Text ──────────────────────────────────
+
+interface StructuredRule {
+  condition: { type: 'keyword' | 'contact_tag' | 'sentiment'; value: string };
+  actions: Array<{ type: 'add_label' | 'set_priority' | 'set_status' | 'add_contact_tag' | 'add_to_contact_list'; value: string; label?: string }>;
+}
+
+function structuredRulesToText(rules: StructuredRule[]): string {
+  if (!rules || rules.length === 0) return '';
+
+  return rules.map((rule) => {
+    const conditionText =
+      rule.condition.type === 'keyword' ? `the message contains "${rule.condition.value}"` :
+      rule.condition.type === 'contact_tag' ? `the contact has the tag "${rule.condition.value}"` :
+      rule.condition.type === 'sentiment' ? `the conversation sentiment is ${rule.condition.value}` :
+      `condition: ${rule.condition.value}`;
+
+    const actionTexts = rule.actions.map((a) => {
+      const name = a.label ?? a.value;
+      switch (a.type) {
+        case 'add_label': return `add the label "${name}"`;
+        case 'set_priority': return `set priority to "${name}"`;
+        case 'set_status': return `set status to "${name}"`;
+        case 'add_contact_tag': return `add the contact tag "${name}"`;
+        case 'add_to_contact_list': return `add to the contact list "${name}"`;
+        default: return `apply ${a.type}: "${name}"`;
+      }
+    });
+
+    return `If ${conditionText}, then ${actionTexts.join(' and ')}.`;
+  }).join('\n');
+}
+
 // ── buildClassificationPrompt ────────────────────────────────
 
 async function buildClassificationPrompt(
@@ -153,13 +186,18 @@ async function buildClassificationPrompt(
   companyId: string,
   contactId: string,
   rules: string,
+  structuredRules: StructuredRule[],
   entities: AvailableEntities
 ): Promise<string> {
   const parts: string[] = [];
 
-  // Admin classification rules
-  if (rules && rules.trim()) {
-    parts.push(`## Classification Rules\n${rules.trim()}`);
+  // Structured rules (converted to text)
+  const structuredText = structuredRulesToText(structuredRules);
+
+  // Combine structured + custom rules
+  const allRules = [structuredText, rules].filter(Boolean).join('\n\n');
+  if (allRules.trim()) {
+    parts.push(`## Classification Rules\n${allRules.trim()}`);
   }
 
   // Contact info
@@ -548,7 +586,7 @@ export async function classifyConversation(
   // 2. Resolve classification config from company + channel settings
   const { data: company } = await supabaseAdmin
     .from('companies')
-    .select('classification_enabled, classification_mode, classification_auto_classify, classification_rules')
+    .select('classification_enabled, classification_mode, classification_auto_classify, classification_rules, classification_config_mode, classification_structured_rules')
     .eq('id', companyId)
     .single();
 
@@ -557,39 +595,45 @@ export async function classifyConversation(
     return null;
   }
 
-  const { data: channelSettings } = await supabaseAdmin
-    .from('channel_agent_settings')
-    .select('classification_override, classification_mode, classification_auto_classify, classification_rules')
-    .eq('channel_id', channelId)
-    .eq('company_id', companyId)
-    .single();
+  const configMode = (company.classification_config_mode as string) ?? 'company';
+  let effectiveMode: string;
+  let effectiveAutoClassify: boolean;
+  let rules: string;
+  let structuredRules: StructuredRule[];
 
-  const override = channelSettings?.classification_override ?? 'company_defaults';
+  if (configMode === 'per_channel') {
+    // Per-channel mode: use channel settings only, no company fallback
+    const { data: channelSettings } = await supabaseAdmin
+      .from('channel_agent_settings')
+      .select('classification_override, classification_mode, classification_auto_classify, classification_rules, classification_structured_rules')
+      .eq('channel_id', channelId)
+      .eq('company_id', companyId)
+      .single();
 
-  if (override === 'disabled') {
-    console.log('[classify] BAIL: channel classification disabled');
-    return null;
+    const override = channelSettings?.classification_override ?? 'disabled';
+
+    if (override !== 'custom') {
+      console.log('[classify] BAIL: channel not configured in per-channel mode');
+      return null;
+    }
+
+    effectiveMode = channelSettings?.classification_mode ?? 'suggest';
+    effectiveAutoClassify = channelSettings?.classification_auto_classify ?? false;
+    rules = channelSettings?.classification_rules ?? '';
+    structuredRules = (channelSettings?.classification_structured_rules as StructuredRule[] | null) ?? [];
+  } else {
+    // Company-wide mode: use company settings for all channels
+    effectiveMode = company.classification_mode ?? 'suggest';
+    effectiveAutoClassify = company.classification_auto_classify ?? false;
+    rules = company.classification_rules ?? '';
+    structuredRules = (company.classification_structured_rules as StructuredRule[] | null) ?? [];
   }
-
-  // Resolve effective config: channel custom overrides company defaults
-  const effectiveMode = override === 'custom' && channelSettings?.classification_mode
-    ? channelSettings.classification_mode
-    : company.classification_mode ?? 'suggest';
-
-  const effectiveAutoClassify = override === 'custom' && channelSettings != null && channelSettings.classification_auto_classify !== null
-    ? channelSettings.classification_auto_classify
-    : company.classification_auto_classify ?? false;
 
   // For auto trigger, skip if auto-classify is disabled
   if (trigger === 'auto' && !effectiveAutoClassify) {
     console.log('[classify] BAIL: auto-classify disabled');
     return null;
   }
-
-  // Rules: company rules + channel rules (additive)
-  const companyRules = company.classification_rules ?? '';
-  const channelRules = (override === 'custom' ? channelSettings?.classification_rules : null) ?? '';
-  const rules = [companyRules, channelRules].filter(Boolean).join('\n\n');
 
   // 4. Dedup check for auto trigger
   if (trigger === 'auto') {
@@ -631,6 +675,7 @@ export async function classifyConversation(
     companyId,
     contactId,
     rules,
+    structuredRules,
     entities
   );
 

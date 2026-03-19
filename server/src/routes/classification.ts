@@ -154,7 +154,7 @@ router.get('/company-settings', requirePermission('company_settings', 'view'), a
     const companyId = req.companyId!;
     const { data, error } = await supabaseAdmin
       .from('companies')
-      .select('classification_enabled, classification_mode, classification_auto_classify, classification_rules')
+      .select('classification_enabled, classification_mode, classification_auto_classify, classification_rules, classification_config_mode, classification_structured_rules')
       .eq('id', companyId)
       .single();
 
@@ -169,13 +169,15 @@ router.get('/company-settings', requirePermission('company_settings', 'view'), a
 router.put('/company-settings', requirePermission('company_settings', 'edit'), async (req, res, next) => {
   try {
     const companyId = req.companyId!;
-    const { classification_enabled, classification_mode, classification_auto_classify, classification_rules } = req.body;
+    const { classification_enabled, classification_mode, classification_auto_classify, classification_rules, classification_config_mode, classification_structured_rules } = req.body;
 
     const update: Record<string, unknown> = {};
     if (typeof classification_enabled === 'boolean') update.classification_enabled = classification_enabled;
     if (classification_mode === 'suggest' || classification_mode === 'auto_apply') update.classification_mode = classification_mode;
     if (typeof classification_auto_classify === 'boolean') update.classification_auto_classify = classification_auto_classify;
     if (typeof classification_rules === 'string') update.classification_rules = classification_rules;
+    if (classification_config_mode === 'company' || classification_config_mode === 'per_channel') update.classification_config_mode = classification_config_mode;
+    if (Array.isArray(classification_structured_rules)) update.classification_structured_rules = classification_structured_rules;
 
     if (Object.keys(update).length === 0) {
       res.status(400).json({ error: 'No valid fields to update.' });
@@ -198,7 +200,7 @@ router.get('/channel-settings/:channelId', requirePermission('company_settings',
 
     const { data, error } = await supabaseAdmin
       .from('channel_agent_settings')
-      .select('classification_override, classification_mode, classification_auto_classify, classification_rules')
+      .select('classification_override, classification_mode, classification_auto_classify, classification_rules, classification_structured_rules')
       .eq('channel_id', channelId)
       .eq('company_id', companyId)
       .single();
@@ -215,13 +217,14 @@ router.put('/channel-settings/:channelId', requirePermission('company_settings',
   try {
     const companyId = req.companyId!;
     const channelId = req.params.channelId as string;
-    const { classification_override, classification_mode, classification_auto_classify, classification_rules } = req.body;
+    const { classification_override, classification_mode, classification_auto_classify, classification_rules, classification_structured_rules } = req.body;
 
     const update: Record<string, unknown> = {};
     if (['company_defaults', 'custom', 'disabled'].includes(classification_override)) update.classification_override = classification_override;
     if (classification_mode === 'suggest' || classification_mode === 'auto_apply' || classification_mode === null) update.classification_mode = classification_mode;
     if (typeof classification_auto_classify === 'boolean' || classification_auto_classify === null) update.classification_auto_classify = classification_auto_classify;
     if (typeof classification_rules === 'string' || classification_rules === null) update.classification_rules = classification_rules;
+    if (Array.isArray(classification_structured_rules) || classification_structured_rules === null) update.classification_structured_rules = classification_structured_rules ?? [];
 
     if (Object.keys(update).length === 0) {
       res.status(400).json({ error: 'No valid fields to update.' });
@@ -261,9 +264,11 @@ router.get('/status/:sessionId', requirePermission('conversations', 'view'), asy
 
     const { data: companyData } = await supabaseAdmin
       .from('companies')
-      .select('classification_enabled, classification_mode, classification_auto_classify')
+      .select('classification_enabled, classification_mode, classification_auto_classify, classification_config_mode')
       .eq('id', companyId)
       .single();
+
+    const configMode = (companyData?.classification_config_mode as string) ?? 'company';
 
     const { data: channelSettingsData } = await supabaseAdmin
       .from('channel_agent_settings')
@@ -272,16 +277,23 @@ router.get('/status/:sessionId', requirePermission('conversations', 'view'), asy
       .eq('company_id', companyId)
       .single();
 
-    const channelOverride = channelSettingsData?.classification_override ?? 'company_defaults';
-    const enabled = companyData?.classification_enabled && channelOverride !== 'disabled';
+    let enabled: boolean;
+    let mode: string;
+
+    if (configMode === 'per_channel') {
+      const override = channelSettingsData?.classification_override ?? 'disabled';
+      enabled = !!companyData?.classification_enabled && override === 'custom';
+      mode = channelSettingsData?.classification_mode ?? 'suggest';
+    } else {
+      enabled = !!companyData?.classification_enabled;
+      mode = companyData?.classification_mode ?? 'suggest';
+    }
 
     res.json({
       enabled,
       channel_id: session.channel_id,
-      mode: channelOverride === 'custom' && channelSettingsData?.classification_mode
-        ? channelSettingsData.classification_mode
-        : companyData?.classification_mode ?? 'suggest',
-      override: channelOverride,
+      mode,
+      config_mode: configMode,
     });
   } catch (err) {
     next(err);
