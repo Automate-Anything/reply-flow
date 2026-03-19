@@ -25,8 +25,8 @@ router.post('/classify/:sessionId', requirePermission('conversations', 'edit'), 
     const sessionId = req.params.sessionId as string;
 
     const last = classifyRateLimit.get(sessionId);
-    if (last && Date.now() - last < 30_000) {
-      res.status(429).json({ error: 'Too many classification requests. Please wait 30 seconds.' });
+    if (last && Date.now() - last < 5_000) {
+      res.status(429).json({ error: 'Too many classification requests. Please wait a moment.' });
       return;
     }
     classifyRateLimit.set(sessionId, Date.now());

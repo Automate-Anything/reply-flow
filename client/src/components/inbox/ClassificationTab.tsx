@@ -242,7 +242,7 @@ export default function ClassificationTab({ sessionId }: ClassificationTabProps)
         <Sparkles className="h-8 w-8 mx-auto text-muted-foreground/50" />
         <p>Classification is not enabled.</p>
         <Button variant="link" size="sm" asChild>
-          <a href="/settings/conversations">Enable in settings</a>
+          <a href="/company-settings">Enable in settings</a>
         </Button>
       </div>
     );
@@ -298,17 +298,15 @@ export default function ClassificationTab({ sessionId }: ClassificationTabProps)
         </div>
       )}
 
-      {/* Settings links */}
-      <div className="pt-2 border-t space-y-1">
-        <a href="/settings/conversations" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <Settings className="h-3 w-3" /> Company classification settings
-        </a>
-        {status?.channel_id && (
-          <a href={`/settings/channels/${status.channel_id}`} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <Settings className="h-3 w-3" /> Channel classification settings
-          </a>
-        )}
-      </div>
+      {/* Settings link */}
+      <a
+        href="/company-settings"
+        className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+      >
+        <Settings className="h-4 w-4" />
+        <span>Classification settings</span>
+        <span className="ml-auto text-muted-foreground/60">→</span>
+      </a>
     </div>
   );
 }

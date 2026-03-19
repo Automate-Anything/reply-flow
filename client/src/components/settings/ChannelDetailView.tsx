@@ -27,7 +27,6 @@ import type { AccessLevel, PermissionConflict, ConflictResolution } from '@/hook
 import ConflictResolutionModal from '@/components/access/ConflictResolutionModal';
 import AccessManager from '@/components/access/AccessManager';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
-import ChannelClassificationSettings from './ChannelClassificationSettings';
 import ScheduleSection from './sections/ScheduleSection';
 import AutoReplySection from './sections/AutoReplySection';
 import ChannelAgentContactList from './ChannelAgentContactList';
@@ -905,8 +904,6 @@ export default function ChannelDetailPage() {
               )}
             </div>
           )}
-
-          <ChannelClassificationSettings channelId={numericChannelId} />
         </TabsContent>
 
         {/* Access Tab — only visible to channel owner */}
