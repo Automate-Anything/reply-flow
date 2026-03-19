@@ -18,6 +18,12 @@ const envSchema = z.object({
   AFFILIATE_JWT_SECRET: z.string().optional(),
   AFFILIATE_JWT_REFRESH_SECRET: z.string().optional(),
   AFFILIATE_PORTAL_URL: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_REDIRECT_URI: z.string().optional(),
+  GCP_PROJECT_ID: z.string().optional(),
+  GOOGLE_PUBSUB_TOPIC: z.string().optional(),
+  GOOGLE_PUBSUB_VERIFICATION_TOKEN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
