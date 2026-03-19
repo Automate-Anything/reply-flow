@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { MessageSquareOff } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MessageSquareOff, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import SectionCard from './SectionCard';
 
@@ -26,41 +27,69 @@ function OptionButton({ selected, onClick, children }: {
   );
 }
 
+const MAX_VARIANTS = 5;
+
 interface Props {
   autoReplyEnabled: boolean;
   autoReplyMessage: string | null;
+  autoReplyMessages: string[];
   autoReplyTrigger: AutoReplyTrigger;
   isExpanded: boolean;
   onToggle: () => void;
   onSave: (updates: {
     auto_reply_enabled: boolean;
     auto_reply_message: string | null;
+    auto_reply_messages: string[];
     auto_reply_trigger: AutoReplyTrigger;
   }) => Promise<void>;
 }
 
+function initVariants(messages: string[], singleMessage: string | null): string[] {
+  if (messages && messages.length > 0) return messages;
+  if (singleMessage) return [singleMessage];
+  return [''];
+}
+
 export default function AutoReplySection({
-  autoReplyEnabled, autoReplyMessage, autoReplyTrigger,
+  autoReplyEnabled, autoReplyMessage, autoReplyMessages, autoReplyTrigger,
   isExpanded, onToggle, onSave,
 }: Props) {
   const [draftEnabled, setDraftEnabled] = useState(autoReplyEnabled);
-  const [draftMessage, setDraftMessage] = useState(autoReplyMessage || '');
+  const [variants, setVariants] = useState<string[]>(() => initVariants(autoReplyMessages, autoReplyMessage));
   const [draftTrigger, setDraftTrigger] = useState<AutoReplyTrigger>(autoReplyTrigger);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (isExpanded) return;
     setDraftEnabled(autoReplyEnabled);
-    setDraftMessage(autoReplyMessage || '');
+    setVariants(initVariants(autoReplyMessages, autoReplyMessage));
     setDraftTrigger(autoReplyTrigger);
-  }, [autoReplyEnabled, autoReplyMessage, autoReplyTrigger, isExpanded]);
+  }, [autoReplyEnabled, autoReplyMessage, autoReplyMessages, autoReplyTrigger, isExpanded]);
+
+  const handleVariantChange = (index: number, value: string) => {
+    setVariants((prev) => prev.map((v, i) => (i === index ? value : v)));
+  };
+
+  const handleAddVariant = () => {
+    if (variants.length < MAX_VARIANTS) {
+      setVariants((prev) => [...prev, '']);
+    }
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    if (index === 0) return; // First variant cannot be removed
+    setVariants((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const nonEmpty = variants.map((v) => v.trim()).filter(Boolean);
+      const firstVariant = nonEmpty[0] ?? null;
       await onSave({
         auto_reply_enabled: draftEnabled,
-        auto_reply_message: draftEnabled ? (draftMessage.trim() || null) : (autoReplyMessage || null),
+        auto_reply_message: draftEnabled ? firstVariant : (autoReplyMessage || null),
+        auto_reply_messages: draftEnabled ? nonEmpty : [],
         auto_reply_trigger: draftTrigger,
       });
     } finally {
@@ -70,7 +99,7 @@ export default function AutoReplySection({
 
   const handleToggle = () => {
     setDraftEnabled(autoReplyEnabled);
-    setDraftMessage(autoReplyMessage || '');
+    setVariants(initVariants(autoReplyMessages, autoReplyMessage));
     setDraftTrigger(autoReplyTrigger);
     onToggle();
   };
@@ -143,15 +172,54 @@ export default function AutoReplySection({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Auto-reply message</Label>
-              <textarea
-                value={draftMessage}
-                onChange={(e) => setDraftMessage(e.target.value)}
-                rows={3}
-                placeholder="e.g. Thanks for reaching out! We're currently unavailable but will get back to you as soon as possible."
-                className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
+            <div className="space-y-2">
+              <Label className="text-xs">Auto-reply messages</Label>
+              <p className="text-xs text-muted-foreground">
+                Add multiple message variants to avoid repetitive patterns. One will be chosen randomly for each auto-reply.
+              </p>
+              <div className="space-y-2">
+                {variants.map((variant, index) => (
+                  <div key={index} className="flex items-start gap-2">
+                    <div className="flex-1 space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Message {index + 1}
+                      </p>
+                      <div className="relative">
+                        <textarea
+                          value={variant}
+                          onChange={(e) => handleVariantChange(index, e.target.value)}
+                          rows={3}
+                          placeholder="e.g. Thanks for reaching out! We're currently unavailable but will get back to you as soon as possible."
+                          className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                      </div>
+                    </div>
+                    {index > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveVariant(index)}
+                        className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-destructive/30 text-destructive/70 hover:border-destructive hover:bg-destructive/5 hover:text-destructive transition-colors"
+                        aria-label={`Remove message ${index + 1}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {variants.length < MAX_VARIANTS && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddVariant}
+                  className="mt-1 h-7 gap-1.5 text-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add variant
+                </Button>
+              )}
             </div>
 
             <p className="text-xs text-muted-foreground">

@@ -19,7 +19,7 @@ import { useAISuggestion } from '@/hooks/useAISuggestion';
 import { AISuggestionButton, type AISuggestionButtonHandle } from './AISuggestionButton';
 
 interface MessageInputProps {
-  onSend: (body: string) => Promise<void>;
+  onSend: (body: string) => Promise<unknown>;
   onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   disabled?: boolean;
@@ -28,6 +28,7 @@ interface MessageInputProps {
   replyingTo?: Message | null;
   onCancelReply?: () => void;
   sessionId?: string;
+  channelId?: number;
 }
 
 function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }[] {
@@ -39,7 +40,7 @@ function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }
   ];
 }
 
-export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId }: MessageInputProps) {
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId: _channelId }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');

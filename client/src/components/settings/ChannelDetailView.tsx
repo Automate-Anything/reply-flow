@@ -373,6 +373,7 @@ export default function ChannelDetailPage() {
   const handleSaveAutoReply = async (updates: {
     auto_reply_enabled: boolean;
     auto_reply_message: string | null;
+    auto_reply_messages: string[];
     auto_reply_trigger: 'outside_hours' | 'all_unavailable';
   }) => {
     await updateSettings(updates);
@@ -896,6 +897,7 @@ export default function ChannelDetailPage() {
                 <AutoReplySection
                   autoReplyEnabled={settings.auto_reply_enabled}
                   autoReplyMessage={settings.auto_reply_message}
+                  autoReplyMessages={settings.auto_reply_messages ?? []}
                   autoReplyTrigger={settings.auto_reply_trigger}
                   isExpanded={autoReplyExpanded}
                   onToggle={() => setAutoReplyExpanded((prev) => !prev)}

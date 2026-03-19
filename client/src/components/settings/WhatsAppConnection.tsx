@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Smartphone, Loader2, XCircle, RefreshCw, Trash2, Check } from 'lucide-react';
+import { Smartphone, Loader2, XCircle, RefreshCw, Trash2, Check, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanGate } from '@/components/auth/PlanGate';
 
@@ -395,6 +395,10 @@ export default function WhatsAppConnection({ onCreated }: Props) {
             <p className="text-xs text-muted-foreground">
               QR code refreshes automatically
             </p>
+            <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 w-full">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+              <p>To protect your WhatsApp account, messages from this channel are limited to 60 per hour.</p>
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
                 <RefreshCw className={`mr-2 h-3 w-3 ${refreshingQR ? 'animate-spin' : ''}`} />
