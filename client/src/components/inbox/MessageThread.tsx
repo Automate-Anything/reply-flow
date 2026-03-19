@@ -6,13 +6,21 @@ import MessageContextMenu from './MessageContextMenu';
 import MessageInput from './MessageInput';
 import type { Message } from '@/hooks/useMessages';
 
+interface ComplianceResult {
+  warnings: string[];
+  remaining: number;
+  limit: number;
+  resetsAt: string;
+}
+
 interface MessageThreadProps {
   messages: Message[];
   loading: boolean;
   sessionId: string;
+  channelId?: number;
   contactName?: string;
   contactAvatarUrl?: string | null;
-  onSend: (body: string) => Promise<void>;
+  onSend: (body: string) => Promise<{ compliance?: ComplianceResult } | void>;
   onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   onCancelScheduled: (messageId: string) => Promise<void>;
@@ -47,6 +55,7 @@ export default function MessageThread({
   messages,
   loading,
   sessionId,
+  channelId,
   contactName,
   contactAvatarUrl,
   onSend,
@@ -199,6 +208,7 @@ export default function MessageThread({
       <MessageInput
         key={sessionId}
         sessionId={sessionId}
+        channelId={channelId}
         onSend={onSend}
         onSendVoiceNote={onSendVoiceNote}
         onSchedule={onSchedule}
