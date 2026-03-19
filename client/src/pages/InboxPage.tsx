@@ -340,7 +340,7 @@ export default function InboxPage() {
     }
   };
 
-  const handleSend = async (body: string) => {
+  const handleSend = async (body: string): Promise<{ compliance?: { warnings: string[]; remaining: number; limit: number; resetsAt: string } } | void> => {
     // Clear draft timer BEFORE the async send — otherwise the pending timer
     // can fire during the await and re-save the draft to the server after
     // the send endpoint already cleared it.
@@ -370,8 +370,9 @@ export default function InboxPage() {
     setReplyingTo(null);
 
     try {
-      await sendMessage(body, quotedId, replyMeta);
+      const result = await sendMessage(body, quotedId, replyMeta);
       refetchConvs();
+      return result ? { compliance: result.compliance } : undefined;
     } catch {
       toast.error('Failed to send message');
     }
@@ -658,6 +659,7 @@ export default function InboxPage() {
               messages={messages}
               loading={msgsLoading}
               sessionId={activeConversation.id}
+              channelId={activeConversation.channel_id ?? undefined}
               contactName={activeConversation.contact_name || activeConversation.phone_number}
               contactAvatarUrl={activeConversation.profile_picture_url}
               onSend={handleSend}

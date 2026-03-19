@@ -87,7 +87,7 @@ export function useMessages(sessionId: string | null) {
           const withoutDupe = prev.filter((m) => m.id !== realId);
           return withoutDupe.map((m) => (m.id === tempId ? data.message : m));
         });
-        return data.message;
+        return { message: data.message, compliance: data.compliance as { warnings: string[]; remaining: number; limit: number; resetsAt: string } | undefined };
       } catch (err) {
         // Mark optimistic message as failed
         setMessages((prev) =>
