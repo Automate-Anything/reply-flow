@@ -205,7 +205,7 @@ export default function ChannelDetailPage() {
           done = true;
           setEffectiveStatus(data.status);
           if (data.status === 'connected') {
-            toast.success('WhatsApp connected successfully');
+            toast.success('Channel connected successfully');
             fetchChannel(true);
           }
         }
@@ -231,7 +231,7 @@ export default function ChannelDetailPage() {
         cancelledRef.current = true;
         setEffectiveStatus('connected');
         setQrData(null);
-        toast.success('WhatsApp connected successfully');
+        toast.success('Channel connected successfully');
         fetchChannel(true);
         return;
       }
@@ -268,7 +268,7 @@ export default function ChannelDetailPage() {
           cancelledRef.current = true;
           setEffectiveStatus('connected');
           setQrData(null);
-          toast.success('WhatsApp connected successfully');
+          toast.success('Channel connected successfully');
           fetchChannel(true);
         }
       } catch {
@@ -295,7 +295,7 @@ export default function ChannelDetailPage() {
       if (data.connected) {
         setEffectiveStatus('connected');
         setQrData(null);
-        toast.success('WhatsApp connected successfully');
+        toast.success('Channel connected successfully');
         fetchChannel();
       } else {
         setQrData(data.qr);
@@ -311,10 +311,10 @@ export default function ChannelDetailPage() {
     setDisconnecting(true);
     try {
       await api.post('/channels/whatsapp/logout', { channelId: numericChannelId });
-      toast.success('WhatsApp disconnected');
+      toast.success('Channel disconnected');
       fetchChannel();
     } catch {
-      toast.error('Failed to disconnect WhatsApp');
+      toast.error('Failed to disconnect channel');
     } finally {
       setDisconnecting(false);
     }
@@ -507,7 +507,7 @@ export default function ChannelDetailPage() {
               <div className="flex-1">
                 <p className="text-sm font-medium">Channel disconnected</p>
                 <p className="text-xs text-muted-foreground">
-                  This WhatsApp channel is no longer connected. Reconnect to resume messaging.
+                  This channel is no longer connected. Reconnect to resume messaging.
                 </p>
               </div>
               <PlanGate>

@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Bot, Plus, Smartphone, ChevronDown, FileText, PenLine, Wand2 } from 'lucide-react';
+import { Bot, Plus, Cable, ChevronDown, FileText, PenLine, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAgents } from '@/hooks/useAgents';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -180,7 +180,7 @@ export default function AIAgentsPage() {
                   <div className="flex items-center gap-1.5">
                     {agent.channel_count > 0 && (
                       <Badge variant="secondary" className="text-xs">
-                        <Smartphone className="mr-1 h-3 w-3" />
+                        <Cable className="mr-1 h-3 w-3" />
                         {agent.channel_count}
                       </Badge>
                     )}

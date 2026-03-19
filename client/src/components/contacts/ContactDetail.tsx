@@ -340,7 +340,7 @@ export default function ContactDetail({
             <DetailSection title="Contact">
               <DetailField icon={<Phone className="h-3.5 w-3.5" />} label="Phone" value={contact.phone_number} />
               <DetailField icon={<Mail className="h-3.5 w-3.5" />} label="Email" value={contact.email} />
-              <DetailField icon={<MessageCircle className="h-3.5 w-3.5" />} label="WhatsApp" value={contact.whatsapp_name} />
+              <DetailField icon={<MessageCircle className="h-3.5 w-3.5" />} label="Display Name" value={contact.whatsapp_name} />
             </DetailSection>
 
             {/* Personal / work — always show */}

@@ -78,7 +78,7 @@ export default function BillingBanners() {
           <span className="flex-1">
             {isPastGracePeriod ? (
               <>
-                Your subscription has expired. Renew to restore your AI agent and WhatsApp service.{' '}
+                Your subscription has expired. Renew to restore your AI agent and messaging service.{' '}
                 <Link
                   to="/company-settings?tab=billing"
                   className="font-medium underline underline-offset-2 hover:text-red-900"

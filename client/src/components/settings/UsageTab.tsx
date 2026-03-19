@@ -167,7 +167,7 @@ export default function UsageTab() {
         </CardHeader>
         <CardContent className="space-y-6">
           <UsageBar
-            label="WhatsApp Channels"
+            label="Channels"
             used={u.channels.used}
             included={u.channels.included}
           />

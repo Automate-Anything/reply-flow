@@ -287,7 +287,7 @@ export default function ContactPanel({ contactId, sessionId, open, onClose, onPr
 
                 {contact.whatsapp_name && (
                   <div>
-                    <Label className="text-xs">WhatsApp Name</Label>
+                    <Label className="text-xs">Display Name</Label>
                     <p className="mt-1 text-sm">{contact.whatsapp_name}</p>
                   </div>
                 )}

@@ -182,7 +182,7 @@ export default function ChannelsPage() {
       <div>
         <h2 className="text-lg font-semibold">Channels</h2>
         <p className="text-sm text-muted-foreground">
-          Connect and manage your WhatsApp lines.
+          Connect and manage your channels.
         </p>
         {!subLoading && subscription && (
           <p className="mt-1 text-xs text-muted-foreground">
@@ -310,7 +310,7 @@ export default function ChannelsPage() {
               <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
                 <Smartphone className="h-8 w-8 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">No channels yet</p>
-                <p className="text-xs text-muted-foreground">Create a new WhatsApp channel below.</p>
+                <p className="text-xs text-muted-foreground">Create a new channel below.</p>
               </CardContent>
             </Card>
           )}

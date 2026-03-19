@@ -111,7 +111,7 @@ export default function DashboardPage() {
           Welcome back, {firstName}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Here's what's happening with your WhatsApp inbox today.
+          Here's what's happening with your inbox today.
         </p>
       </div>
 
@@ -183,7 +183,7 @@ export default function DashboardPage() {
                   ? 'No Channels'
                   : `${data.connectedChannelCount} / ${data.totalChannelCount} Connected`}
               </p>
-              <p className="text-xs text-muted-foreground">WhatsApp Channels</p>
+              <p className="text-xs text-muted-foreground">Connected Channels</p>
             </div>
           </CardContent>
         </Card>

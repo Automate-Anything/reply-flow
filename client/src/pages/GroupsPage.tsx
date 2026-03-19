@@ -52,7 +52,7 @@ export default function GroupsPage() {
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">WhatsApp Groups</h1>
+              <h1 className="text-xl font-semibold">Groups</h1>
               {!groupsLoading && groups.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   {watchingCount} of {groups.length} groups watched

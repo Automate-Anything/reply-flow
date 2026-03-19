@@ -141,7 +141,7 @@ export default function ConversationSettingsTab() {
             Auto-Create Contacts
           </CardTitle>
           <CardDescription>
-            Automatically create a contact record when a message is received from an unknown phone number.
+            Automatically create a contact record when a message is received from an unknown sender.
             When disabled, messages from unknown numbers will still appear in the inbox but no contact will be created.
           </CardDescription>
         </CardHeader>

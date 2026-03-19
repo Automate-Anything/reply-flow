@@ -450,7 +450,7 @@ export default function BillingTab() {
                   )}
                 </p>
                 <p className="mt-0.5 text-blue-700 dark:text-blue-300">
-                  Trial limits: 1 WhatsApp channel · 1 AI agent · 100 messages · 3 KB pages.
+                  Trial limits: 1 channel · 1 AI agent · 100 messages · 3 KB pages.
                   {trialEndsAt && (
                     <> Your {activePlanName} plan starts automatically on <strong>{formatDate(trialEndsAt)}</strong>.</>
                   )}
@@ -611,7 +611,7 @@ export default function BillingTab() {
                     Included
                   </p>
                   <ul className="space-y-2">
-                    <PlanFeature label={`${plan.channels} WhatsApp channel${plan.channels > 1 ? 's' : ''}`} />
+                    <PlanFeature label={`${plan.channels} channel${plan.channels > 1 ? 's' : ''}`} />
                     <PlanFeature label={`${plan.agents} AI agent${plan.agents > 1 ? 's' : ''}`} />
                     <PlanFeature label={`Up to ${plan.knowledgeBases} knowledge base${plan.knowledgeBases > 1 ? 's' : ''}`} />
                   </ul>

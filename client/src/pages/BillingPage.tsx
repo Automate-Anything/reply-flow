@@ -333,7 +333,7 @@ export default function BillingPage() {
                 </p>
                 <ul className="space-y-2">
                   <PlanFeature
-                    label={`${plan.channels} WhatsApp channel${plan.channels > 1 ? 's' : ''}`}
+                    label={`${plan.channels} channel${plan.channels > 1 ? 's' : ''}`}
                   />
                   <PlanFeature
                     label={`${plan.agents} AI agent${plan.agents > 1 ? 's' : ''}`}

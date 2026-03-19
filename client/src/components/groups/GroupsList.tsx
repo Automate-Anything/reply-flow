@@ -71,7 +71,7 @@ export function GroupsList({ groups, loading, toggleMonitoring, bulkToggleMonito
           <Users className="h-10 w-10 text-muted-foreground/50" />
           <p className="text-sm font-medium">No groups found</p>
           <p className="text-xs text-muted-foreground">
-            Click "Sync Groups" to discover groups from your WhatsApp channels.
+            Click "Sync Groups" to discover groups from your connected channels.
           </p>
         </CardContent>
       </Card>

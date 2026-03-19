@@ -10,7 +10,7 @@ import { PlanGate } from '@/components/auth/PlanGate';
 import {
   RotateCcw, Save, Loader2, Lock,
   Crown, Shield, UserCog, Users, User, Eye,
-  MessageSquare, Mail, BookUser, StickyNote, Smartphone,
+  MessageSquare, Mail, BookUser, StickyNote, Cable,
   Bot, Library, Tag, UsersRound, Building2, KeyRound,
   MessageCircle, Zap, ListPlus, List,
 } from 'lucide-react';
@@ -118,7 +118,7 @@ const RESOURCE_ICONS: Record<string, React.ComponentType<{ className?: string }>
   contact_notes: StickyNote,
   conversation_notes: MessageCircle,
   canned_responses: Zap,
-  channels: Smartphone,
+  channels: Cable,
   ai_settings: Bot,
   knowledge_base: Library,
   labels: Tag,

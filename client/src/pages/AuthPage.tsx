@@ -217,7 +217,7 @@ export default function AuthPage() {
           </div>
           <CardTitle className="text-2xl font-semibold">Reply Flow</CardTitle>
           <p className="text-sm text-muted-foreground">
-            WhatsApp business inbox powered by AI
+            Business inbox powered by AI
           </p>
         </CardHeader>
         <CardContent>
