@@ -18,6 +18,8 @@ import api from '@/lib/api';
 import { useContactNotes, type Contact, type ContactNote } from '@/hooks/useContacts';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { useFormDirtyGuard } from '@/contexts/FormGuardContext';
+import { getChannelConfig } from '@/lib/channelTypes';
+import { cn } from '@/lib/utils';
 import ClassificationTab from './ClassificationTab';
 
 interface ContactPanelProps {
@@ -54,6 +56,18 @@ export default function ContactPanel({ contactId, sessionId, open, onClose, onPr
   );
   const [newNote, setNewNote] = useState('');
   const [noteSubmitting, setNoteSubmitting] = useState(false);
+
+  // Cross-channel conversations
+  const [otherConversations, setOtherConversations] = useState<any[]>([]);
+  useEffect(() => {
+    if (!open || !contact?.id) {
+      setOtherConversations([]);
+      return;
+    }
+    api.get(`/contacts/${contact.id}/conversations`)
+      .then(res => setOtherConversations(res.data))
+      .catch(() => setOtherConversations([]));
+  }, [open, contact?.id]);
 
   // Stable ref for callback to avoid infinite re-fetch loops
   const onProfilePictureLoadedRef = useRef(onProfilePictureLoaded);
@@ -325,6 +339,25 @@ export default function ContactPanel({ contactId, sessionId, open, onClose, onPr
                 )}
 
               </div>
+
+              {/* Cross-channel conversations */}
+              {otherConversations.filter(c => c.id !== sessionId).length > 0 && (
+                <div className="space-y-1 mt-4">
+                  <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Other Conversations</h4>
+                  {otherConversations.filter(c => c.id !== sessionId).map(conv => {
+                    const config = getChannelConfig(conv.channel?.channel_type);
+                    const Icon = config.icon;
+                    return (
+                      <button key={conv.id}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted text-sm text-left">
+                        <Icon className={cn('h-3.5 w-3.5 shrink-0', config.color)} />
+                        <span className="truncate flex-1">{conv.last_message || '(no messages)'}</span>
+                        <span className="text-xs text-muted-foreground">{conv.status}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="notes" className="mt-0 flex flex-col">

@@ -912,6 +912,27 @@ router.get('/:contactId/duplicates', requirePermission('contacts', 'view'), asyn
   }
 });
 
+// Get cross-channel conversations for a contact
+router.get('/:contactId/conversations', requirePermission('contacts', 'view'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { contactId } = req.params;
+
+    const { data: sessions, error } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('id, channel_id, chat_id, status, last_message, last_message_at, channel:channel_id(channel_type, channel_name, display_identifier)')
+      .eq('contact_id', contactId)
+      .eq('company_id', companyId)
+      .is('deleted_at', null)
+      .order('last_message_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(sessions || []);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get activity timeline for a contact
 router.get('/:contactId/activity', requirePermission('contacts', 'view'), async (req, res, next) => {
   try {
