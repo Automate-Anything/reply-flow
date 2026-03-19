@@ -356,12 +356,8 @@ function ClassificationConfigForm({
 
 function ChannelClassificationRow({
   channel,
-  saving,
-  onSave,
 }: {
   channel: ChannelInfo;
-  saving: boolean;
-  onSave: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [config, setConfig] = useState<ChannelClassificationConfig | null>(null);
@@ -688,8 +684,6 @@ export default function CompanyClassificationSettings() {
                       <ChannelClassificationRow
                         key={ch.id}
                         channel={ch}
-                        saving={saving}
-                        onSave={handleSaveCompany}
                       />
                     ))}
                   </div>
