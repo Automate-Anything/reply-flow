@@ -18,6 +18,7 @@ interface MessageThreadProps {
   loading: boolean;
   sessionId: string;
   channelId?: number;
+  channelType?: string;
   contactName?: string;
   contactAvatarUrl?: string | null;
   onSend: (body: string) => Promise<{ compliance?: ComplianceResult } | void>;
@@ -56,6 +57,7 @@ export default function MessageThread({
   loading,
   sessionId,
   channelId,
+  channelType,
   contactName,
   contactAvatarUrl,
   onSend,
@@ -209,6 +211,7 @@ export default function MessageThread({
         key={sessionId}
         sessionId={sessionId}
         channelId={channelId}
+        channelType={channelType}
         onSend={onSend}
         onSendVoiceNote={onSendVoiceNote}
         onSchedule={onSchedule}

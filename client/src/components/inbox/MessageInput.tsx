@@ -50,6 +50,7 @@ interface MessageInputProps {
   onCancelReply?: () => void;
   sessionId?: string;
   channelId?: number;
+  channelType?: string;
 }
 
 function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }[] {
@@ -73,7 +74,7 @@ function formatTimeUntil(isoString: string): string {
   return `${minutes}m`;
 }
 
-export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId }: MessageInputProps) {
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId, channelType }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
@@ -113,11 +114,14 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
     }
   }, [sessionId]);
 
-  // Fetch on mount
+  // Fetch on mount — only fetch window status for WhatsApp channels (or unknown)
+  const isWhatsApp = !channelType || channelType === 'whatsapp';
   useEffect(() => {
     fetchRateLimit();
-    fetchWindowStatus();
-  }, [fetchRateLimit, fetchWindowStatus]);
+    if (isWhatsApp) {
+      fetchWindowStatus();
+    }
+  }, [fetchRateLimit, fetchWindowStatus, isWhatsApp]);
 
   const dismissComplianceWarnings = useCallback(() => {
     setComplianceWarnings([]);
@@ -147,7 +151,7 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
 
   // Derived compliance state
   const rateLimitExhausted = rateLimit !== null && rateLimit.remaining <= 0;
-  const windowExpired = windowStatus !== null && !windowStatus.allowed;
+  const windowExpired = isWhatsApp && windowStatus !== null && !windowStatus.allowed;
   const sendBlocked = rateLimitExhausted || windowExpired;
 
   const rateLimitColorClass = useMemo(() => {
@@ -445,8 +449,8 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
 
   return (
     <div className="relative z-10 border-t bg-background">
-      {/* 24h window expired banner */}
-      {windowExpired && (
+      {/* 24h window expired banner (WhatsApp only) */}
+      {isWhatsApp && windowExpired && (
         <div className="flex items-center gap-2 border-b bg-yellow-50 px-3 py-2 dark:bg-yellow-950/30">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-400" />
           <p className="flex-1 text-xs text-yellow-800 dark:text-yellow-300">
@@ -455,8 +459,8 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
         </div>
       )}
 
-      {/* 24h window active countdown — shown only when less than 3 hours remain */}
-      {!windowExpired && windowStatus?.allowed && windowStatus.expiresAt && (() => {
+      {/* 24h window active countdown — shown only when less than 3 hours remain (WhatsApp only) */}
+      {isWhatsApp && !windowExpired && windowStatus?.allowed && windowStatus.expiresAt && (() => {
         const ms = new Date(windowStatus.expiresAt).getTime() - Date.now();
         if (ms > 3 * 3_600_000) return null;
         return (

@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 interface HealthData {
   channelId: number;
   channelStatus: string;
+  channel_type: string;
   healthScore: number;              // 0–1 (weighted score)
   healthStatus: 'healthy' | 'needs_attention' | 'at_risk' | 'no_data';
   groupCount: number;
@@ -41,7 +42,9 @@ interface HealthData {
 }
 
 interface SafetyMeterData {
-  cached: boolean;
+  cached?: boolean;
+  score?: number | null;
+  message?: string;
   risk_factor: number | null;
   risk_factor_contacts: number | null;
   risk_factor_chats: number | null;
@@ -183,6 +186,9 @@ export default function ComplianceTab({ channelId }: Props) {
     );
   }
 
+  const channelType = health?.channel_type ?? 'whatsapp';
+  const isWhatsApp = channelType === 'whatsapp';
+
   const healthStatus = health?.healthStatus ?? 'no_data';
   const { label: hLabel, color: hColor, ring: hRing } = healthLabel(healthStatus);
 
@@ -223,8 +229,8 @@ export default function ComplianceTab({ channelId }: Props) {
         </div>
       )}
 
-      {/* ── 3. Group monitoring warning ──────────────────────────────────── */}
-      {health && health.groupCount >= 50 && (
+      {/* ── 3. Group monitoring warning (WhatsApp only) ────────────────── */}
+      {isWhatsApp && health && health.groupCount >= 50 && (
         <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
           <p className="text-sm text-yellow-900">
@@ -259,7 +265,8 @@ export default function ComplianceTab({ channelId }: Props) {
         </div>
       )}
 
-      {/* ── 5. Account Safety Score ─────────────────────────────────────── */}
+      {/* ── 5. Account Safety Score (WhatsApp only) ──────────────────────── */}
+      {isWhatsApp && (
       <div className="rounded-lg border p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -317,6 +324,17 @@ export default function ComplianceTab({ channelId }: Props) {
           </p>
         )}
       </div>
+      )}
+
+      {/* ── 5b. Email health placeholder ──────────────────────────────────── */}
+      {channelType === 'email' && (
+        <div className="rounded-lg border p-4">
+          <p className="text-sm font-semibold">Email Health</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Email health metrics will be available after your first 100 sent emails.
+          </p>
+        </div>
+      )}
 
       {/* ── 6. Recent Events ─────────────────────────────────────────────── */}
       <div className="rounded-lg border p-4">
