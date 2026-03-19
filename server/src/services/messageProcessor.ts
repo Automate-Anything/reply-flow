@@ -637,25 +637,28 @@ export async function processIncomingMessage(
   try {
     const autoReply = await evaluateAutoReply(companyId, channelId, isNewSession);
     if (autoReply.shouldReply && autoReply.message && autoReply.channelId) {
-      const responseRate = await getResponseRateStatus(channelId, companyId);
-      const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
-      const rateCheck = checkRateLimit(channelId, companyId, effectiveLimit);
+      // Resolve channel type for compliance checks
+      const { data: arChannel } = await supabaseAdmin
+        .from('channels')
+        .select('channel_token, channel_type')
+        .eq('id', channelId)
+        .single();
+      const arCt = (arChannel?.channel_type || 'whatsapp') as 'whatsapp' | 'email';
+      const responseRate = await getResponseRateStatus(channelId, companyId, arCt);
+      const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of default when throttled
+      const rateCheck = checkRateLimit(channelId, companyId, effectiveLimit, arCt);
       if (rateCheck.allowed) {
         (async () => {
-          // Fetch channel token for simulation (typing indicators / read receipts)
-          const { data: channelRow } = await supabaseAdmin
-            .from('channels')
-            .select('channel_token')
-            .eq('id', channelId)
-            .single();
-          if (channelRow?.channel_token) {
+          // Use already-fetched channel token for simulation (typing indicators / read receipts)
+          if (arChannel?.channel_token) {
             await simulateBeforeSend({
-              channelToken: channelRow.channel_token,
+              channelToken: arChannel.channel_token,
               chatId: chatId!,
               inboundMessageId: msg.id,
               messageType: 'text',
               messageLength: autoReply.message!.length,
               path: 'auto_reply',
+              channelType: arCt,
             });
           }
           await sendOutsideHoursReply(companyId, sessionId, autoReply.channelId!, autoReply.message!);

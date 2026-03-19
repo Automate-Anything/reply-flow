@@ -3,7 +3,8 @@ import { supabaseAdmin } from '../config/supabase.js';
 
 // --- Rate Limiting (in-memory, single-process) ---
 
-const RATE_LIMIT = 60; // messages per channel per hour
+const RATE_LIMIT_WHATSAPP = 60; // messages per channel per hour
+const RATE_LIMIT_EMAIL = 120;
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 interface RateLimitEntry {
@@ -16,11 +17,13 @@ const rateLimitMap = new Map<string, RateLimitEntry>();
 export function checkRateLimit(
   channelId: number | string,
   _companyId: string,
-  overrideLimit?: number
+  overrideLimit?: number,
+  channelType: 'whatsapp' | 'email' = 'whatsapp'
 ): { allowed: boolean; remaining: number; limit: number; resetsAt: Date } {
   const key = String(channelId);
   const now = Date.now();
-  const limit = overrideLimit ?? RATE_LIMIT;
+  const defaultLimit = channelType === 'email' ? RATE_LIMIT_EMAIL : RATE_LIMIT_WHATSAPP;
+  const limit = overrideLimit ?? defaultLimit;
 
   let entry = rateLimitMap.get(key);
   if (!entry || now - entry.windowStart > RATE_WINDOW_MS) {
@@ -45,8 +48,12 @@ export function incrementRateCounter(channelId: number | string, _companyId?: st
 // --- 24-Hour Window ---
 
 export async function check24HourWindow(
-  sessionId: string
+  sessionId: string,
+  channelType: 'whatsapp' | 'email' = 'whatsapp'
 ): Promise<{ allowed: boolean; lastInboundAt: Date | null; expiresAt: Date | null }> {
+  // Email has no 24-hour window restriction
+  if (channelType === 'email') return { allowed: true, lastInboundAt: null, expiresAt: null };
+
   const { data } = await supabaseAdmin
     .from('chat_messages')
     .select('message_ts')
@@ -80,7 +87,8 @@ const PHONE_REGEX = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
 
 export async function checkContentSafety(
   messageBody: string,
-  sessionId?: string
+  sessionId?: string,
+  channelType: 'whatsapp' | 'email' = 'whatsapp'
 ): Promise<{ warnings: string[] }> {
   const warnings: string[] = [];
   const lower = messageBody.toLowerCase();
@@ -93,8 +101,8 @@ export async function checkContentSafety(
     }
   }
 
-  // Check for links in first message to contact
-  if (sessionId && URL_REGEX.test(messageBody)) {
+  // Check for links in first message to contact — skip for email (URLs are normal in email)
+  if (channelType !== 'email' && sessionId && URL_REGEX.test(messageBody)) {
     const { count } = await supabaseAdmin
       .from('chat_messages')
       .select('id', { count: 'exact', head: true })
@@ -148,8 +156,10 @@ export async function checkDuplicateContent(
 
 export async function getResponseRateStatus(
   channelId: number | string,
-  companyId: string
+  companyId: string,
+  channelType: 'whatsapp' | 'email' = 'whatsapp'
 ): Promise<{ rate: number; warning: boolean; throttled: boolean }> {
+  const throttleThreshold = channelType === 'email' ? 0.05 : 0.10;
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   // Get all session IDs for this channel so we can scope the inbound count
@@ -183,8 +193,8 @@ export async function getResponseRateStatus(
 
   return {
     rate: Math.round(rate * 100),
-    warning: rate < 0.3,
-    throttled: rate < 0.1,
+    warning: rate < throttleThreshold * 3,
+    throttled: rate < throttleThreshold,
   };
 }
 

@@ -62,12 +62,13 @@ async function processScheduledMessages() {
         }
 
         // --- Compliance checks ---
+        const ct = (channel.channel_type || 'whatsapp') as 'whatsapp' | 'email';
 
         // Rate limit check — if exceeded, reset to scheduled and skip
-        // Also check response rate for throttling (< 10% response rate → 50% limit)
-        const responseRate = await getResponseRateStatus(session.channel_id, msg.company_id);
-        const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
-        const rateResult = checkRateLimit(session.channel_id, msg.company_id, effectiveLimit);
+        // Also check response rate for throttling
+        const responseRate = await getResponseRateStatus(session.channel_id, msg.company_id, ct);
+        const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of default when throttled
+        const rateResult = checkRateLimit(session.channel_id, msg.company_id, effectiveLimit, ct);
         if (!rateResult.allowed) {
           console.warn(`Rate limit exceeded for channel ${session.channel_id}, deferring message ${msg.id}`);
           await supabaseAdmin
@@ -78,7 +79,7 @@ async function processScheduledMessages() {
         }
 
         // 24-hour window check — if expired, mark as failed and skip
-        const windowResult = await check24HourWindow(msg.session_id);
+        const windowResult = await check24HourWindow(msg.session_id, ct);
         if (!windowResult.allowed) {
           console.warn(`24-hour window expired for session ${msg.session_id}, failing message ${msg.id}`);
           await supabaseAdmin
@@ -89,7 +90,7 @@ async function processScheduledMessages() {
         }
 
         // Content safety check — log warnings only, don't block
-        const safetyResult = await checkContentSafety(msg.message_body, msg.session_id);
+        const safetyResult = await checkContentSafety(msg.message_body, msg.session_id, ct);
         if (safetyResult.warnings.length > 0) {
           console.warn(`Content safety warnings for message ${msg.id}:`, safetyResult.warnings);
         }
@@ -111,6 +112,7 @@ async function processScheduledMessages() {
           messageType: 'text',
           messageLength: msg.message_body.length,
           path: 'scheduled',
+          channelType: ct,
         });
 
         // Send the message

@@ -759,40 +759,21 @@ export async function generateAndSendAIReply(
 
   const channelId = sessionForChannel?.channel_id;
 
-  // Rate limit check (with response-rate throttle)
-  if (channelId) {
-    const responseRate = await getResponseRateStatus(channelId, companyId);
-    const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
-    const rateCheck = checkRateLimit(channelId, companyId, effectiveLimit);
-    if (!rateCheck.allowed) {
-      logComplianceMetric(channelId, companyId, { type: 'rate_limit_hit', path: 'ai_agent' });
-      return;
-    }
-  }
-
-  // 24h window check
-  const windowCheck = await check24HourWindow(sessionId);
-  if (!windowCheck.allowed) {
-    if (channelId) {
-      logComplianceMetric(channelId, companyId, { type: '24h_window_blocked', path: 'ai_agent' });
-    }
-    await supabaseAdmin.from('chat_sessions').update({ human_takeover: true }).eq('id', sessionId);
-    return;
-  }
-
-  // Resolve channel token + chatId + last inbound message for simulation
+  // Resolve channel info early — needed for compliance checks and simulation
   let channelToken: string | null = null;
   let chatId: string | null = null;
   let lastInboundMessageId: string | null = null;
+  let ct: 'whatsapp' | 'email' = 'whatsapp';
 
   if (channelId) {
     const { data: ch } = await supabaseAdmin
       .from('channels')
-      .select('channel_token')
+      .select('channel_token, channel_type')
       .eq('id', channelId)
       .eq('channel_status', 'connected')
       .single();
     channelToken = ch?.channel_token ?? null;
+    ct = (ch?.channel_type || 'whatsapp') as 'whatsapp' | 'email';
 
     if (sessionForChannel?.chat_id) {
       chatId = sessionForChannel.chat_id.includes('@')
@@ -810,6 +791,27 @@ export async function generateAndSendAIReply(
       .limit(1)
       .maybeSingle();
     lastInboundMessageId = lastInbound?.message_id_normalized ?? null;
+  }
+
+  // Rate limit check (with response-rate throttle)
+  if (channelId) {
+    const responseRate = await getResponseRateStatus(channelId, companyId, ct);
+    const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of default when throttled
+    const rateCheck = checkRateLimit(channelId, companyId, effectiveLimit, ct);
+    if (!rateCheck.allowed) {
+      logComplianceMetric(channelId, companyId, { type: 'rate_limit_hit', path: 'ai_agent' });
+      return;
+    }
+  }
+
+  // 24h window check
+  const windowCheck = await check24HourWindow(sessionId, ct);
+  if (!windowCheck.allowed) {
+    if (channelId) {
+      logComplianceMetric(channelId, companyId, { type: '24h_window_blocked', path: 'ai_agent' });
+    }
+    await supabaseAdmin.from('chat_sessions').update({ human_takeover: true }).eq('id', sessionId);
+    return;
   }
   // --- End compliance setup ---
 
@@ -895,6 +897,7 @@ export async function generateAndSendAIReply(
       messageLength: aiReply.length,
       path: 'ai_agent',
       aiProcessingTimeMs,
+      channelType: ct,
     });
   }
 

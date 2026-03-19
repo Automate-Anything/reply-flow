@@ -102,9 +102,10 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
     }
 
     // 1. Rate limit check (with response-rate throttle)
-    const responseRate = await getResponseRateStatus(session.channel_id, companyId);
-    const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of 60 when throttled
-    const rateCheck = checkRateLimit(session.channel_id, companyId, effectiveLimit);
+    const ct = channel.channel_type || 'whatsapp';
+    const responseRate = await getResponseRateStatus(session.channel_id, companyId, ct);
+    const effectiveLimit = responseRate.throttled ? 30 : undefined; // 50% of default when throttled
+    const rateCheck = checkRateLimit(session.channel_id, companyId, effectiveLimit, ct);
     if (!rateCheck.allowed) {
       return res.status(429).json({
         error: 'rate_limit_exceeded',
@@ -115,7 +116,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
     }
 
     // 2. 24-hour window check
-    const windowCheck = await check24HourWindow(sessionId);
+    const windowCheck = await check24HourWindow(sessionId, ct);
     if (!windowCheck.allowed) {
       return res.status(403).json({
         error: '24h_window_expired',
@@ -125,7 +126,7 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
     }
 
     // 3. Content safety (warnings only, don't block)
-    const safetyCheck = await checkContentSafety(body, sessionId);
+    const safetyCheck = await checkContentSafety(body, sessionId, ct);
 
     // 4. Duplicate content check (warning only)
     const dupeCheck = await checkDuplicateContent(session.channel_id, body);

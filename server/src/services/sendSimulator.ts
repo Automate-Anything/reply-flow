@@ -69,9 +69,13 @@ export interface SimulateOptions {
   messageLength: number;
   path: 'scheduled' | 'auto_reply' | 'ai_agent';
   aiProcessingTimeMs?: number;
+  channelType?: 'whatsapp' | 'email';
 }
 
 export async function simulateBeforeSend(options: SimulateOptions): Promise<void> {
+  // No typing indicators for email channels
+  if (options.channelType === 'email') return;
+
   const channelKey = options.channelToken;
 
   const wasQueued = (channelQueues.get(channelKey)?.depth ?? 0) >= MAX_QUEUE_DEPTH;
