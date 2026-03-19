@@ -6,6 +6,8 @@ export interface ChannelInfo {
   channel_status: string;
   phone_number: string | null;
   email_address: string | null;
+  email_signature: string | null;
+  gmail_watch_expiry: string | null;
   profile_picture_url: string | null;
   profile_name: string | null;
   webhook_registered: boolean;

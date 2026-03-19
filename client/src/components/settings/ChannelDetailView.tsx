@@ -16,8 +16,9 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
-  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, ChevronDown,
+  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, ChevronDown, Mail, Save,
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { PlanGate } from '@/components/auth/PlanGate';
 import { useChannelAgent, type ChannelAgentSettings } from '@/hooks/useChannelAgent';
@@ -133,6 +134,58 @@ export default function ChannelDetailPage() {
 
   // Company timezone (still company-level)
   const [companyTimezone, setCompanyTimezone] = useState('UTC');
+
+  // Email/Gmail specific state
+  const [emailSignature, setEmailSignature] = useState('');
+  const [savingSignature, setSavingSignature] = useState(false);
+  const [reauthing, setReauthing] = useState(false);
+  const isEmailChannel = channel?.channel_type === 'email';
+
+  // Sync signature from channel data
+  useEffect(() => {
+    if (channel?.email_signature != null) {
+      setEmailSignature(channel.email_signature);
+    }
+  }, [channel?.email_signature]);
+
+  const handleSaveSignature = async () => {
+    setSavingSignature(true);
+    try {
+      await api.patch(`/channels/whatsapp/channels/${numericChannelId}`, { email_signature: emailSignature });
+      toast.success('Email signature saved');
+      fetchChannel(true);
+    } catch {
+      toast.error('Failed to save signature');
+    } finally {
+      setSavingSignature(false);
+    }
+  };
+
+  const handleGmailReauth = async () => {
+    setReauthing(true);
+    try {
+      const { data } = await api.post('/channels/gmail/connect', { channelName: channel?.channel_name || 'Gmail' });
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch {
+      toast.error('Failed to start re-authentication');
+      setReauthing(false);
+    }
+  };
+
+  const handleGmailDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      await api.post(`/channels/gmail/channels/${numericChannelId}/disconnect`);
+      toast.success('Gmail disconnected');
+      fetchChannel();
+    } catch {
+      toast.error('Failed to disconnect Gmail');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
 
   // AI toggle state
   const [toggling, setToggling] = useState(false);
@@ -500,80 +553,156 @@ export default function ChannelDetailPage() {
 
         {/* Connection Tab */}
         <TabsContent value="connection" className="mt-1 space-y-5">
-          {/* Disconnected banner */}
-          {isDisconnected && (
-            <div className="flex items-center gap-3 rounded-lg border-2 border-destructive/30 bg-destructive/5 p-4">
-              <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Channel disconnected</p>
-                <p className="text-xs text-muted-foreground">
-                  This channel is no longer connected. Reconnect to resume messaging.
-                </p>
+          {isEmailChannel ? (
+            <>
+              {/* Email connection info */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+                    <Mail className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{channel.email_address || 'No email connected'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {isConnected
+                        ? channel.gmail_watch_expiry
+                          ? `Syncing — watch expires ${new Date(channel.gmail_watch_expiry).toLocaleDateString()}`
+                          : 'Connected and syncing'
+                        : 'Not connected'}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={statusConfig.badgeClass}>
+                    <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${statusConfig.dotClass}`} />
+                    {statusConfig.label}
+                  </Badge>
+                </div>
               </div>
-              <PlanGate>
-                <Button size="sm" onClick={handleReconnect}>
-                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  Reconnect
+
+              {/* Email signature editor */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium">Email Signature</p>
+                  <p className="text-xs text-muted-foreground">
+                    This signature will be appended to outgoing emails from this channel.
+                  </p>
+                </div>
+                <Textarea
+                  value={emailSignature}
+                  onChange={(e) => setEmailSignature(e.target.value)}
+                  placeholder="Enter your email signature..."
+                  rows={4}
+                  className="text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSaveSignature}
+                  disabled={savingSignature}
+                >
+                  {savingSignature ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Save Signature
                 </Button>
-              </PlanGate>
-            </div>
-          )}
-
-          {/* Provisioning state */}
-          {isProvisioning && (
-            <div className="flex items-center gap-3 rounded-lg border-2 border-amber-500/30 bg-amber-500/5 p-4">
-              <Loader2 className="h-5 w-5 text-amber-500 animate-spin" />
-              <div>
-                <p className="text-sm font-medium">Setting up channel...</p>
-                <p className="text-xs text-muted-foreground">This may take a few minutes.</p>
               </div>
-            </div>
-          )}
 
-          {/* QR code display */}
-          {isAwaitingScan && (
-            <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-blue-500/30 bg-muted/30 p-5">
-              <p className="text-sm font-medium">Scan this QR code with your WhatsApp app</p>
-              {loadingQR ? (
-                <Skeleton className="h-[232px] w-[232px] rounded-lg" />
-              ) : qrData ? (
-                <div className="rounded-lg border bg-white p-3 shadow-sm">
-                  <QRCodeSVG value={qrData} size={200} />
-                </div>
-              ) : (
-                <div className="flex h-[232px] w-[232px] items-center justify-center rounded-lg border bg-muted/50">
-                  <p className="text-sm text-muted-foreground">Failed to load QR code</p>
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                QR code refreshes automatically. Checking connection every 5s...
-              </p>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          {(isConnected || isAwaitingScan) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {isConnected && (
+              {/* Gmail action buttons */}
+              <div className="flex flex-wrap items-center gap-2">
                 <PlanGate>
-                  <Button variant="outline" size="sm" onClick={handleLogout} disabled={disconnecting || deleting}>
-                    {disconnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-2 h-3.5 w-3.5" />}
-                    {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                  <Button variant="outline" size="sm" onClick={handleGmailReauth} disabled={reauthing}>
+                    {reauthing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
+                    {reauthing ? 'Redirecting...' : 'Re-authenticate'}
                   </Button>
                 </PlanGate>
+                {isConnected && (
+                  <PlanGate>
+                    <Button variant="outline" size="sm" onClick={handleGmailDisconnect} disabled={disconnecting || deleting}>
+                      {disconnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-2 h-3.5 w-3.5" />}
+                      {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                    </Button>
+                  </PlanGate>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* WhatsApp: Disconnected banner */}
+              {isDisconnected && (
+                <div className="flex items-center gap-3 rounded-lg border-2 border-destructive/30 bg-destructive/5 p-4">
+                  <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Channel disconnected</p>
+                    <p className="text-xs text-muted-foreground">
+                      This channel is no longer connected. Reconnect to resume messaging.
+                    </p>
+                  </div>
+                  <PlanGate>
+                    <Button size="sm" onClick={handleReconnect}>
+                      <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                      Reconnect
+                    </Button>
+                  </PlanGate>
+                </div>
               )}
+
+              {/* WhatsApp: Provisioning state */}
+              {isProvisioning && (
+                <div className="flex items-center gap-3 rounded-lg border-2 border-amber-500/30 bg-amber-500/5 p-4">
+                  <Loader2 className="h-5 w-5 text-amber-500 animate-spin" />
+                  <div>
+                    <p className="text-sm font-medium">Setting up channel...</p>
+                    <p className="text-xs text-muted-foreground">This may take a few minutes.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* WhatsApp: QR code display */}
               {isAwaitingScan && (
-                <PlanGate>
-                  <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
-                    <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshingQR ? 'animate-spin' : ''}`} />
-                    {refreshingQR ? 'Refreshing...' : 'Refresh QR'}
-                  </Button>
-                </PlanGate>
+                <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-blue-500/30 bg-muted/30 p-5">
+                  <p className="text-sm font-medium">Scan this QR code with your WhatsApp app</p>
+                  {loadingQR ? (
+                    <Skeleton className="h-[232px] w-[232px] rounded-lg" />
+                  ) : qrData ? (
+                    <div className="rounded-lg border bg-white p-3 shadow-sm">
+                      <QRCodeSVG value={qrData} size={200} />
+                    </div>
+                  ) : (
+                    <div className="flex h-[232px] w-[232px] items-center justify-center rounded-lg border bg-muted/50">
+                      <p className="text-sm text-muted-foreground">Failed to load QR code</p>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    QR code refreshes automatically. Checking connection every 5s...
+                  </p>
+                </div>
               )}
-            </div>
+
+              {/* WhatsApp: Action buttons */}
+              {(isConnected || isAwaitingScan) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {isConnected && (
+                    <PlanGate>
+                      <Button variant="outline" size="sm" onClick={handleLogout} disabled={disconnecting || deleting}>
+                        {disconnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <LogOut className="mr-2 h-3.5 w-3.5" />}
+                        {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                      </Button>
+                    </PlanGate>
+                  )}
+                  {isAwaitingScan && (
+                    <PlanGate>
+                      <Button variant="outline" size="sm" onClick={handleRefreshQR} disabled={refreshingQR}>
+                        <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshingQR ? 'animate-spin' : ''}`} />
+                        {refreshingQR ? 'Refreshing...' : 'Refresh QR'}
+                      </Button>
+                    </PlanGate>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
-          {/* Danger zone — Delete */}
+          {/* Danger zone — Delete (shared for all channel types) */}
           {(
             <div className="rounded-lg border border-dashed border-destructive/30 p-4">
               <div className="flex items-center justify-between">

@@ -454,7 +454,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
 
     const { data: channel } = await supabaseAdmin
       .from('channels')
-      .select('id, channel_id, channel_name, channel_type, channel_status, phone_number, email_address, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
+      .select('id, channel_id, channel_name, channel_type, channel_status, phone_number, email_address, email_signature, gmail_watch_expiry, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
@@ -465,6 +465,31 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
     }
 
     res.json({ channel: { ...channel, is_owner: channel.user_id === userId } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update channel settings (e.g., email signature)
+router.patch('/channels/:channelId', requirePermission('channels', 'edit'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { channelId } = req.params;
+    const { email_signature } = req.body;
+
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (email_signature !== undefined) updates.email_signature = email_signature;
+
+    const { data, error } = await supabaseAdmin
+      .from('channels')
+      .update(updates)
+      .eq('id', Number(channelId))
+      .eq('company_id', companyId)
+      .select('id, email_signature')
+      .single();
+
+    if (error) throw error;
+    res.json({ channel: data });
   } catch (err) {
     next(err);
   }
