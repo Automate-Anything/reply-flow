@@ -45,6 +45,7 @@ import gmailWebhookRouter from './routes/gmailWebhook.js';
 import { startScheduler } from './services/scheduler.js';
 import { startAvailabilityScheduler } from './services/availabilityScheduler.js';
 import { startPayoutScheduler } from './cron/affiliatePayouts.js';
+import { startGmailWatchCron } from './services/gmailWatchCron.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -150,6 +151,9 @@ app.listen(env.PORT, () => {
   startScheduler();
   startAvailabilityScheduler();
   startPayoutScheduler();
+  if (env.GOOGLE_CLIENT_ID) {
+    startGmailWatchCron();
+  }
 });
 
 export default app;
