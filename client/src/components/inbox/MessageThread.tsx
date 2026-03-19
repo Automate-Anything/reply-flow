@@ -4,6 +4,7 @@ import { ArrowDown } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import MessageContextMenu from './MessageContextMenu';
 import MessageInput from './MessageInput';
+import EmailMessageCard from './EmailMessageCard';
 import type { Message } from '@/hooks/useMessages';
 
 interface ComplianceResult {
@@ -21,7 +22,9 @@ interface MessageThreadProps {
   channelType?: string;
   contactName?: string;
   contactAvatarUrl?: string | null;
+  contactEmail?: string;
   onSend: (body: string) => Promise<{ compliance?: ComplianceResult } | void>;
+  onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; cc: string[]; bcc: string[] }) => void;
   onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   onCancelScheduled: (messageId: string) => Promise<void>;
@@ -60,7 +63,9 @@ export default function MessageThread({
   channelType,
   contactName,
   contactAvatarUrl,
+  contactEmail,
   onSend,
+  onSendEmail,
   onSendVoiceNote,
   onSchedule,
   onCancelScheduled,
@@ -169,27 +174,35 @@ export default function MessageThread({
             </div>
           ) : (
             <div className="space-y-2">
-              {messages.map((msg) => (
-                <MessageContextMenu
-                  key={msg.id}
-                  message={msg}
-                  sessionId={sessionId}
-                  onReply={onReply || (() => {})}
-                  onMessageUpdate={onMessageUpdate}
-                  onForward={onForward}
-                >
-                  <MessageBubble
+              {messages.map((msg) =>
+                channelType === 'email' ? (
+                  <EmailMessageCard
+                    key={msg.id}
                     message={msg}
-                    messages={messages}
                     contactName={contactName}
-                    contactAvatarUrl={contactAvatarUrl}
-                    onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
-                    onReply={onReply}
-                    onMessageUpdate={onMessageUpdate}
-                    isDebugMode={isDebugMode}
                   />
-                </MessageContextMenu>
-              ))}
+                ) : (
+                  <MessageContextMenu
+                    key={msg.id}
+                    message={msg}
+                    sessionId={sessionId}
+                    onReply={onReply || (() => {})}
+                    onMessageUpdate={onMessageUpdate}
+                    onForward={onForward}
+                  >
+                    <MessageBubble
+                      message={msg}
+                      messages={messages}
+                      contactName={contactName}
+                      contactAvatarUrl={contactAvatarUrl}
+                      onCancelScheduled={msg.status === 'scheduled' ? onCancelScheduled : undefined}
+                      onReply={onReply}
+                      onMessageUpdate={onMessageUpdate}
+                      isDebugMode={isDebugMode}
+                    />
+                  </MessageContextMenu>
+                )
+              )}
               <div ref={bottomRef} />
             </div>
           )}
@@ -219,6 +232,13 @@ export default function MessageThread({
         onDraftChange={onDraftChange}
         replyingTo={replyingTo}
         onCancelReply={onCancelReply}
+        contactEmail={contactEmail}
+        emailSubject={
+          channelType === 'email' && messages.length > 0
+            ? ((messages[messages.length - 1].metadata as Record<string, unknown> | null)?.subject as string) || ''
+            : undefined
+        }
+        onSendEmail={onSendEmail}
       />
     </div>
   );

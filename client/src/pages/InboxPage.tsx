@@ -401,6 +401,24 @@ export default function InboxPage() {
     }
   };
 
+  const handleSendEmail = async (data: { htmlBody: string; textBody: string; subject: string; cc: string[]; bcc: string[] }) => {
+    if (!activeConversation) return;
+    try {
+      await api.post('/messages/send-email', {
+        sessionId: activeConversation.id,
+        htmlBody: data.htmlBody,
+        textBody: data.textBody,
+        subject: data.subject,
+        cc: data.cc,
+        bcc: data.bcc,
+      });
+      refetchConvs();
+      toast.success('Email sent');
+    } catch {
+      toast.error('Failed to send email');
+    }
+  };
+
   const handleSchedule = async (body: string, scheduledFor: string) => {
     try {
       await scheduleMessage(body, scheduledFor);
@@ -713,7 +731,9 @@ export default function InboxPage() {
               channelType={activeConversation.channel_type ?? undefined}
               contactName={activeConversation.contact_name || activeConversation.phone_number}
               contactAvatarUrl={activeConversation.profile_picture_url}
+              contactEmail={activeConversation.channel_type === 'email' ? activeConversation.phone_number : undefined}
               onSend={handleSend}
+              onSendEmail={activeConversation.channel_type === 'email' ? handleSendEmail : undefined}
               onSendVoiceNote={handleSendVoiceNote}
               onSchedule={handleSchedule}
               onCancelScheduled={handleCancelScheduled}

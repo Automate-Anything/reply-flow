@@ -217,6 +217,131 @@ router.post('/send', requirePermission('messages', 'create'), async (req, res, n
   }
 });
 
+// Send an email message
+router.post('/send-email', requirePermission('messages', 'create'), async (req, res, next) => {
+  try {
+    const companyId = req.companyId!;
+    const { sessionId, htmlBody, textBody, subject, cc, bcc } = req.body;
+
+    if (!sessionId) {
+      res.status(400).json({ error: 'sessionId is required' });
+      return;
+    }
+
+    // Look up session
+    const { data: session, error: sessionError } = await supabaseAdmin
+      .from('chat_sessions')
+      .select('id, channel_id, chat_id, phone_number, contact_name')
+      .eq('id', sessionId)
+      .eq('company_id', companyId)
+      .single();
+
+    if (sessionError || !session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    if (!session.channel_id) {
+      res.status(400).json({ error: 'Conversation is not linked to a channel' });
+      return;
+    }
+
+    // Look up channel
+    const { data: channel } = await supabaseAdmin
+      .from('channels')
+      .select('id, channel_type, channel_token, channel_status, email_address, oauth_access_token, oauth_refresh_token, email_signature')
+      .eq('id', session.channel_id)
+      .eq('channel_status', 'connected')
+      .single();
+
+    if (!channel) {
+      res.status(400).json({ error: 'No connected channel for this conversation' });
+      return;
+    }
+    if (channel.channel_type !== 'email') {
+      res.status(400).json({ error: 'Not an email channel' });
+      return;
+    }
+
+    // Get last message for threading (inReplyTo, references)
+    const { data: lastMsg } = await supabaseAdmin
+      .from('chat_messages')
+      .select('metadata')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    const lastMeta = lastMsg?.metadata as Record<string, unknown> | null;
+
+    // Send via email provider
+    const provider = getProvider('email');
+    const result = await provider.sendMessage(channel as any, session.phone_number, htmlBody || '', {
+      subject: subject || (lastMeta?.subject as string) || '',
+      threadId: session.chat_id, // Gmail threadId
+      inReplyTo: (lastMeta?.message_id_header as string) || '',
+      references: (lastMeta?.references as string) || '',
+      cc: cc || [],
+      bcc: bcc || [],
+    });
+
+    // Store outbound message
+    const now = new Date().toISOString();
+    const plainText = textBody || (htmlBody || '').replace(/<[^>]*>/g, '');
+    const { data: message, error: msgError } = await supabaseAdmin
+      .from('chat_messages')
+      .insert({
+        session_id: sessionId,
+        company_id: companyId,
+        user_id: req.userId,
+        chat_id_normalized: session.chat_id,
+        phone_number: session.phone_number,
+        message_body: plainText,
+        message_type: 'email',
+        message_id_normalized: result.messageId,
+        direction: 'outbound',
+        sender_type: 'human',
+        status: 'sent',
+        read: true,
+        message_ts: now,
+        metadata: { subject, html_body: htmlBody, cc, bcc },
+      })
+      .select()
+      .single();
+
+    if (msgError) throw msgError;
+
+    // Update session
+    await supabaseAdmin
+      .from('chat_sessions')
+      .update({
+        last_message: `${subject}: ${(plainText || '').substring(0, 100)}`,
+        last_message_at: now,
+        last_message_direction: 'outbound',
+        last_message_sender: 'human',
+        updated_at: now,
+        draft_message: null,
+        marked_unread: false,
+        last_read_at: now,
+      })
+      .eq('id', sessionId)
+      .or(`last_message_at.is.null,last_message_at.lte.${now}`);
+
+    // Mark inbound messages as read
+    await supabaseAdmin
+      .from('chat_messages')
+      .update({ read: true })
+      .eq('session_id', sessionId)
+      .eq('direction', 'inbound')
+      .eq('read', false);
+
+    res.json({ success: true, message, messageId: result.messageId });
+  } catch (err) {
+    console.error('[messages] send-email error:', err);
+    next(err);
+  }
+});
+
 // Send a voice note
 router.post('/send-voice', requirePermission('messages', 'create'), (req, res, next) => {
   voiceUpload(req, res, (err) => {

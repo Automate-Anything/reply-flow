@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useAISuggestion } from '@/hooks/useAISuggestion';
 import { AISuggestionButton, type AISuggestionButtonHandle } from './AISuggestionButton';
 import api from '@/lib/api';
+import EmailComposer from './EmailComposer';
 
 interface ComplianceResult {
   warnings: string[];
@@ -51,6 +52,10 @@ interface MessageInputProps {
   sessionId?: string;
   channelId?: number;
   channelType?: string;
+  contactEmail?: string;
+  emailSubject?: string;
+  emailSignature?: string;
+  onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; cc: string[]; bcc: string[] }) => void;
 }
 
 function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }[] {
@@ -74,7 +79,7 @@ function formatTimeUntil(isoString: string): string {
   return `${minutes}m`;
 }
 
-export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId, channelType }: MessageInputProps) {
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId, channelType, contactEmail, emailSubject, emailSignature, onSendEmail }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
@@ -446,6 +451,19 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
       setPreviewDismissed(false);
     }
   }, [typedLinkPreview?.url]);
+
+  // Email channel — render the rich text EmailComposer instead
+  if (channelType === 'email' && onSendEmail) {
+    return (
+      <EmailComposer
+        to={contactEmail || ''}
+        subject={emailSubject || ''}
+        signature={emailSignature}
+        onSend={onSendEmail}
+        replyMode={true}
+      />
+    );
+  }
 
   return (
     <div className="relative z-10 border-t bg-background">
