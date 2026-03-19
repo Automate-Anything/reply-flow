@@ -1,9 +1,10 @@
 import type { ChannelProvider } from '../channelProvider.js';
 import { whatsappProvider } from './whatsapp.js';
+import { emailProvider } from './email.js';
 
 const providers: Record<string, ChannelProvider> = {
   whatsapp: whatsappProvider,
-  // email: emailProvider — added in Phase 2
+  email: emailProvider,
 };
 
 export function getProvider(channelType: string): ChannelProvider {
