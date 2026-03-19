@@ -18,7 +18,6 @@ import OnboardingPage from '@/pages/OnboardingPage';
 import CompanySettingsPage from '@/pages/CompanySettingsPage';
 import ChannelsPage from '@/pages/ChannelsPage';
 import ChannelDetailPage from '@/components/settings/ChannelDetailView';
-import ChannelHealthPage from '@/pages/ChannelHealthPage';
 import AIAgentsPage from '@/pages/AIAgentsPage';
 import AgentDetailPage from '@/pages/AgentDetailPage';
 import SuperAdminPage from '@/pages/SuperAdminPage';
@@ -48,7 +47,6 @@ function App() {
                   <Route path="ai-agents/:agentId" element={<AgentDetailPage />} />
                   <Route path="channels" element={<ChannelsPage />} />
                   <Route path="channels/:channelId" element={<ChannelDetailPage />} />
-                  <Route path="channel-health" element={<ChannelHealthPage />} />
                   <Route path="whatsapp-groups" element={<GroupsPage />} />
 
                   <Route path="company-settings" element={<CompanySettingsPage />} />

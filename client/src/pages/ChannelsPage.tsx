@@ -6,11 +6,38 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, Smartphone, CheckCircle2, CircleX, QrCode, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
 import { formatChannelName, getStatusConfig, getCardBorder, type ChannelInfo } from '@/components/settings/channelHelpers';
 import { useSubscription } from '@/hooks/useSubscription';
+
+// ── Health types & helpers ─────────────────────────────────────────────────
+
+interface ChannelHealthEntry {
+  channelId: number;
+  healthStatus: 'healthy' | 'needs_attention' | 'at_risk' | 'no_data';
+  rateLimitUtilization: number;
+}
+
+function getHealthDot(status: ChannelHealthEntry['healthStatus']): string {
+  switch (status) {
+    case 'healthy':         return 'bg-green-500';
+    case 'needs_attention': return 'bg-amber-500';
+    case 'at_risk':         return 'bg-red-500';
+    default:                return 'bg-muted-foreground/40';
+  }
+}
+
+function getHealthTooltip(status: ChannelHealthEntry['healthStatus']): string {
+  switch (status) {
+    case 'healthy':         return 'Healthy';
+    case 'needs_attention': return 'Needs Attention';
+    case 'at_risk':         return 'At Risk';
+    default:                return 'No Data';
+  }
+}
 
 function getStatusIcon(status: string) {
   switch (status) {
@@ -53,12 +80,30 @@ export default function ChannelsPage() {
   const cachedChannels = getCachedChannels();
   const [channels, setChannels] = useState<ChannelInfo[]>(cachedChannels || []);
   const [channelsLoading, setLoading] = useState(!cachedChannels);
+  const [healthMap, setHealthMap] = useState<Map<number, ChannelHealthEntry>>(new Map());
   const pageReady = usePageReady();
   const loading = channelsLoading || !pageReady;
   const { subscription, loading: subLoading } = useSubscription();
 
   const channelLimit = subscription?.plan.channels ?? Infinity;
   const atLimit = channels.length >= channelLimit;
+
+  // Fetch health data in background (non-blocking)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHealth() {
+      try {
+        const { data } = await api.get('/compliance/channels/health');
+        if (cancelled) return;
+        const entries: ChannelHealthEntry[] = data.channels ?? [];
+        setHealthMap(new Map(entries.map((e) => [e.channelId, e])));
+      } catch {
+        // Health data is supplementary — don't block the page on failure
+      }
+    }
+    void loadHealth();
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchChannels = useCallback(async (showLoader = false) => {
     if (showLoader) setLoading(true);
@@ -154,6 +199,7 @@ export default function ChannelsPage() {
               {channels.map((ch) => {
                 const status = getStatusConfig(ch.channel_status);
                 const borderClass = getCardBorder(ch.channel_status);
+                const health = healthMap.get(ch.id);
                 return (
                   <Card
                     key={ch.id}
@@ -182,6 +228,24 @@ export default function ChannelsPage() {
                           {ch.phone_number && ch.profile_name ? `${formatPhone(ch.phone_number)} · ` : ''}{status.label}
                         </p>
                       </div>
+
+                      {/* Health indicator + rate limit */}
+                      {health && (
+                        <div className="hidden sm:flex items-center gap-2 shrink-0">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${getHealthDot(health.healthStatus)}`} />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">
+                              {getHealthTooltip(health.healthStatus)}
+                            </TooltipContent>
+                          </Tooltip>
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {health.rateLimitUtilization.toFixed(0)}%
+                          </span>
+                        </div>
+                      )}
+
                       <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
                     </CardContent>
                   </Card>
