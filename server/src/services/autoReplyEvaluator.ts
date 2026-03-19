@@ -31,7 +31,7 @@ export async function evaluateAutoReply(
   // Fetch channel auto-reply settings
   const { data: channelSettings } = await supabaseAdmin
     .from('channel_agent_settings')
-    .select('is_enabled, auto_reply_enabled, auto_reply_message, auto_reply_trigger')
+    .select('is_enabled, auto_reply_enabled, auto_reply_message, auto_reply_messages, auto_reply_trigger')
     .eq('channel_id', channelId)
     .single();
 
@@ -44,12 +44,19 @@ export async function evaluateAutoReply(
     return { shouldReply: false };
   }
 
+  // Message rotation: if multiple messages are configured, pick one at random;
+  // otherwise fall back to the single auto_reply_message.
+  let message = channelSettings.auto_reply_message;
+  if (channelSettings.auto_reply_messages && channelSettings.auto_reply_messages.length > 0) {
+    message = channelSettings.auto_reply_messages[Math.floor(Math.random() * channelSettings.auto_reply_messages.length)];
+  }
+
   const trigger = channelSettings.auto_reply_trigger || 'outside_hours';
 
   if (trigger === 'outside_hours') {
-    return evaluateOutsideHoursTrigger(companyId, channelId, channelSettings.auto_reply_message);
+    return evaluateOutsideHoursTrigger(companyId, channelId, message);
   } else if (trigger === 'all_unavailable') {
-    return evaluateAllUnavailableTrigger(companyId, channelId, channelSettings.auto_reply_message);
+    return evaluateAllUnavailableTrigger(companyId, channelId, message);
   }
 
   return { shouldReply: false };

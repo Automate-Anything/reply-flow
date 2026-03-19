@@ -11,6 +11,8 @@ import { autoAssignConversation } from './autoAssignService.js';
 import { createNotification, createNotificationsForUsers } from './notificationService.js';
 import { evaluateAutoReply } from './autoReplyEvaluator.js';
 import { classifyConversation } from './classification.js';
+import { checkRateLimit, incrementRateCounter, logComplianceMetric } from './complianceUtils.js';
+import { simulateBeforeSend } from './sendSimulator.js';
 
 /**
  * Normalizes a WhatsApp JID/chat_id to a plain phone number or identifier.
@@ -635,9 +637,30 @@ export async function processIncomingMessage(
   try {
     const autoReply = await evaluateAutoReply(companyId, channelId, isNewSession);
     if (autoReply.shouldReply && autoReply.message && autoReply.channelId) {
-      sendOutsideHoursReply(companyId, sessionId, autoReply.channelId, autoReply.message).catch((err) => {
-        console.error('Auto-reply send error:', err);
-      });
+      const rateCheck = checkRateLimit(channelId, companyId);
+      if (rateCheck.allowed) {
+        (async () => {
+          // Fetch channel token for simulation (typing indicators / read receipts)
+          const { data: channelRow } = await supabaseAdmin
+            .from('whatsapp_channels')
+            .select('channel_token')
+            .eq('id', channelId)
+            .single();
+          if (channelRow?.channel_token) {
+            await simulateBeforeSend({
+              channelToken: channelRow.channel_token,
+              chatId: chatId!,
+              inboundMessageId: msg.id,
+              messageType: 'text',
+              messageLength: autoReply.message!.length,
+              path: 'auto_reply',
+            });
+          }
+          await sendOutsideHoursReply(companyId, sessionId, autoReply.channelId!, autoReply.message!);
+          incrementRateCounter(channelId, companyId);
+          logComplianceMetric(channelId, companyId, { type: 'message_sent', path: 'auto_reply' });
+        })().catch((err) => console.error('Auto-reply error:', err));
+      }
       return;
     }
   } catch (err) {
