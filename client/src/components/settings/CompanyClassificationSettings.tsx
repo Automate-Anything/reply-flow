@@ -522,7 +522,7 @@ export default function CompanyClassificationSettings() {
       .finally(() => setLoading(false));
 
     api
-      .get('/whatsapp/channels')
+      .get('/channels/whatsapp/channels')
       .then(({ data }) => setChannels(data.channels || []))
       .catch(() => console.error('Failed to fetch channels'))
       .finally(() => setChannelsLoading(false));

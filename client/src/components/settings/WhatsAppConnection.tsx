@@ -69,7 +69,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     if (qrRefreshRef.current) clearInterval(qrRefreshRef.current);
     qrRefreshRef.current = setInterval(async () => {
       try {
-        const { data } = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
+        const { data } = await api.get(`/channels/whatsapp/create-qr?channelId=${channelId}`);
         if (data.connected) {
           markConnected();
           return;
@@ -97,13 +97,13 @@ export default function WhatsAppConnection({ onCreated }: Props) {
       }
 
       try {
-        const { data } = await api.get(`/whatsapp/health-check?channelId=${channelId}`);
+        const { data } = await api.get(`/channels/whatsapp/health-check?channelId=${channelId}`);
 
         if (data.status === 'awaiting_scan') {
           // Provisioning done — fetch QR and show it
           clearTimers();
           try {
-            const qrRes = await api.get(`/whatsapp/create-qr?channelId=${channelId}`);
+            const qrRes = await api.get(`/channels/whatsapp/create-qr?channelId=${channelId}`);
             if (qrRes.data.connected) {
               markConnected();
               return;
@@ -117,7 +117,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
           // Restart health poll for connected status
           healthPollRef.current = setInterval(async () => {
             try {
-              const { data: d } = await api.get(`/whatsapp/health-check?channelId=${channelId}`);
+              const { data: d } = await api.get(`/channels/whatsapp/health-check?channelId=${channelId}`);
               if (d.status === 'connected') {
                 markConnected();
               }
@@ -140,7 +140,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     setState('provisioning');
     setError(null);
     try {
-      const { data } = await api.post('/whatsapp/create-channel', { name: channelName.trim() || undefined });
+      const { data } = await api.post('/channels/whatsapp/create-channel', { name: channelName.trim() || undefined });
       setDbChannelId(data.dbChannelId);
       startHealthPolling(data.dbChannelId);
     } catch (err: unknown) {
@@ -162,7 +162,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     if (!dbChannelId) return;
     setDeleting(true);
     try {
-      await api.delete('/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
+      await api.delete('/channels/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
       clearTimers();
       setQrData(null);
       setDbChannelId(null);
@@ -179,9 +179,9 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     setDeleting(true);
     try {
       if (dbChannelId) {
-        await api.delete('/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
+        await api.delete('/channels/whatsapp/delete-channel', { data: { channelId: dbChannelId } });
       } else {
-        await api.post('/whatsapp/cancel-provisioning');
+        await api.post('/channels/whatsapp/cancel-provisioning');
       }
       clearTimers();
       setQrData(null);
@@ -198,7 +198,7 @@ export default function WhatsAppConnection({ onCreated }: Props) {
     if (!dbChannelId) return;
     setRefreshingQR(true);
     try {
-      const { data } = await api.get(`/whatsapp/create-qr?channelId=${dbChannelId}`);
+      const { data } = await api.get(`/channels/whatsapp/create-qr?channelId=${dbChannelId}`);
       setQrData(data.qr);
     } catch {
       toast.error('Failed to refresh QR code');

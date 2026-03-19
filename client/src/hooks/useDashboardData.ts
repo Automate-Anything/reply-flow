@@ -51,7 +51,7 @@ export function useDashboardData() {
     const [convsRes, contactsRes, channelsRes] = await Promise.all([
       api.get('/conversations').catch(() => ({ data: { sessions: [] } })),
       api.get('/contacts').catch(() => ({ data: { contacts: [] } })),
-      api.get('/whatsapp/channels').catch(() => ({ data: { channels: [] } })),
+      api.get('/channels/whatsapp/channels').catch(() => ({ data: { channels: [] } })),
     ]);
 
     const allConversations: Conversation[] = convsRes.data.sessions || [];

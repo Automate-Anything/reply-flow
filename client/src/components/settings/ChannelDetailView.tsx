@@ -142,7 +142,7 @@ export default function ChannelDetailPage() {
   // Fetch channel data
   const fetchChannel = useCallback(async (skipStatusUpdate = false) => {
     try {
-      const { data } = await api.get(`/whatsapp/channels/${numericChannelId}`);
+      const { data } = await api.get(`/channels/whatsapp/channels/${numericChannelId}`);
       setChannel(data.channel);
       if (!skipStatusUpdate) {
         setEffectiveStatus(data.channel.channel_status);
@@ -178,7 +178,7 @@ export default function ChannelDetailPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
+        const { data } = await api.get(`/channels/whatsapp/health-check?channelId=${numericChannelId}`);
         if (cancelled) return;
         if (data.status !== 'connected') {
           setEffectiveStatus(data.status);
@@ -200,7 +200,7 @@ export default function ChannelDetailPage() {
     const poll = setInterval(async () => {
       if (done) return;
       try {
-        const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
+        const { data } = await api.get(`/channels/whatsapp/health-check?channelId=${numericChannelId}`);
         if (data.status !== 'pending') {
           done = true;
           setEffectiveStatus(data.status);
@@ -241,7 +241,7 @@ export default function ChannelDetailPage() {
     const fetchQR = async () => {
       setLoadingQR(true);
       try {
-        const { data } = await api.get(`/whatsapp/create-qr?channelId=${numericChannelId}`);
+        const { data } = await api.get(`/channels/whatsapp/create-qr?channelId=${numericChannelId}`);
         handleQRResponse(data);
       } catch {
         // Will retry on interval
@@ -253,7 +253,7 @@ export default function ChannelDetailPage() {
 
     const qrInterval = setInterval(async () => {
       try {
-        const { data } = await api.get(`/whatsapp/create-qr?channelId=${numericChannelId}`);
+        const { data } = await api.get(`/channels/whatsapp/create-qr?channelId=${numericChannelId}`);
         handleQRResponse(data);
       } catch {
         // ignore
@@ -262,7 +262,7 @@ export default function ChannelDetailPage() {
 
     const healthInterval = setInterval(async () => {
       try {
-        const { data } = await api.get(`/whatsapp/health-check?channelId=${numericChannelId}`);
+        const { data } = await api.get(`/channels/whatsapp/health-check?channelId=${numericChannelId}`);
         if (data.status === 'connected' && !cancelled) {
           cancelled = true;
           cancelledRef.current = true;
@@ -291,7 +291,7 @@ export default function ChannelDetailPage() {
   const handleRefreshQR = async () => {
     setRefreshingQR(true);
     try {
-      const { data } = await api.get(`/whatsapp/create-qr?channelId=${numericChannelId}`);
+      const { data } = await api.get(`/channels/whatsapp/create-qr?channelId=${numericChannelId}`);
       if (data.connected) {
         setEffectiveStatus('connected');
         setQrData(null);
@@ -310,7 +310,7 @@ export default function ChannelDetailPage() {
   const handleLogout = async () => {
     setDisconnecting(true);
     try {
-      await api.post('/whatsapp/logout', { channelId: numericChannelId });
+      await api.post('/channels/whatsapp/logout', { channelId: numericChannelId });
       toast.success('WhatsApp disconnected');
       fetchChannel();
     } catch {
@@ -324,7 +324,7 @@ export default function ChannelDetailPage() {
     setDeleting(true);
     setConfirmDelete(false);
     try {
-      await api.delete('/whatsapp/delete-channel', { data: { channelId: numericChannelId } });
+      await api.delete('/channels/whatsapp/delete-channel', { data: { channelId: numericChannelId } });
       toast.success('Channel deleted');
       navigate('/channels');
     } catch {

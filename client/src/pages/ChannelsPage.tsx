@@ -136,7 +136,7 @@ export default function ChannelsPage() {
   const fetchChannels = useCallback(async (showLoader = false) => {
     if (showLoader) setLoading(true);
     try {
-      const { data } = await api.get('/whatsapp/channels');
+      const { data } = await api.get('/channels/whatsapp/channels');
       const nextChannels = data.channels || [];
       setChannels(nextChannels);
       try {
@@ -158,11 +158,11 @@ export default function ChannelsPage() {
         void (async () => {
           await Promise.allSettled(
             channelsNeedingMetadata.map((channel: ChannelInfo) =>
-              api.get(`/whatsapp/health-check?channelId=${channel.id}`)
+              api.get(`/channels/whatsapp/health-check?channelId=${channel.id}`)
             )
           );
 
-          const { data: refreshedData } = await api.get('/whatsapp/channels');
+          const { data: refreshedData } = await api.get('/channels/whatsapp/channels');
           setChannels(refreshedData.channels || []);
         })();
       }

@@ -57,7 +57,7 @@ export default function AutoAssignSettings() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get('/whatsapp/channels');
+        const { data } = await api.get('/channels/whatsapp/channels');
         setChannels(data.channels || []);
       } catch {
         console.error('Failed to fetch channels');

@@ -89,7 +89,7 @@ app.use(express.json({ limit: '12mb' }));
 
 // Whapi webhook must receive the raw parsed JSON without sanitization —
 // register it BEFORE sanitizeBody so link_preview payloads aren't modified.
-app.use('/api/whatsapp/webhook', webhookLimiter, webhookRouter);
+app.use('/api/channels/whatsapp/webhook', webhookLimiter, webhookRouter);
 
 // Gmail Pub/Sub webhook — no auth, registered before sanitizeBody
 app.use('/api/webhooks/gmail', webhookLimiter, gmailWebhookRouter);
@@ -106,7 +106,7 @@ app.get('/api/auth/google/callback', handleGoogleCallback);
 // Apply general rate limit to all other API routes
 app.use('/api', apiLimiter);
 
-app.use('/api/whatsapp', whatsappRouter);
+app.use('/api/channels/whatsapp', whatsappRouter);
 app.use('/api/messages/send', sendLimiter);
 app.use('/api/messages/schedule', sendLimiter);
 app.use('/api/messages', messagesRouter);
