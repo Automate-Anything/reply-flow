@@ -3,10 +3,10 @@ import { usePageReady } from '@/hooks/usePageReady';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, Smartphone, CheckCircle2, CircleX, QrCode, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import WhatsAppConnection from '@/components/settings/WhatsAppConnection';
@@ -19,6 +19,7 @@ interface ChannelHealthEntry {
   channelId: number;
   healthStatus: 'healthy' | 'needs_attention' | 'at_risk' | 'no_data';
   rateLimitUtilization: number;
+  riskFactor: number | null;
 }
 
 function getHealthDot(status: ChannelHealthEntry['healthStatus']): string {
@@ -30,13 +31,40 @@ function getHealthDot(status: ChannelHealthEntry['healthStatus']): string {
   }
 }
 
-function getHealthTooltip(status: ChannelHealthEntry['healthStatus']): string {
+function getHealthLabel(status: ChannelHealthEntry['healthStatus']): string {
   switch (status) {
     case 'healthy':         return 'Healthy';
     case 'needs_attention': return 'Needs Attention';
     case 'at_risk':         return 'At Risk';
     default:                return 'No Data';
   }
+}
+
+function getHealthBadgeClass(status: ChannelHealthEntry['healthStatus']): string {
+  switch (status) {
+    case 'healthy':
+      return 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800';
+    case 'needs_attention':
+      return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800';
+    case 'at_risk':
+      return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800';
+    default:
+      return 'bg-muted text-muted-foreground border-border';
+  }
+}
+
+function getRiskLabel(riskFactor: number | null): string {
+  if (riskFactor === null) return '—';
+  if (riskFactor < 0.34) return 'Low';
+  if (riskFactor < 0.67) return 'Medium';
+  return 'High';
+}
+
+function getRiskClass(riskFactor: number | null): string {
+  if (riskFactor === null) return 'text-muted-foreground';
+  if (riskFactor < 0.34) return 'text-green-600 dark:text-green-400';
+  if (riskFactor < 0.67) return 'text-amber-600 dark:text-amber-400';
+  return 'text-red-600 dark:text-red-400';
 }
 
 function getStatusIcon(status: string) {
@@ -207,7 +235,8 @@ export default function ChannelsPage() {
                     onClick={() => navigate(`/channels/${ch.id}`)}
                   >
                     <CardContent className="flex items-center gap-3 py-4 px-4">
-                      <div className="relative">
+                      {/* Avatar + status icon */}
+                      <div className="relative shrink-0">
                         <Avatar>
                           {ch.profile_picture_url ? (
                             <AvatarImage src={ch.profile_picture_url} alt={formatChannelName(ch)} />
@@ -220,6 +249,8 @@ export default function ChannelsPage() {
                           {getStatusIcon(ch.channel_status)}
                         </span>
                       </div>
+
+                      {/* Channel name + phone — always visible */}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">
                           {ch.profile_name || (ch.phone_number ? formatPhone(ch.phone_number) : formatChannelName(ch))}
@@ -229,24 +260,44 @@ export default function ChannelsPage() {
                         </p>
                       </div>
 
-                      {/* Health indicator + rate limit */}
+                      {/* sm+: rich health grid */}
                       {health && (
-                        <div className="hidden sm:flex items-center gap-2 shrink-0">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className={`h-2 w-2 rounded-full shrink-0 ${getHealthDot(health.healthStatus)}`} />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">
-                              {getHealthTooltip(health.healthStatus)}
-                            </TooltipContent>
-                          </Tooltip>
-                          <span className="text-xs text-muted-foreground tabular-nums">
-                            {health.rateLimitUtilization.toFixed(0)}%
-                          </span>
+                        <div className="hidden sm:flex items-center gap-4 shrink-0">
+                          {/* Health badge */}
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Badge
+                              variant="outline"
+                              className={`flex items-center gap-1 text-xs px-2 py-0.5 font-medium ${getHealthBadgeClass(health.healthStatus)}`}
+                            >
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${getHealthDot(health.healthStatus)}`} />
+                              {getHealthLabel(health.healthStatus)}
+                            </Badge>
+                          </div>
+
+                          {/* Rate Limit */}
+                          <div className="flex flex-col items-center min-w-[3rem]">
+                            <span className="text-sm font-semibold tabular-nums">
+                              {health.rateLimitUtilization.toFixed(0)}%
+                            </span>
+                            <span className="text-[10px] text-muted-foreground leading-tight">used</span>
+                          </div>
+
+                          {/* Risk Level */}
+                          <div className="flex flex-col items-center min-w-[3rem]">
+                            <span className={`text-sm font-semibold ${getRiskClass(health.riskFactor)}`}>
+                              {getRiskLabel(health.riskFactor)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground leading-tight">risk</span>
+                          </div>
                         </div>
                       )}
 
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                      {/* Mobile: minimal health dot only */}
+                      {health && (
+                        <span className={`sm:hidden h-2 w-2 rounded-full shrink-0 ${getHealthDot(health.healthStatus)}`} />
+                      )}
+
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0" />
                     </CardContent>
                   </Card>
                 );
