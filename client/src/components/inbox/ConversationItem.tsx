@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { getChannelConfig } from '@/lib/channelTypes';
 import { formatRelativeDate, formatSnoozeUntil } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -75,6 +76,8 @@ export default function ConversationItem({
   onManageAccess,
 }: ConversationItemProps) {
   const { companyTimezone: tz } = useSession();
+  const channelConfig = getChannelConfig(conversation.channel_type);
+  const ChannelIcon = channelConfig.icon;
   const hasUnread = conversation.unread_count > 0 || conversation.marked_unread;
   const name = conversation.contact_name || conversation.phone_number;
   const initial = (name[0] || '?').toUpperCase();
@@ -133,11 +136,14 @@ export default function ConversationItem({
         <div className="flex items-center justify-between gap-2">
           <span
             className={cn(
-              'truncate text-sm',
+              'flex items-center gap-1 truncate text-sm',
               hasUnread ? 'font-semibold' : 'font-medium'
             )}
           >
-            {name}
+            {conversation.channel_type && (
+              <ChannelIcon className={cn('h-3.5 w-3.5 shrink-0', channelConfig.color)} />
+            )}
+            <span className="truncate">{name}</span>
           </span>
           <div className="flex shrink-0 items-center gap-1">
             {conversation.pinned_at && (

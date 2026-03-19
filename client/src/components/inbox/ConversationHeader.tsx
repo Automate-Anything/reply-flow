@@ -42,6 +42,7 @@ import {
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { getChannelConfig } from '@/lib/channelTypes';
 import { getTomorrowAt, getNextMondayAt } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
 import type { Conversation } from '@/hooks/useConversations';
@@ -248,6 +249,16 @@ export default function ConversationHeader({
             <p className="text-xs text-muted-foreground">{conversation.phone_number}</p>
           </div>
         </button>
+        {conversation.channel_type && (() => {
+          const chConfig = getChannelConfig(conversation.channel_type);
+          const ChIcon = chConfig.icon;
+          return (
+            <Badge variant="secondary" className={cn('hidden sm:inline-flex gap-1 text-xs', chConfig.bgColor, chConfig.color)}>
+              <ChIcon className="h-3 w-3" />
+              {chConfig.label}
+            </Badge>
+          );
+        })()}
         {conversation.labels.map((label) => (
           <Badge
             key={label.id}
