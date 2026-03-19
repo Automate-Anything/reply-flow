@@ -16,7 +16,7 @@ function extractMessageBody(msg: WhapiIncomingMessage): string {
   if (msg.type === 'link_preview' && msg.link_preview?.body) return msg.link_preview.body;
   if (msg.type === 'image' && msg.image?.caption) return msg.image.caption;
   if (msg.type === 'video' && msg.video?.caption) return msg.video.caption;
-  if (msg.type === 'document' && msg.document?.caption) return msg.document.caption;
+  if (msg.type === 'document' && (msg.document as any)?.caption) return (msg.document as any).caption;
   if (msg.type === 'audio') return '[Audio message]';
   if (msg.type === 'voice' || msg.type === 'ptt') return '[Voice message]';
   if (msg.type === 'sticker') return '[Sticker]';
@@ -105,8 +105,9 @@ export const whatsappProvider: ChannelProvider = {
   async getContactProfile(channel, identifier) {
     try {
       const profile = await whapi.getContactProfile(channel.channel_token!, identifier);
+      if (!profile) return null;
       return {
-        name: profile.name || undefined,
+        name: undefined,
         avatarUrl: profile.icon_full || profile.icon || undefined,
       };
     } catch {

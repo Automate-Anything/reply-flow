@@ -69,7 +69,7 @@ router.post('/', async (req, res) => {
 
     const { data: channel, error: channelError } = await supabaseAdmin
       .from('channels')
-      .select('id, user_id, company_id, channel_status, phone_number')
+      .select('id, user_id, company_id, channel_status, phone_number, channel_type')
       .eq('channel_id', whapiChannelId)
       .eq('channel_status', 'connected')
       .single();
