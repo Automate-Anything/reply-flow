@@ -15,35 +15,45 @@ import { toast } from 'sonner';
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface HealthData {
-  score: number | null; // 0–100 or null if no data
-  metrics: {
-    messages_sent_today: number;
-    messages_sent_week: number;
-    response_rate_24h: number | null;
-    response_rate_7d: number | null;
-    rate_limit_usage: number | null; // 0–100 percentage
-    auto_replies_today: number;
-    ai_responses_today: number;
-    content_warnings_7d: number;
+  channelId: number;
+  channelStatus: string;
+  healthScore: number;              // 0–1 (weighted score)
+  healthStatus: 'healthy' | 'needs_attention' | 'at_risk' | 'no_data';
+  groupCount: number;
+  breakdown: {
+    responseRate7d: number | null;   // percentage
+    outbound7d: number;
+    inbound7d: number;
+    rateLimitUtilization: number;    // 0–100 percentage
+    rateLimit: {
+      limit: number;
+      remaining: number;
+      resetsAt: string;
+    };
+    whapi: {
+      riskFactor: number | null;
+      riskFactorContacts: number | null;
+      riskFactorChats: number | null;
+      lifeTime: number | null;
+      fetchedAt: string;
+    } | null;
   };
-  group_count: number;
-  send_rate_reduced: boolean;
 }
 
 interface SafetyMeterData {
-  scores: {
-    label: string;
-    value: number; // 0–100
-    last_refreshed: string | null;
-  }[];
-  last_refresh: string | null;
+  cached: boolean;
+  risk_factor: number | null;
+  risk_factor_contacts: number | null;
+  risk_factor_chats: number | null;
+  life_time: number | null;
+  fetched_at: string | null;
 }
 
 interface ComplianceEvent {
   id: string | number;
-  timestamp: string;
+  created_at: string;
   event_type: string;
-  details: string;
+  event_data: unknown;
 }
 
 interface ComplianceEventsData {
@@ -52,17 +62,29 @@ interface ComplianceEventsData {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function healthLabel(score: number | null): { label: string; color: string; ring: string } {
-  if (score === null) return { label: 'No Data', color: 'bg-gray-400', ring: 'ring-gray-200' };
-  if (score >= 70) return { label: 'Healthy', color: 'bg-green-500', ring: 'ring-green-200' };
-  if (score >= 40) return { label: 'Needs Attention', color: 'bg-yellow-400', ring: 'ring-yellow-200' };
-  return { label: 'At Risk', color: 'bg-red-500', ring: 'ring-red-200' };
+function healthLabel(status: HealthData['healthStatus']): { label: string; color: string; ring: string } {
+  switch (status) {
+    case 'healthy':         return { label: 'Healthy', color: 'bg-green-500', ring: 'ring-green-200' };
+    case 'needs_attention':  return { label: 'Needs Attention', color: 'bg-yellow-400', ring: 'ring-yellow-200' };
+    case 'at_risk':          return { label: 'At Risk', color: 'bg-red-500', ring: 'ring-red-200' };
+    case 'no_data':
+    default:                return { label: 'No Data', color: 'bg-gray-400', ring: 'ring-gray-200' };
+  }
 }
 
-function safetyScoreColor(value: number): string {
-  if (value >= 70) return 'text-green-600';
-  if (value >= 40) return 'text-yellow-600';
+/** Risk factor 1–3 scale: 3=good, 2=medium, 1=bad */
+function riskFactorColor(value: number | null): string {
+  if (value === null) return 'text-gray-400';
+  if (value >= 3) return 'text-green-600';
+  if (value === 2) return 'text-yellow-600';
   return 'text-red-600';
+}
+
+function riskFactorLabel(value: number | null): string {
+  if (value === null) return '—';
+  if (value >= 3) return 'Good';
+  if (value === 2) return 'Medium';
+  return 'Poor';
 }
 
 function formatTimestamp(ts: string): string {
@@ -78,9 +100,9 @@ function formatTimestamp(ts: string): string {
   }
 }
 
-function canRefreshSafety(lastRefresh: string | null): boolean {
-  if (!lastRefresh) return true;
-  const diff = Date.now() - new Date(lastRefresh).getTime();
+function canRefreshSafety(fetchedAt: string | null): boolean {
+  if (!fetchedAt) return true;
+  const diff = Date.now() - new Date(fetchedAt).getTime();
   return diff >= 24 * 60 * 60 * 1000;
 }
 
@@ -139,8 +161,8 @@ export default function ComplianceTab({ channelId }: Props) {
   const handleRefreshSafety = async () => {
     setRefreshingSafety(true);
     try {
-      const { data } = await api.post<SafetyMeterData>(
-        `/compliance/channels/${channelId}/safety-meter/refresh`
+      const { data } = await api.get<SafetyMeterData>(
+        `/compliance/channels/${channelId}/safety-meter?refresh=true`
       );
       setSafety(data);
       toast.success('Safety scores refreshed');
@@ -161,19 +183,16 @@ export default function ComplianceTab({ channelId }: Props) {
     );
   }
 
-  const { label: hLabel, color: hColor, ring: hRing } = healthLabel(health?.score ?? null);
+  const healthStatus = health?.healthStatus ?? 'no_data';
+  const { label: hLabel, color: hColor, ring: hRing } = healthLabel(healthStatus);
 
-  const metrics = health?.metrics;
-  const responseRate24h = metrics?.response_rate_24h ?? null;
-  const responseRate7d = metrics?.response_rate_7d ?? null;
-  // Use 24h rate for warnings; fall back to 7d
-  const primaryResponseRate = responseRate24h ?? responseRate7d ?? null;
+  const responseRate7d = health?.breakdown?.responseRate7d ?? null;
 
   const uniqueEventTypes = Array.from(new Set(events.map((e) => e.event_type)));
   const filteredEvents =
     eventFilter === 'all' ? events : events.filter((e) => e.event_type === eventFilter);
 
-  const refreshAllowed = canRefreshSafety(safety?.last_refresh ?? null);
+  const refreshAllowed = canRefreshSafety(safety?.fetched_at ?? null);
 
   return (
     <div className="space-y-5">
@@ -186,65 +205,56 @@ export default function ComplianceTab({ channelId }: Props) {
         <div>
           <p className="text-sm font-semibold">{hLabel}</p>
           <p className="text-xs text-muted-foreground">
-            {health?.score !== null && health?.score !== undefined
-              ? `Compliance score: ${health.score}/100`
+            {healthStatus !== 'no_data'
+              ? `Compliance score: ${Math.round((health?.healthScore ?? 0) * 100)}/100`
               : 'No compliance data yet'}
           </p>
         </div>
       </div>
 
       {/* ── 2. Response rate warning ─────────────────────────────────────── */}
-      {primaryResponseRate !== null && primaryResponseRate < 30 && (
+      {responseRate7d !== null && responseRate7d < 30 && (
         <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-yellow-900">
-              Low response rate ({Math.round(primaryResponseRate)}%). Contacts who don't reply
-              increase your ban risk.
-            </p>
-            {primaryResponseRate < 10 && health?.send_rate_reduced && (
-              <p className="text-xs text-yellow-800">
-                Your send rate has been automatically reduced to protect your account.
-              </p>
-            )}
-          </div>
+          <p className="text-sm font-medium text-yellow-900">
+            Low response rate ({Math.round(responseRate7d)}%). Contacts who don't reply
+            increase your ban risk.
+          </p>
         </div>
       )}
 
       {/* ── 3. Group monitoring warning ──────────────────────────────────── */}
-      {health && health.group_count >= 50 && (
+      {health && health.groupCount >= 50 && (
         <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
           <p className="text-sm text-yellow-900">
-            Monitoring many groups ({health.group_count}) may draw attention to your account.
+            Monitoring many groups ({health.groupCount}) may draw attention to your account.
           </p>
         </div>
       )}
 
       {/* ── 4. Metrics cards ─────────────────────────────────────────────── */}
-      {metrics && (
+      {health?.breakdown && (
         <div>
           <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
             Activity Metrics
           </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <MetricCard label="Messages sent today" value={metrics.messages_sent_today} />
-            <MetricCard label="Messages sent this week" value={metrics.messages_sent_week} />
-            <MetricCard
-              label="Response rate (24h)"
-              value={metrics.response_rate_24h !== null ? `${Math.round(metrics.response_rate_24h)}%` : '—'}
-            />
+            <MetricCard label="Outbound messages (7d)" value={health.breakdown.outbound7d} />
+            <MetricCard label="Inbound replies (7d)" value={health.breakdown.inbound7d} />
             <MetricCard
               label="Response rate (7d)"
-              value={metrics.response_rate_7d !== null ? `${Math.round(metrics.response_rate_7d)}%` : '—'}
+              value={health.breakdown.responseRate7d !== null ? `${Math.round(health.breakdown.responseRate7d)}%` : '—'}
             />
             <MetricCard
               label="Rate limit usage"
-              value={metrics.rate_limit_usage !== null ? `${Math.round(metrics.rate_limit_usage)}%` : '—'}
+              value={`${Math.round(health.breakdown.rateLimitUtilization)}%`}
             />
-            <MetricCard label="Auto-replies today" value={metrics.auto_replies_today} />
-            <MetricCard label="AI responses today" value={metrics.ai_responses_today} />
-            <MetricCard label="Content warnings (7d)" value={metrics.content_warnings_7d} />
+            <MetricCard
+              label="Rate limit remaining"
+              value={`${health.breakdown.rateLimit.remaining} / ${health.breakdown.rateLimit.limit}`}
+            />
+            <MetricCard label="Monitored groups" value={health.groupCount} />
           </div>
         </div>
       )}
@@ -254,9 +264,9 @@ export default function ComplianceTab({ channelId }: Props) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold">WhAPI Safety Meter</p>
-            {safety?.last_refresh && (
+            {safety?.fetched_at && (
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Last refreshed {formatTimestamp(safety.last_refresh)}
+                Last refreshed {formatTimestamp(safety.fetched_at)}
               </p>
             )}
           </div>
@@ -272,16 +282,34 @@ export default function ComplianceTab({ channelId }: Props) {
           </Button>
         </div>
 
-        {safety && safety.scores.length > 0 ? (
+        {safety && (safety.risk_factor !== null || safety.risk_factor_contacts !== null || safety.risk_factor_chats !== null) ? (
           <div className="mt-3 space-y-2">
-            {safety.scores.map((score) => (
-              <div key={score.label} className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-                <p className="text-sm text-foreground">{score.label}</p>
-                <p className={`text-sm font-semibold ${safetyScoreColor(score.value)}`}>
-                  {score.value}/100
+            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-sm text-foreground">Risk Factor</p>
+              <p className={`text-sm font-semibold ${riskFactorColor(safety.risk_factor)}`}>
+                {riskFactorLabel(safety.risk_factor)}
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-sm text-foreground">Risk Factor (Contacts)</p>
+              <p className={`text-sm font-semibold ${riskFactorColor(safety.risk_factor_contacts)}`}>
+                {riskFactorLabel(safety.risk_factor_contacts)}
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-sm text-foreground">Risk Factor (Chats)</p>
+              <p className={`text-sm font-semibold ${riskFactorColor(safety.risk_factor_chats)}`}>
+                {riskFactorLabel(safety.risk_factor_chats)}
+              </p>
+            </div>
+            {safety.life_time !== null && (
+              <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                <p className="text-sm text-foreground">Account Lifetime</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {safety.life_time} days
                 </p>
               </div>
-            ))}
+            )}
           </div>
         ) : (
           <p className="mt-3 text-xs text-muted-foreground">
@@ -321,10 +349,16 @@ export default function ComplianceTab({ channelId }: Props) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-foreground">{event.event_type}</span>
                   <span className="shrink-0 text-muted-foreground">
-                    {formatTimestamp(event.timestamp)}
+                    {formatTimestamp(event.created_at)}
                   </span>
                 </div>
-                <p className="text-muted-foreground">{event.details}</p>
+                {event.event_data != null && (
+                  <p className="text-muted-foreground">
+                    {typeof event.event_data === 'string'
+                      ? event.event_data
+                      : JSON.stringify(event.event_data) as string}
+                  </p>
+                )}
               </div>
             ))}
           </div>

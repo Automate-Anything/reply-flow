@@ -231,7 +231,7 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const [outboundResult, inboundResult, safetyResult] = await Promise.all([
+    const [outboundResult, inboundResult, safetyResult, groupCountResult] = await Promise.all([
       supabaseAdmin
         .from('chat_messages')
         .select('id', { count: 'exact', head: true })
@@ -249,6 +249,11 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
         .select('risk_factor, risk_factor_contacts, risk_factor_chats, life_time, fetched_at')
         .eq('channel_id', channelId)
         .maybeSingle(),
+      supabaseAdmin
+        .from('group_chats')
+        .select('id', { count: 'exact', head: true })
+        .eq('channel_id', channelId)
+        .eq('monitoring_enabled', true),
     ]);
 
     const outbound7d = outboundResult.count ?? 0;
@@ -274,6 +279,7 @@ router.get('/channels/:channelId/health', async (req, res, next) => {
       channelStatus: channel.channel_status,
       healthScore: score,
       healthStatus: status,
+      groupCount: groupCountResult.count ?? 0,
       breakdown: {
         responseRate7d,
         outbound7d,
