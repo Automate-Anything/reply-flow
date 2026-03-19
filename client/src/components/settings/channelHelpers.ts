@@ -2,8 +2,10 @@ export interface ChannelInfo {
   id: number;
   channel_id: string;
   channel_name: string;
+  channel_type: string | null;
   channel_status: string;
   phone_number: string | null;
+  email_address: string | null;
   profile_picture_url: string | null;
   profile_name: string | null;
   webhook_registered: boolean;

@@ -425,7 +425,7 @@ router.get('/channels', requirePermission('channels', 'view'), async (req, res, 
 
     const { data: channels, error } = await supabaseAdmin
       .from('channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
+      .select('id, channel_id, channel_name, channel_type, channel_status, phone_number, email_address, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
       .in('id', accessibleIds)
       .eq('company_id', companyId)
       .order('created_at', { ascending: true });
@@ -454,7 +454,7 @@ router.get('/channels/:channelId', requirePermission('channels', 'view'), async 
 
     const { data: channel } = await supabaseAdmin
       .from('channels')
-      .select('id, channel_id, channel_name, channel_status, phone_number, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
+      .select('id, channel_id, channel_name, channel_type, channel_status, phone_number, email_address, profile_picture_url, profile_name, webhook_registered, created_at, user_id')
       .eq('id', Number(channelId))
       .eq('company_id', companyId)
       .single();
