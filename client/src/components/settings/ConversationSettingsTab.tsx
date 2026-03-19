@@ -90,6 +90,8 @@ export default function ConversationSettingsTab() {
         </CardContent>
       </Card>
 
+      <CompanyClassificationSettings />
+
       <Card>
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -160,7 +162,6 @@ export default function ConversationSettingsTab() {
         </CardContent>
       </Card>
 
-      <CompanyClassificationSettings />
     </div>
   );
 }

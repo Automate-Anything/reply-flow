@@ -304,27 +304,33 @@ function ClassificationConfigForm({
 }) {
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>Mode</Label>
-        <Select value={mode} onValueChange={onModeChange} disabled={saving}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="suggest">Suggest & Confirm</SelectItem>
-            <SelectItem value="auto_apply">Auto-Apply</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <Label htmlFor="auto-classify-toggle">Auto-classify new conversations</Label>
+      <div className="space-y-1.5">
+        <Label>Automatically analyze new conversations</Label>
+        <p className="text-xs text-muted-foreground">
+          When enabled, the AI will analyze every new inbound conversation without anyone clicking the wand button.
+        </p>
         <Switch
           id="auto-classify-toggle"
           checked={autoClassify}
           onCheckedChange={onAutoClassifyChange}
           disabled={saving}
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>When suggestions are ready</Label>
+        <p className="text-xs text-muted-foreground">
+          Choose whether an agent reviews suggestions before they're applied, or if they're applied automatically.
+        </p>
+        <Select value={mode} onValueChange={onModeChange} disabled={saving}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="suggest">Review first — show suggestions for agents to accept or dismiss</SelectItem>
+            <SelectItem value="auto_apply">Apply automatically — labels, tags, and priority are set immediately</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <StructuredRulesBuilder
