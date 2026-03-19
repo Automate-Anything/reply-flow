@@ -12,6 +12,8 @@ import { isDebugModeEnabled } from './debugMode.js';
 import { downloadFromStorage } from './mediaStorage.js';
 import { sendHandoffNotification } from './handoffNotifier.js';
 import * as whapi from './whapi.js';
+import { checkRateLimit, incrementRateCounter, check24HourWindow, logComplianceMetric, hashMessageBody } from './complianceUtils.js';
+import { simulateBeforeSend } from './sendSimulator.js';
 
 const anthropic = env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
@@ -747,6 +749,67 @@ export async function generateAndSendAIReply(
 ): Promise<void> {
   if (!anthropic) return;
 
+  // --- Compliance: resolve channel info for rate limits + simulation ---
+  const { data: sessionForChannel } = await supabaseAdmin
+    .from('chat_sessions')
+    .select('channel_id, chat_id')
+    .eq('id', sessionId)
+    .single();
+
+  const channelId = sessionForChannel?.channel_id;
+
+  // Rate limit check
+  if (channelId) {
+    const rateCheck = checkRateLimit(channelId, companyId);
+    if (!rateCheck.allowed) {
+      logComplianceMetric(channelId, companyId, { type: 'rate_limit_hit', path: 'ai_agent' });
+      return;
+    }
+  }
+
+  // 24h window check
+  const windowCheck = await check24HourWindow(sessionId);
+  if (!windowCheck.allowed) {
+    if (channelId) {
+      logComplianceMetric(channelId, companyId, { type: '24h_window_blocked', path: 'ai_agent' });
+    }
+    await supabaseAdmin.from('chat_sessions').update({ human_takeover: true }).eq('id', sessionId);
+    return;
+  }
+
+  // Resolve channel token + chatId + last inbound message for simulation
+  let channelToken: string | null = null;
+  let chatId: string | null = null;
+  let lastInboundMessageId: string | null = null;
+
+  if (channelId) {
+    const { data: ch } = await supabaseAdmin
+      .from('whatsapp_channels')
+      .select('channel_token')
+      .eq('id', channelId)
+      .eq('channel_status', 'connected')
+      .single();
+    channelToken = ch?.channel_token ?? null;
+
+    if (sessionForChannel?.chat_id) {
+      chatId = sessionForChannel.chat_id.includes('@')
+        ? sessionForChannel.chat_id
+        : `${sessionForChannel.chat_id}@s.whatsapp.net`;
+    }
+
+    // Get last inbound message ID for read receipts in simulation
+    const { data: lastInbound } = await supabaseAdmin
+      .from('chat_messages')
+      .select('message_id_normalized')
+      .eq('session_id', sessionId)
+      .eq('direction', 'inbound')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    lastInboundMessageId = lastInbound?.message_id_normalized ?? null;
+  }
+  // --- End compliance setup ---
+
   const { profileData, kbEntries, kbLowConfidence, channelOverrides, maxTokens, messages, textMessages, contactMemories, debugContext } = context;
   const hasScenarios = !!(profileData.response_flow?.scenarios?.length);
 
@@ -803,14 +866,14 @@ export async function generateAndSendAIReply(
     onSection?.({ name: 'ContactMemories', content: memoriesSection });
   }
 
-  const startTime = Date.now();
+  const aiStartTime = Date.now();
   const response = await anthropic.messages.create({
     model: RESPONSE_MODEL,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages,
   });
-  const responseTimeMs = Date.now() - startTime;
+  const aiProcessingTimeMs = Date.now() - aiStartTime;
 
   const aiReply = response.content
     .filter((block) => block.type === 'text')
@@ -818,6 +881,19 @@ export async function generateAndSendAIReply(
     .join('\n');
 
   if (!aiReply.trim()) return;
+
+  // Simulate human-like presence before sending
+  if (channelToken && chatId) {
+    await simulateBeforeSend({
+      channelToken,
+      chatId,
+      inboundMessageId: lastInboundMessageId ?? undefined,
+      messageType: 'text',
+      messageLength: aiReply.length,
+      path: 'ai_agent',
+      aiProcessingTimeMs,
+    });
+  }
 
   // Build debug metadata if debug mode was enabled
   const metadata = debugContext ? {
@@ -835,13 +911,23 @@ export async function generateAndSendAIReply(
         input: response.usage?.input_tokens ?? 0,
         output: response.usage?.output_tokens ?? 0,
       },
-      responseTimeMs,
+      aiProcessingTimeMs,
       model: RESPONSE_MODEL,
       stopReason: response.stop_reason ?? 'unknown',
     },
   } : undefined;
 
   await sendAndStoreMessage(companyId, sessionId, aiReply, metadata);
+
+  // Post-send compliance logging
+  if (channelId) {
+    incrementRateCounter(channelId, companyId);
+    logComplianceMetric(channelId, companyId, {
+      type: 'message_sent',
+      path: 'ai_agent',
+      hash: hashMessageBody(aiReply),
+    });
+  }
 }
 
 /**
