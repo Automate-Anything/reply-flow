@@ -13,13 +13,13 @@ router.use(requireAuth);
 router.post('/connect', requirePermission('channels', 'create'), async (req, res) => {
   try {
     const { channelName } = req.body;
-    const companyId = req.user!.company_id;
+    const companyId = req.companyId!;
 
     const { data: channel, error } = await supabaseAdmin
       .from('channels')
       .insert({
         company_id: companyId,
-        created_by: req.user!.id,
+        created_by: req.userId!,
         channel_type: 'email',
         channel_name: channelName || 'Gmail',
         channel_status: 'pending',
