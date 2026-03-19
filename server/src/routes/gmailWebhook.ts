@@ -165,7 +165,31 @@ async function processGmailMessage(params: {
 
     if (existingContact) {
       contact = existingContact;
-    } else {
+    }
+
+    // Name-based fallback: auto-link email to existing WhatsApp contact
+    if (!contact && senderName) {
+      const firstName = senderName.split(' ')[0];
+      if (firstName.length >= 2) {
+        const { data: nameMatches } = await supabaseAdmin
+          .from('contacts')
+          .select('id, first_name, last_name, email, phone_number')
+          .eq('company_id', channel.company_id)
+          .eq('is_deleted', false)
+          .ilike('first_name', `%${firstName}%`)
+          .limit(1);
+
+        if (nameMatches && nameMatches.length === 1 && !nameMatches[0].email) {
+          await supabaseAdmin
+            .from('contacts')
+            .update({ email: senderEmail })
+            .eq('id', nameMatches[0].id);
+          contact = nameMatches[0];
+        }
+      }
+    }
+
+    if (!contact) {
       const { data: newContact } = await supabaseAdmin
         .from('contacts')
         .insert({
