@@ -247,11 +247,12 @@ async function processGmailMessage(params: {
 
   if (!session) return false;
 
-  await supabaseAdmin
+  const { error: msgError } = await supabaseAdmin
     .from('chat_messages')
     .insert({
       session_id: session.id,
       company_id: channel.company_id,
+      user_id: channel.created_by as string,
       chat_id_normalized: chatId,
       phone_number: senderEmail,
       message_body: textBody || htmlBody?.replace(/<[^>]*>/g, '') || '',
@@ -275,6 +276,11 @@ async function processGmailMessage(params: {
     })
     .select('id')
     .single();
+
+  if (msgError) {
+    console.error('[gmail] Failed to insert message:', msgError);
+    return false;
+  }
 
   await supabaseAdmin
     .from('chat_sessions')
