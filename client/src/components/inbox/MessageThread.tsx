@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { ArrowDown, Reply } from 'lucide-react';
+import { ArrowDown, Reply, ReplyAll, Forward } from 'lucide-react';
+import type { EmailComposerMode } from './EmailComposer';
 import MessageBubble from './MessageBubble';
 import MessageContextMenu from './MessageContextMenu';
 import MessageInput from './MessageInput';
@@ -25,7 +26,7 @@ interface MessageThreadProps {
   contactAvatarUrl?: string | null;
   contactEmail?: string;
   onSend: (body: string) => Promise<{ compliance?: ComplianceResult } | void>;
-  onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; cc: string[]; bcc: string[] }) => void;
+  onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; to: string; cc: string[]; bcc: string[] }) => void;
   onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
   onSchedule: (body: string, scheduledFor: string) => Promise<void>;
   onCancelScheduled: (messageId: string) => Promise<void>;
@@ -85,7 +86,7 @@ export default function MessageThread({
   const wasLoadingRef = useRef(false);
   const prevMessageCountRef = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
-  const [showEmailComposer, setShowEmailComposer] = useState(false);
+  const [emailComposerMode, setEmailComposerMode] = useState<EmailComposerMode | null>(null);
   const isEmail = channelType === 'email';
 
   // Check if user is near the bottom of the scroll container
@@ -123,7 +124,7 @@ export default function MessageThread({
       restoredForSessionRef.current = sessionId;
       prevMessageCountRef.current = messages.length;
       setShowScrollDown(false);
-      setShowEmailComposer(false);
+      setEmailComposerMode(null);
 
       const positions = getScrollPositions();
       const savedScroll = positions[sessionId];
@@ -225,14 +226,59 @@ export default function MessageThread({
         )}
       </div>
 
-      {/* Email: show Reply button, then composer when clicked */}
-      {isEmail && !showEmailComposer ? (
-        <div className="border-t bg-background p-3 flex justify-center">
-          <Button variant="outline" onClick={() => setShowEmailComposer(true)}>
-            <Reply className="mr-2 h-4 w-4" />
+      {/* Email: show Reply/Reply All/Forward buttons, then composer when clicked */}
+      {isEmail && !emailComposerMode ? (
+        <div className="border-t bg-background px-4 py-3 flex items-center justify-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEmailComposerMode('reply')}>
+            <Reply className="mr-1.5 h-4 w-4" />
             Reply
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setEmailComposerMode('reply-all')}>
+            <ReplyAll className="mr-1.5 h-4 w-4" />
+            Reply all
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setEmailComposerMode('forward')}>
+            <Forward className="mr-1.5 h-4 w-4" />
+            Forward
+          </Button>
         </div>
+      ) : isEmail && emailComposerMode ? (
+        (() => {
+          const lastMsg = messages[messages.length - 1];
+          const meta = (lastMsg?.metadata || {}) as Record<string, unknown>;
+          const lastSubject = (meta.subject as string) || '';
+          const lastTo = (meta.to as string) || '';
+          const lastCc = (meta.cc as string) || '';
+          const lastHtml = (meta.html_body as string) || lastMsg?.message_body || '';
+
+          // For Reply All: CC = all recipients except yourself
+          const replyAllCc = emailComposerMode === 'reply-all'
+            ? [lastTo, lastCc].filter(Boolean).join(', ')
+            : '';
+
+          return (
+            <MessageInput
+              key={`${sessionId}-${emailComposerMode}`}
+              sessionId={sessionId}
+              channelId={channelId}
+              channelType={channelType}
+              onSend={onSend}
+              onSendVoiceNote={onSendVoiceNote}
+              onSchedule={onSchedule}
+              initialDraft={initialDraft}
+              onDraftChange={onDraftChange}
+              replyingTo={replyingTo}
+              onCancelReply={onCancelReply}
+              contactEmail={contactEmail}
+              emailSubject={lastSubject}
+              emailComposerMode={emailComposerMode}
+              emailCc={replyAllCc}
+              emailQuotedHtml={lastHtml}
+              onCancelEmailComposer={() => setEmailComposerMode(null)}
+              onSendEmail={onSendEmail}
+            />
+          );
+        })()
       ) : (
         <MessageInput
           key={sessionId}
