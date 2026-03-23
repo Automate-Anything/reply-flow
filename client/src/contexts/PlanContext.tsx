@@ -31,7 +31,10 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   // Default to true so we never block rendering — worst case, PlanGate buttons
   // are briefly enabled then disabled if the user has no plan.
   const [hasActivePlan, setHasActivePlan] = useState(cachedPlan ?? true);
-  const [planLoading, setPlanLoading] = useState(cachedPlan === null);
+  const [planLoading, setPlanLoading] = useState(true);
+  // Only redirect after a successful API response confirms no plan — never from
+  // cache or after errors (network hiccup, server restart, etc.).
+  const [checkedServer, setCheckedServer] = useState(false);
 
   useEffect(() => {
     api.get('/billing/subscription')
@@ -40,20 +43,20 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         const active = !!sub && (sub.status === 'active' || sub.status === 'trialing');
         setHasActivePlan(active);
         localStorage.setItem(PLAN_CACHE_KEY, JSON.stringify(active));
+        setCheckedServer(true);
       })
       .catch(() => {
-        setHasActivePlan(false);
-        localStorage.setItem(PLAN_CACHE_KEY, JSON.stringify(false));
+        // API error (network, auth race, server restart) — do NOT poison the
+        // cache or flip hasActivePlan. Leave at current value (true / cached).
       })
       .finally(() => setPlanLoading(false));
   }, []);
 
-  // Redirect to /plans when no active subscription
   useEffect(() => {
-    if (!planLoading && !hasActivePlan) {
+    if (checkedServer && !hasActivePlan) {
       navigate('/plans', { replace: true });
     }
-  }, [planLoading, hasActivePlan, navigate]);
+  }, [checkedServer, hasActivePlan, navigate]);
 
   const openNoPlanModal = useCallback(() => {
     navigate('/plans');
