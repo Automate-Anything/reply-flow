@@ -185,7 +185,7 @@ export default function MessageThread({
                     key={msg.id}
                     message={msg}
                     contactName={contactName}
-                    isFirst={idx === 0}
+                    isLast={idx === messages.length - 1}
                   />
                 ) : (
                   <MessageContextMenu
