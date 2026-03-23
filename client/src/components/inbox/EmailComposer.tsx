@@ -16,6 +16,7 @@ import {
   ChevronUp,
   Send,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -293,12 +294,16 @@ export default function EmailComposer({
       <EditorContent editor={editor} />
 
       {/* Action buttons */}
-      <div className="flex items-center justify-end gap-2 border-t px-3 py-2">
-        {onCancel && (
-          <Button size="sm" variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-        )}
+      <div className="flex items-center justify-between border-t px-3 py-2">
+        <div>
+          {onCancel && (
+            <Button size="sm" variant="ghost" onClick={onCancel} className="text-muted-foreground hover:text-destructive">
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Discard
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
         <Button
           size="sm"
           onClick={handleSend}
@@ -311,6 +316,7 @@ export default function EmailComposer({
           )}
           {sending ? 'Sending...' : 'Send'}
         </Button>
+        </div>
       </div>
     </div>
   );
