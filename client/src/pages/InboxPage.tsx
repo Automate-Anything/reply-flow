@@ -59,12 +59,22 @@ export default function InboxPage() {
   const { hasPending } = useClassificationSuggestions(activeConversation?.id ?? null);
   const [contactPanelTab, setContactPanelTab] = useState<'info' | 'notes' | 'ai'>('info');
   const [channelFilter, setChannelFilter] = useState<string>('all');
-  const [connectedChannelTypes, setConnectedChannelTypes] = useState<string[]>([]);
+  const [connectedChannelTypes, setConnectedChannelTypes] = useState<string[]>(() => {
+    // Load cached channel types for instant render (no flash)
+    try {
+      const cached = localStorage.getItem('rf:channel-types');
+      if (cached) return JSON.parse(cached);
+    } catch { /* ignore */ }
+    return [];
+  });
 
   // Fetch connected channel types for the channel tabs
   useEffect(() => {
     api.get('/conversations/channel-types')
-      .then(res => setConnectedChannelTypes(res.data))
+      .then(res => {
+        setConnectedChannelTypes(res.data);
+        try { localStorage.setItem('rf:channel-types', JSON.stringify(res.data)); } catch { /* ignore */ }
+      })
       .catch(() => setConnectedChannelTypes(['whatsapp']));
   }, []);
 
