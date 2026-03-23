@@ -26,6 +26,7 @@ export interface Conversation {
   last_message_sender: string | null;
   status: string;
   channel_type: string | null;
+  message_count: number;
   priority: string;
   is_archived: boolean;
   is_starred: boolean;

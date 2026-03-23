@@ -202,6 +202,23 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
       }
     }
 
+    // Message count for email threads (for badge display)
+    const emailSessionIds = (data || [])
+      .filter((s: any) => (s.channel as any)?.channel_type === 'email')
+      .map((s: any) => s.id);
+    const msgCountMap: Record<string, number> = {};
+    if (emailSessionIds.length > 0) {
+      const { data: msgCounts } = await supabaseAdmin
+        .from('chat_messages')
+        .select('session_id')
+        .in('session_id', emailSessionIds);
+      if (msgCounts) {
+        for (const row of msgCounts) {
+          msgCountMap[row.session_id] = (msgCountMap[row.session_id] || 0) + 1;
+        }
+      }
+    }
+
     // Post-filter for unread: sessions with marked_unread OR actual unread messages
     let filteredData = data || [];
     if (unread === 'true') {
@@ -243,6 +260,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
         contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
         profile_picture_url: (s.contact as Record<string, unknown>)?.profile_picture_url || null,
         channel_type: (s.channel as Record<string, unknown>)?.channel_type || null,
+        message_count: msgCountMap[s.id] || 0,
         labels:
           s.conversation_labels
             ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)

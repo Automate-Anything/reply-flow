@@ -144,6 +144,11 @@ export default function ConversationItem({
               <ChannelIcon className={cn('h-3.5 w-3.5 shrink-0', channelConfig.color)} />
             )}
             <span className="truncate">{name}</span>
+            {conversation.channel_type === 'email' && conversation.message_count > 1 && (
+              <span className="ml-0.5 shrink-0 text-[10px] text-muted-foreground font-normal">
+                {conversation.message_count}
+              </span>
+            )}
           </span>
           <div className="flex shrink-0 items-center gap-1">
             {conversation.pinned_at && (

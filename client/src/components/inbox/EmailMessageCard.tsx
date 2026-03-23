@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import DOMPurify from 'dompurify';
-import { ChevronDown, ChevronUp, Paperclip } from 'lucide-react';
+import { ChevronDown, ChevronUp, Paperclip, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
@@ -9,11 +9,11 @@ import type { Message } from '@/hooks/useMessages';
 interface EmailMessageCardProps {
   message: Message;
   contactName?: string;
-  isFirst?: boolean;
+  isLast?: boolean;
 }
 
-export default function EmailMessageCard({ message, contactName, isFirst }: EmailMessageCardProps) {
-  const [expanded, setExpanded] = useState(!!isFirst);
+export default function EmailMessageCard({ message, contactName, isLast }: EmailMessageCardProps) {
+  const [expanded, setExpanded] = useState(!!isLast);
   const { companyTimezone } = useSession();
   const meta = (message.metadata || {}) as Record<string, unknown>;
 
@@ -26,10 +26,44 @@ export default function EmailMessageCard({ message, contactName, isFirst }: Emai
 
   const isOutbound = message.direction === 'outbound';
 
-  const sanitizedHtml = DOMPurify.sanitize(htmlBody, {
+  // Split body into new content and quoted reply chain
+  const { mainHtml, quotedHtml } = useMemo(() => {
+    // Common patterns for quoted reply markers
+    const quotePatterns = [
+      /<div class="gmail_quote">/i,
+      /<blockquote[^>]*class="[^"]*gmail[^"]*"[^>]*>/i,
+      /On .{10,80} wrote:/,
+      /---------- Forwarded message ----------/,
+      /<div[^>]*id="appendonsend"[^>]*>/i,
+    ];
+
+    let splitIdx = -1;
+    for (const pattern of quotePatterns) {
+      const match = htmlBody.search(pattern);
+      if (match !== -1 && (splitIdx === -1 || match < splitIdx)) {
+        splitIdx = match;
+      }
+    }
+
+    if (splitIdx > 0) {
+      return {
+        mainHtml: htmlBody.substring(0, splitIdx),
+        quotedHtml: htmlBody.substring(splitIdx),
+      };
+    }
+    return { mainHtml: htmlBody, quotedHtml: '' };
+  }, [htmlBody]);
+
+  const [showQuoted, setShowQuoted] = useState(false);
+
+  const sanitizedMain = DOMPurify.sanitize(mainHtml, {
     FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form'],
     ALLOW_DATA_ATTR: false,
   });
+  const sanitizedQuoted = quotedHtml ? DOMPurify.sanitize(quotedHtml, {
+    FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form'],
+    ALLOW_DATA_ATTR: false,
+  }) : '';
 
   const timestamp = message.message_ts || message.created_at;
 
@@ -46,11 +80,11 @@ export default function EmailMessageCard({ message, contactName, isFirst }: Emai
       {/* Header — always visible, clickable to toggle (except first message which stays open) */}
       <button
         type="button"
-        onClick={isFirst ? undefined : () => setExpanded((prev) => !prev)}
+        onClick={isLast ? undefined : () => setExpanded((prev) => !prev)}
         className={cn(
           'flex w-full items-start gap-3 p-3 text-left transition-colors rounded-lg',
-          !isFirst && 'hover:bg-accent/30 cursor-pointer',
-          isFirst && 'cursor-default',
+          !isLast && 'hover:bg-accent/30 cursor-pointer',
+          isLast && 'cursor-default',
         )}
       >
         {/* Sender avatar circle */}
@@ -87,7 +121,7 @@ export default function EmailMessageCard({ message, contactName, isFirst }: Emai
           )}
         </div>
 
-        {!isFirst && (
+        {!isLast && (
           <div className="shrink-0 pt-0.5">
             {expanded ? (
               <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -120,11 +154,31 @@ export default function EmailMessageCard({ message, contactName, isFirst }: Emai
             )}
           </div>
 
-          {/* Sanitized HTML body */}
+          {/* Email body — new content */}
           <div
             className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_img]:rounded"
-            dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+            dangerouslySetInnerHTML={{ __html: sanitizedMain }}
           />
+
+          {/* Quoted reply chain — hidden behind toggle */}
+          {sanitizedQuoted && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowQuoted(!showQuoted); }}
+                className="mt-2 flex h-5 items-center rounded border px-2 text-muted-foreground hover:bg-accent/50 transition-colors"
+                title={showQuoted ? 'Hide quoted text' : 'Show quoted text'}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+              {showQuoted && (
+                <div
+                  className="mt-2 border-l-2 border-muted pl-3 prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed text-muted-foreground [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_img]:rounded"
+                  dangerouslySetInnerHTML={{ __html: sanitizedQuoted }}
+                />
+              )}
+            </>
+          )}
 
           {/* Attachments */}
           {attachments.length > 0 && (
