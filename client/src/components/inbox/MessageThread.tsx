@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ArrowDown, Reply } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import MessageContextMenu from './MessageContextMenu';
 import MessageInput from './MessageInput';
@@ -84,6 +85,8 @@ export default function MessageThread({
   const wasLoadingRef = useRef(false);
   const prevMessageCountRef = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [showEmailComposer, setShowEmailComposer] = useState(false);
+  const isEmail = channelType === 'email';
 
   // Check if user is near the bottom of the scroll container
   const isNearBottom = useCallback(() => {
@@ -120,6 +123,7 @@ export default function MessageThread({
       restoredForSessionRef.current = sessionId;
       prevMessageCountRef.current = messages.length;
       setShowScrollDown(false);
+      setShowEmailComposer(false);
 
       const positions = getScrollPositions();
       const savedScroll = positions[sessionId];
@@ -220,26 +224,36 @@ export default function MessageThread({
         )}
       </div>
 
-      <MessageInput
-        key={sessionId}
-        sessionId={sessionId}
-        channelId={channelId}
-        channelType={channelType}
-        onSend={onSend}
-        onSendVoiceNote={onSendVoiceNote}
-        onSchedule={onSchedule}
-        initialDraft={initialDraft}
-        onDraftChange={onDraftChange}
-        replyingTo={replyingTo}
-        onCancelReply={onCancelReply}
-        contactEmail={contactEmail}
-        emailSubject={
-          channelType === 'email' && messages.length > 0
-            ? ((messages[messages.length - 1].metadata as Record<string, unknown> | null)?.subject as string) || ''
-            : undefined
-        }
-        onSendEmail={onSendEmail}
-      />
+      {/* Email: show Reply button, then composer when clicked */}
+      {isEmail && !showEmailComposer ? (
+        <div className="border-t bg-background p-3 flex justify-center">
+          <Button variant="outline" onClick={() => setShowEmailComposer(true)}>
+            <Reply className="mr-2 h-4 w-4" />
+            Reply
+          </Button>
+        </div>
+      ) : (
+        <MessageInput
+          key={sessionId}
+          sessionId={sessionId}
+          channelId={channelId}
+          channelType={channelType}
+          onSend={onSend}
+          onSendVoiceNote={onSendVoiceNote}
+          onSchedule={onSchedule}
+          initialDraft={initialDraft}
+          onDraftChange={onDraftChange}
+          replyingTo={replyingTo}
+          onCancelReply={onCancelReply}
+          contactEmail={contactEmail}
+          emailSubject={
+            channelType === 'email' && messages.length > 0
+              ? ((messages[messages.length - 1].metadata as Record<string, unknown> | null)?.subject as string) || ''
+              : undefined
+          }
+          onSendEmail={onSendEmail}
+        />
+      )}
     </div>
   );
 }
