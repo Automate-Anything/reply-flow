@@ -417,7 +417,7 @@ export default function InboxPage() {
     }
   };
 
-  const handleSendEmail = async (data: { htmlBody: string; textBody: string; subject: string; cc: string[]; bcc: string[] }) => {
+  const handleSendEmail = async (data: { htmlBody: string; textBody: string; subject: string; to: string; cc: string[]; bcc: string[] }) => {
     if (!activeConversation) return;
     try {
       await api.post('/messages/send-email', {
@@ -425,6 +425,7 @@ export default function InboxPage() {
         htmlBody: data.htmlBody,
         textBody: data.textBody,
         subject: data.subject,
+        to: data.to,
         cc: data.cc,
         bcc: data.bcc,
       });

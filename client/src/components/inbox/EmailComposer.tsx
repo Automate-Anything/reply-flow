@@ -21,38 +21,61 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
+export type EmailComposerMode = 'reply' | 'reply-all' | 'forward';
+
 export interface EmailComposerProps {
   to: string;
   subject: string;
+  cc?: string;
   signature?: string;
+  mode?: EmailComposerMode;
+  quotedHtml?: string;
   onSend: (data: {
     htmlBody: string;
     textBody: string;
     subject: string;
+    to: string;
     cc: string[];
     bcc: string[];
   }) => void;
+  onCancel?: () => void;
   sending?: boolean;
-  replyMode?: boolean;
 }
 
 export default function EmailComposer({
-  to,
+  to: initialTo,
   subject: initialSubject,
+  cc: initialCc,
   signature,
+  mode = 'reply',
+  quotedHtml,
   onSend,
+  onCancel,
   sending = false,
-  replyMode = true,
 }: EmailComposerProps) {
-  const [subject, setSubject] = useState(initialSubject);
-  const [showCcBcc, setShowCcBcc] = useState(false);
-  const [cc, setCc] = useState('');
+  const isForward = mode === 'forward';
+  const subjectPrefix = isForward ? 'Fwd: ' : 'Re: ';
+  const prefixedSubject = initialSubject.startsWith(subjectPrefix)
+    ? initialSubject
+    : `${subjectPrefix}${initialSubject.replace(/^(Re|Fwd): /i, '')}`;
+
+  const [to, setTo] = useState(isForward ? '' : initialTo);
+  const [subject, setSubject] = useState(prefixedSubject);
+  const [showCcBcc, setShowCcBcc] = useState(mode === 'reply-all' && !!initialCc);
+  const [cc, setCc] = useState(mode === 'reply-all' ? (initialCc || '') : '');
   const [bcc, setBcc] = useState('');
 
-  // Build initial content with signature
-  const initialContent = signature
-    ? `<p></p><br/><p>--</p><p>${signature}</p>`
-    : '<p></p>';
+  // Build initial content with signature and quoted message
+  let initialContent = '<p></p>';
+  if (signature) {
+    initialContent += `<br/><p>--</p><p>${signature}</p>`;
+  }
+  if (quotedHtml && (mode === 'reply' || mode === 'reply-all')) {
+    initialContent += `<br/><blockquote style="border-left:2px solid #ccc;padding-left:8px;margin-left:0;color:#666">${quotedHtml}</blockquote>`;
+  }
+  if (quotedHtml && isForward) {
+    initialContent += `<br/><p>---------- Forwarded message ----------</p>${quotedHtml}`;
+  }
 
   const editor = useEditor({
     extensions: [
@@ -106,6 +129,7 @@ export default function EmailComposer({
       htmlBody,
       textBody,
       subject,
+      to,
       cc: ccList,
       bcc: bccList,
     });
@@ -179,10 +203,20 @@ export default function EmailComposer({
 
   return (
     <div className="border-t bg-background">
-      {/* To line (read-only) */}
+      {/* To line */}
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <span className="text-xs font-medium text-muted-foreground w-10">To:</span>
-        <span className="flex-1 truncate text-xs">{to}</span>
+        {isForward ? (
+          <Input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="recipient@example.com"
+            className="h-7 text-xs border-0 shadow-none focus-visible:ring-0 px-0 flex-1"
+            autoFocus
+          />
+        ) : (
+          <span className="flex-1 truncate text-xs">{to}</span>
+        )}
         <button
           type="button"
           onClick={() => setShowCcBcc((prev) => !prev)}
@@ -221,8 +255,8 @@ export default function EmailComposer({
         </div>
       )}
 
-      {/* Subject (only in new email mode, not replies) */}
-      {!replyMode && (
+      {/* Subject (editable for forwards, hidden for replies) */}
+      {isForward && (
         <div className="flex items-center gap-2 border-b px-3 py-1.5">
           <span className="text-xs font-medium text-muted-foreground w-10">Subj:</span>
           <Input
@@ -258,8 +292,13 @@ export default function EmailComposer({
       {/* Editor */}
       <EditorContent editor={editor} />
 
-      {/* Send button */}
+      {/* Action buttons */}
       <div className="flex items-center justify-end gap-2 border-t px-3 py-2">
+        {onCancel && (
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
         <Button
           size="sm"
           onClick={handleSend}

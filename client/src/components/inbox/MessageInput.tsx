@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { useAISuggestion } from '@/hooks/useAISuggestion';
 import { AISuggestionButton, type AISuggestionButtonHandle } from './AISuggestionButton';
 import api from '@/lib/api';
-import EmailComposer from './EmailComposer';
+import EmailComposer, { type EmailComposerMode } from './EmailComposer';
 
 interface ComplianceResult {
   warnings: string[];
@@ -55,7 +55,11 @@ interface MessageInputProps {
   contactEmail?: string;
   emailSubject?: string;
   emailSignature?: string;
-  onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; cc: string[]; bcc: string[] }) => void;
+  emailComposerMode?: EmailComposerMode;
+  emailCc?: string;
+  emailQuotedHtml?: string;
+  onCancelEmailComposer?: () => void;
+  onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; to: string; cc: string[]; bcc: string[] }) => void;
 }
 
 function getSchedulePresets(tz?: string): { label: string; getDate: () => Date }[] {
@@ -79,7 +83,7 @@ function formatTimeUntil(isoString: string): string {
   return `${minutes}m`;
 }
 
-export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId, channelType, contactEmail, emailSubject, emailSignature, onSendEmail }: MessageInputProps) {
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId, channelType, contactEmail, emailSubject, emailSignature, emailComposerMode, emailCc, emailQuotedHtml, onCancelEmailComposer, onSendEmail }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
@@ -458,9 +462,12 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
       <EmailComposer
         to={contactEmail || ''}
         subject={emailSubject || ''}
+        cc={emailCc}
         signature={emailSignature}
+        mode={emailComposerMode || 'reply'}
+        quotedHtml={emailQuotedHtml}
         onSend={onSendEmail}
-        replyMode={true}
+        onCancel={onCancelEmailComposer}
       />
     );
   }
