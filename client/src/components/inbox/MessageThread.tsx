@@ -178,12 +178,13 @@ export default function MessageThread({
             </div>
           ) : (
             <div className="space-y-2">
-              {messages.map((msg) =>
+              {messages.map((msg, idx) =>
                 channelType === 'email' ? (
                   <EmailMessageCard
                     key={msg.id}
                     message={msg}
                     contactName={contactName}
+                    isFirst={idx === 0}
                   />
                 ) : (
                   <MessageContextMenu

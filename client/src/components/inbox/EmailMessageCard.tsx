@@ -9,10 +9,11 @@ import type { Message } from '@/hooks/useMessages';
 interface EmailMessageCardProps {
   message: Message;
   contactName?: string;
+  isFirst?: boolean;
 }
 
-export default function EmailMessageCard({ message, contactName }: EmailMessageCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function EmailMessageCard({ message, contactName, isFirst }: EmailMessageCardProps) {
+  const [expanded, setExpanded] = useState(!!isFirst);
   const { companyTimezone } = useSession();
   const meta = (message.metadata || {}) as Record<string, unknown>;
 
@@ -42,11 +43,15 @@ export default function EmailMessageCard({ message, contactName }: EmailMessageC
         expanded && 'shadow-sm',
       )}
     >
-      {/* Header — always visible */}
+      {/* Header — always visible, clickable to toggle (except first message which stays open) */}
       <button
         type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        className="flex w-full items-start gap-3 p-3 text-left hover:bg-accent/30 transition-colors rounded-lg"
+        onClick={isFirst ? undefined : () => setExpanded((prev) => !prev)}
+        className={cn(
+          'flex w-full items-start gap-3 p-3 text-left transition-colors rounded-lg',
+          !isFirst && 'hover:bg-accent/30 cursor-pointer',
+          isFirst && 'cursor-default',
+        )}
       >
         {/* Sender avatar circle */}
         <div
@@ -82,13 +87,15 @@ export default function EmailMessageCard({ message, contactName }: EmailMessageC
           )}
         </div>
 
-        <div className="shrink-0 pt-0.5">
-          {expanded ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
+        {!isFirst && (
+          <div className="shrink-0 pt-0.5">
+            {expanded ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        )}
       </button>
 
       {/* Expanded content */}
