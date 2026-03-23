@@ -84,8 +84,14 @@ export default function InboxPage() {
     return base;
   }, [activeTab, filters, channelFilter]);
 
-  const { conversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
+  const { conversations: rawConversations, setConversations, loading: convsLoading, refetch: refetchConvs } =
     useConversations(search, effectiveFilters);
+
+  // Client-side filter as safety net to prevent stale data flash on tab switch
+  const conversations = useMemo(() => {
+    if (channelFilter === 'all') return rawConversations;
+    return rawConversations.filter(c => c.channel_type === channelFilter);
+  }, [rawConversations, channelFilter]);
   const { messages, setMessages, loading: msgsLoading, sendMessage, sendVoiceNote, scheduleMessage, cancelScheduledMessage, markRead } = useMessages(
     activeConversation?.id ?? null
   );
