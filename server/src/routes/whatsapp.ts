@@ -253,7 +253,7 @@ router.get('/create-qr', requirePermission('channels', 'edit'), async (req, res)
 
         // Register webhook while we're here
         try {
-          const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
+          const webhookUrl = `${env.BACKEND_URL}/api/channels/whatsapp/webhook`;
           await whapi.registerWebhook(channel.channel_token, webhookUrl);
           await supabaseAdmin
             .from('channels')
@@ -330,7 +330,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
         }
 
         if (isConnected) {
-          const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
+          const webhookUrl = `${env.BACKEND_URL}/api/channels/whatsapp/webhook`;
           await whapi.registerWebhook(channel.channel_token, webhookUrl);
           await supabaseAdmin
             .from('channels')
@@ -384,7 +384,7 @@ router.get('/health-check', requirePermission('channels', 'view'), async (req, r
       );
 
       if (!channel.webhook_registered) {
-        const webhookUrl = `${env.BACKEND_URL}/api/whatsapp/webhook`;
+        const webhookUrl = `${env.BACKEND_URL}/api/channels/whatsapp/webhook`;
         await whapi.registerWebhook(channel.channel_token, webhookUrl);
         await supabaseAdmin
           .from('channels')

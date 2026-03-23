@@ -107,7 +107,7 @@ export const whatsappProvider: ChannelProvider = {
       const profile = await whapi.getContactProfile(channel.channel_token!, identifier);
       if (!profile) return null;
       return {
-        name: undefined,
+        name: (profile as any).name || undefined,
         avatarUrl: profile.icon_full || profile.icon || undefined,
       };
     } catch {

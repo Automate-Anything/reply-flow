@@ -26,8 +26,8 @@ export default function EmailMessageCard({ message, contactName }: EmailMessageC
   const isOutbound = message.direction === 'outbound';
 
   const sanitizedHtml = DOMPurify.sanitize(htmlBody, {
-    FORBID_TAGS: ['style', 'script'],
-    FORBID_ATTR: ['onerror', 'onload', 'onclick'],
+    FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form'],
+    ALLOW_DATA_ATTR: false,
   });
 
   const timestamp = message.message_ts || message.created_at;

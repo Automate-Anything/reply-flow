@@ -2,6 +2,7 @@ import { Mail, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 
 interface GmailConnectionProps {
@@ -21,6 +22,7 @@ export default function GmailConnection(_props: GmailConnectionProps) {
       window.location.href = data.authUrl;
     } catch (err) {
       console.error('Failed to start Gmail connection:', err);
+      toast.error('Failed to start Gmail connection. Please try again.');
       setLoading(false);
     }
   };

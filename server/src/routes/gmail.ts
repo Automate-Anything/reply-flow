@@ -19,6 +19,7 @@ router.post('/connect', requirePermission('channels', 'create'), async (req, res
       .from('channels')
       .insert({
         company_id: companyId,
+        user_id: req.userId!,
         created_by: req.userId!,
         channel_type: 'email',
         channel_name: channelName || 'Gmail',
@@ -49,6 +50,7 @@ router.get('/channels/:id/status', requirePermission('channels', 'view'), async 
       .from('channels')
       .select('id, channel_status, email_address, gmail_watch_expiry, oauth_token_expiry')
       .eq('id', req.params.id)
+      .eq('company_id', req.companyId!)
       .eq('channel_type', 'email')
       .single();
 
@@ -81,6 +83,7 @@ router.post('/channels/:id/disconnect', requirePermission('channels', 'edit'), a
         webhook_registered: false,
       })
       .eq('id', req.params.id)
+      .eq('company_id', req.companyId!)
       .eq('channel_type', 'email');
 
     res.json({ success: true });
@@ -103,7 +106,12 @@ export async function handleGoogleCallback(req: any, res: any) {
     if (decoded.sig !== expectedSig) {
       return res.status(403).send('Invalid state signature');
     }
-    const { channelId, companyId } = JSON.parse(decoded.payload);
+    const { channelId, companyId, ts } = JSON.parse(decoded.payload);
+
+    // Reject states older than 15 minutes to prevent replay attacks
+    if (ts && Date.now() - ts > 15 * 60 * 1000) {
+      return res.status(400).send('OAuth state expired — please try connecting again');
+    }
 
     const { data: pendingChannel } = await supabaseAdmin
       .from('channels')
@@ -121,7 +129,7 @@ export async function handleGoogleCallback(req: any, res: any) {
     const gmailClient = gmail.getGmailClient({
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
-    });
+    }, channelId);
     const watchResult = await gmail.registerWatch(gmailClient);
 
     await supabaseAdmin
@@ -147,11 +155,11 @@ export async function handleGoogleCallback(req: any, res: any) {
         is_enabled: false,
       });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = env.CLIENT_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}/channels/${channelId}?connected=true`);
   } catch (err) {
     console.error('[gmail] callback error:', err);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = env.CLIENT_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}/channels?error=gmail_connection_failed`);
   }
 }
