@@ -19,6 +19,7 @@ import {
   Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, ChevronDown, Mail, Save, Download,
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { PlanGate } from '@/components/auth/PlanGate';
 import { useChannelAgent, type ChannelAgentSettings } from '@/hooks/useChannelAgent';
@@ -177,14 +178,17 @@ export default function ChannelDetailPage() {
   };
 
   const handleGmailSync = async (period: '24h' | '7d' | '30d') => {
+    console.log('[gmail-sync] Starting sync for period:', period, 'channelId:', numericChannelId);
     setSyncing(true);
     setSyncResult(null);
     try {
       const { data } = await api.post(`/channels/gmail/channels/${numericChannelId}/sync`, { period });
+      console.log('[gmail-sync] Response:', data);
       const label = period === '24h' ? '24 hours' : period === '7d' ? '7 days' : '30 days';
       setSyncResult(`Syncing ${data.messageCount} emails from the last ${label}...`);
       toast.success(`Syncing ${data.messageCount} emails from the last ${label}`);
-    } catch {
+    } catch (err) {
+      console.error('[gmail-sync] Error:', err);
       toast.error('Failed to start email sync');
       setSyncResult(null);
     } finally {
@@ -628,17 +632,20 @@ export default function ChannelDetailPage() {
               {/* Gmail action buttons */}
               <div className="flex flex-wrap items-center gap-2">
                 {isConnected && (
-                  <Select onValueChange={(v) => handleGmailSync(v as '24h' | '7d' | '30d')} disabled={syncing}>
-                    <SelectTrigger className="w-auto h-8 text-sm gap-1.5">
-                      {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                      {syncing ? 'Syncing...' : 'Sync Emails'}
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="24h">Last 24 hours</SelectItem>
-                      <SelectItem value="7d">Last 7 days</SelectItem>
-                      <SelectItem value="30d">Last 30 days</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" disabled={syncing}>
+                        {syncing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-2 h-3.5 w-3.5" />}
+                        {syncing ? 'Syncing...' : 'Sync Emails'}
+                        <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => handleGmailSync('24h')}>Last 24 hours</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleGmailSync('7d')}>Last 7 days</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleGmailSync('30d')}>Last 30 days</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
                 <PlanGate>
                   <Button variant="outline" size="sm" onClick={handleGmailReauth} disabled={reauthing}>
