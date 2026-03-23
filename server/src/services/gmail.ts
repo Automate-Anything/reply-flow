@@ -206,6 +206,35 @@ export function extractAttachments(
   return attachments;
 }
 
+// List messages from inbox within a time range (for historical sync)
+export async function listMessages(
+  gmail: gmail_v1.Gmail,
+  options: { after: Date; maxResults?: number }
+): Promise<string[]> {
+  const afterEpoch = Math.floor(options.after.getTime() / 1000);
+  const messageIds: string[] = [];
+  let pageToken: string | undefined;
+  const max = options.maxResults || 500;
+
+  do {
+    const res = await gmail.users.messages.list({
+      userId: 'me',
+      q: `after:${afterEpoch} in:inbox`,
+      maxResults: Math.min(100, max - messageIds.length),
+      pageToken,
+    });
+
+    if (res.data.messages) {
+      for (const msg of res.data.messages) {
+        if (msg.id) messageIds.push(msg.id);
+      }
+    }
+    pageToken = res.data.nextPageToken || undefined;
+  } while (pageToken && messageIds.length < max);
+
+  return messageIds;
+}
+
 // Send an email reply (with proper threading headers)
 export async function sendReply(
   gmail: gmail_v1.Gmail,

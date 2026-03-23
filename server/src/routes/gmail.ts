@@ -92,6 +92,62 @@ router.post('/channels/:id/disconnect', requirePermission('channels', 'edit'), a
   }
 });
 
+// POST /api/channels/gmail/channels/:id/sync — Historical email sync
+router.post('/channels/:id/sync', requirePermission('channels', 'edit'), async (req, res) => {
+  try {
+    const { period } = req.body; // '24h' | '7d' | '30d'
+    const companyId = req.companyId!;
+
+    const { data: channel } = await supabaseAdmin
+      .from('channels')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('company_id', companyId)
+      .eq('channel_type', 'email')
+      .eq('channel_status', 'connected')
+      .single();
+
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!channel.oauth_access_token || !channel.oauth_refresh_token) {
+      return res.status(400).json({ error: 'Channel not authenticated' });
+    }
+
+    const hoursMap: Record<string, number> = { '24h': 24, '7d': 168, '30d': 720 };
+    const hours = hoursMap[period] || 24;
+    const after = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const gmailClient = gmail.getGmailClient({
+      access_token: channel.oauth_access_token,
+      refresh_token: channel.oauth_refresh_token,
+    }, channel.id);
+
+    // List messages in the time range
+    const messageIds = await gmail.listMessages(gmailClient, { after, maxResults: 500 });
+
+    // Respond immediately with the count — process in background
+    res.json({ started: true, messageCount: messageIds.length, period });
+
+    // Process messages in the background (after response is sent)
+    const { processGmailMessageById } = await import('./gmailWebhook.js');
+    let processed = 0;
+    let skipped = 0;
+    for (const messageId of messageIds) {
+      try {
+        const wasNew = await processGmailMessageById(gmailClient, channel, messageId);
+        if (wasNew) processed++; else skipped++;
+      } catch (err) {
+        console.error(`[gmail-sync] Error processing ${messageId}:`, err);
+      }
+    }
+    console.log(`[gmail-sync] Done for ${channel.email_address}: ${processed} new, ${skipped} skipped, ${messageIds.length} total`);
+  } catch (err) {
+    console.error('[gmail-sync] Error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to start sync' });
+    }
+  }
+});
+
 export default router;
 
 // OAuth callback — registered separately in index.ts (no auth middleware)

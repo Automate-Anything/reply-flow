@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2, CheckCircle2, RefreshCw, Trash2, LogOut, CircleX, QrCode,
-  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, ChevronDown, Mail, Save,
+  Bot, ArrowLeft, Plus, AlertCircle, Lock, Globe, ChevronDown, Mail, Save, Download,
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -69,6 +69,8 @@ export default function ChannelDetailPage() {
   const [refreshingQR, setRefreshingQR] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const cancelledRef = useRef(false);
 
@@ -171,6 +173,22 @@ export default function ChannelDetailPage() {
     } catch {
       toast.error('Failed to start re-authentication');
       setReauthing(false);
+    }
+  };
+
+  const handleGmailSync = async (period: '24h' | '7d' | '30d') => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data } = await api.post(`/channels/gmail/channels/${numericChannelId}/sync`, { period });
+      const label = period === '24h' ? '24 hours' : period === '7d' ? '7 days' : '30 days';
+      setSyncResult(`Syncing ${data.messageCount} emails from the last ${label}...`);
+      toast.success(`Syncing ${data.messageCount} emails from the last ${label}`);
+    } catch {
+      toast.error('Failed to start email sync');
+      setSyncResult(null);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -609,6 +627,19 @@ export default function ChannelDetailPage() {
 
               {/* Gmail action buttons */}
               <div className="flex flex-wrap items-center gap-2">
+                {isConnected && (
+                  <Select onValueChange={(v) => handleGmailSync(v as '24h' | '7d' | '30d')} disabled={syncing}>
+                    <SelectTrigger className="w-auto h-8 text-sm gap-1.5">
+                      {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                      {syncing ? 'Syncing...' : 'Sync Emails'}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="24h">Last 24 hours</SelectItem>
+                      <SelectItem value="7d">Last 7 days</SelectItem>
+                      <SelectItem value="30d">Last 30 days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <PlanGate>
                   <Button variant="outline" size="sm" onClick={handleGmailReauth} disabled={reauthing}>
                     {reauthing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
@@ -624,6 +655,9 @@ export default function ChannelDetailPage() {
                   </PlanGate>
                 )}
               </div>
+              {syncResult && (
+                <p className="text-sm text-muted-foreground">{syncResult}</p>
+              )}
             </>
           ) : (
             <>

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { gmail_v1 } from 'googleapis';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import * as gmail from '../services/gmail.js';
@@ -65,42 +66,7 @@ router.post('/', async (req, res) => {
 
       for (const messageId of changes.messageIds) {
         try {
-          const msg = await gmail.getMessage(gmailClient, messageId);
-          if (!msg.payload) continue;
-
-          const headers = msg.payload.headers || [];
-          const from = gmail.getHeader(headers, 'From') || '';
-          const to = gmail.getHeader(headers, 'To') || '';
-          const subject = gmail.getHeader(headers, 'Subject') || '(no subject)';
-          const messageIdHeader = gmail.getHeader(headers, 'Message-ID') || '';
-
-          const isOutbound = from.toLowerCase().includes(channel.email_address!.toLowerCase());
-
-          const senderEmail = isOutbound ? extractEmail(to) : extractEmail(from);
-          const senderName = isOutbound ? extractName(to) : extractName(from);
-
-          const htmlBody = gmail.extractBody(msg.payload, 'text/html');
-          const textBody = gmail.extractBody(msg.payload, 'text/plain');
-          const attachments = gmail.extractAttachments(msg.payload);
-
-          await processGmailMessage({
-            channel: channel as ChannelRecord,
-            gmailMessageId: msg.id!,
-            threadId: msg.threadId!,
-            from, to,
-            cc: gmail.getHeader(headers, 'Cc') || '',
-            bcc: gmail.getHeader(headers, 'Bcc') || '',
-            subject,
-            messageIdHeader,
-            inReplyTo: gmail.getHeader(headers, 'In-Reply-To') || '',
-            references: gmail.getHeader(headers, 'References') || '',
-            htmlBody: htmlBody || textBody || '',
-            textBody: textBody || '',
-            senderEmail, senderName, isOutbound,
-            timestamp: new Date(parseInt(msg.internalDate || '0')),
-            labelIds: msg.labelIds || [],
-            attachments,
-          });
+          await processGmailMessageById(gmailClient, channel as ChannelRecord, messageId);
         } catch (msgErr) {
           console.error(`[gmail-webhook] Error processing message ${messageId}:`, msgErr);
         }
@@ -126,6 +92,51 @@ function extractName(str: string): string {
   return match ? match[1].trim() : '';
 }
 
+// Fetch and process a single Gmail message by ID. Returns true if it was new (not a duplicate).
+// Used by both the webhook handler and the historical sync endpoint.
+export async function processGmailMessageById(
+  gmailClient: gmail_v1.Gmail,
+  channel: ChannelRecord,
+  messageId: string
+): Promise<boolean> {
+  const msg = await gmail.getMessage(gmailClient, messageId);
+  if (!msg.payload) return false;
+
+  const headers = msg.payload.headers || [];
+  const from = gmail.getHeader(headers, 'From') || '';
+  const to = gmail.getHeader(headers, 'To') || '';
+  const subject = gmail.getHeader(headers, 'Subject') || '(no subject)';
+  const messageIdHeader = gmail.getHeader(headers, 'Message-ID') || '';
+
+  const isOutbound = from.toLowerCase().includes(channel.email_address!.toLowerCase());
+  const senderEmail = isOutbound ? extractEmail(to) : extractEmail(from);
+  const senderName = isOutbound ? extractName(to) : extractName(from);
+
+  const htmlBody = gmail.extractBody(msg.payload, 'text/html');
+  const textBody = gmail.extractBody(msg.payload, 'text/plain');
+  const attachments = gmail.extractAttachments(msg.payload);
+
+  return processGmailMessage({
+    channel,
+    gmailMessageId: msg.id!,
+    threadId: msg.threadId!,
+    from, to,
+    cc: gmail.getHeader(headers, 'Cc') || '',
+    bcc: gmail.getHeader(headers, 'Bcc') || '',
+    subject,
+    messageIdHeader,
+    inReplyTo: gmail.getHeader(headers, 'In-Reply-To') || '',
+    references: gmail.getHeader(headers, 'References') || '',
+    htmlBody: htmlBody || textBody || '',
+    textBody: textBody || '',
+    senderEmail, senderName, isOutbound,
+    timestamp: new Date(parseInt(msg.internalDate || '0')),
+    labelIds: msg.labelIds || [],
+    attachments,
+  });
+}
+
+// @returns true if the message was new, false if it was a duplicate
 async function processGmailMessage(params: {
   channel: ChannelRecord;
   gmailMessageId: string;
@@ -138,7 +149,7 @@ async function processGmailMessage(params: {
   isOutbound: boolean; timestamp: Date;
   labelIds: string[];
   attachments: Array<{ filename: string; mimeType: string; attachmentId: string; size: number }>;
-}) {
+}): Promise<boolean> {
   const {
     channel, gmailMessageId, threadId, subject, senderEmail, senderName,
     isOutbound, timestamp, htmlBody, textBody, from, to, cc, bcc,
@@ -151,7 +162,7 @@ async function processGmailMessage(params: {
     .eq('message_id_normalized', gmailMessageId)
     .single();
 
-  if (existing) return;
+  if (existing) return false;
 
   let contact;
   if (!isOutbound && senderEmail) {
@@ -234,7 +245,7 @@ async function processGmailMessage(params: {
     session = newSession;
   }
 
-  if (!session) return;
+  if (!session) return false;
 
   await supabaseAdmin
     .from('chat_messages')
@@ -275,6 +286,8 @@ async function processGmailMessage(params: {
       updated_at: new Date().toISOString(),
     })
     .eq('id', session.id);
+
+  return true;
 }
 
 export default router;
