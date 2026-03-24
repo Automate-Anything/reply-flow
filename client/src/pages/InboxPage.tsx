@@ -749,6 +749,7 @@ export default function InboxPage() {
               contactName={activeConversation.contact_name || activeConversation.phone_number}
               contactAvatarUrl={activeConversation.profile_picture_url}
               contactEmail={activeConversation.channel_type === 'email' ? activeConversation.phone_number : undefined}
+              channelEmail={activeConversation.channel_email ?? undefined}
               onSend={handleSend}
               onSendEmail={activeConversation.channel_type === 'email' ? handleSendEmail : undefined}
               onSendVoiceNote={handleSendVoiceNote}

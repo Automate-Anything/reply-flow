@@ -36,7 +36,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
     let query = supabaseAdmin
       .from('chat_sessions')
       .select(
-        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url), channel:channel_id(channel_type)'
+        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url), channel:channel_id(channel_type, email_address)'
       )
       .eq('company_id', companyId)
       .is('deleted_at', null);
@@ -260,6 +260,7 @@ router.get('/', requirePermission('conversations', 'view'), async (req, res, nex
         contact_session_count: s.contact_id ? (sessionCountMap[s.contact_id] || 1) : 1,
         profile_picture_url: (s.contact as Record<string, unknown>)?.profile_picture_url || null,
         channel_type: (s.channel as Record<string, unknown>)?.channel_type || null,
+        channel_email: (s.channel as Record<string, unknown>)?.email_address || null,
         message_count: msgCountMap[s.id] || 0,
         labels:
           s.conversation_labels
@@ -312,7 +313,7 @@ router.get('/:sessionId', requirePermission('conversations', 'view'), async (req
     const { data: session, error } = await supabaseAdmin
       .from('chat_sessions')
       .select(
-        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url), channel:channel_id(channel_type)'
+        '*, contact:contact_id(profile_picture_url), conversation_labels(label_id, labels(id, name, color)), assigned_user:assigned_to(id, full_name, avatar_url), channel:channel_id(channel_type, email_address)'
       )
       .eq('id', sessionId as string)
       .eq('company_id', companyId)
@@ -364,6 +365,7 @@ router.get('/:sessionId', requirePermission('conversations', 'view'), async (req
       contact_session_count: contactSessionCount,
       profile_picture_url: (session.contact as Record<string, unknown>)?.profile_picture_url || null,
       channel_type: (session.channel as Record<string, unknown>)?.channel_type || null,
+      channel_email: (session.channel as Record<string, unknown>)?.email_address || null,
       labels:
         session.conversation_labels
           ?.map((cl: Record<string, Record<string, unknown>>) => cl.labels)
