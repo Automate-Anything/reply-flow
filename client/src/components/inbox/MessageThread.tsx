@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { ArrowDown, Reply, ReplyAll, Forward } from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 import type { EmailComposerMode } from './EmailComposer';
 import MessageBubble from './MessageBubble';
 import MessageContextMenu from './MessageContextMenu';
@@ -89,7 +88,16 @@ export default function MessageThread({
   const prevMessageCountRef = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [emailComposerMode, setEmailComposerMode] = useState<EmailComposerMode | null>(null);
+  const [emailReplyMessage, setEmailReplyMessage] = useState<Message | null>(null);
   const isEmail = channelType === 'email';
+
+  // Handle reply/reply-all/forward from any message in the thread
+  const handleEmailReplyAction = useCallback((mode: EmailComposerMode, msg: Message) => {
+    setEmailComposerMode(mode);
+    setEmailReplyMessage(msg);
+    // Scroll to bottom where composer will appear
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  }, []);
 
   // Check if user is near the bottom of the scroll container
   const isNearBottom = useCallback(() => {
@@ -127,6 +135,7 @@ export default function MessageThread({
       prevMessageCountRef.current = messages.length;
       setShowScrollDown(false);
       setEmailComposerMode(null);
+      setEmailReplyMessage(null);
 
       const positions = getScrollPositions();
       const savedScroll = positions[sessionId];
@@ -181,13 +190,24 @@ export default function MessageThread({
             </div>
           ) : (
             <div className="space-y-2">
+              {/* Email thread: show subject as title */}
+              {isEmail && messages.length > 0 && (() => {
+                const firstMeta = (messages[0].metadata || {}) as Record<string, unknown>;
+                const threadSubject = (firstMeta.subject as string) || '';
+                return threadSubject ? (
+                  <h2 className="text-lg font-semibold px-1 pb-2">{threadSubject}</h2>
+                ) : null;
+              })()}
+
               {messages.map((msg, idx) =>
                 channelType === 'email' ? (
                   <EmailMessageCard
                     key={msg.id}
                     message={msg}
                     contactName={contactName}
+                    channelEmail={channelEmail}
                     isLast={idx === messages.length - 1}
+                    onReplyAction={handleEmailReplyAction}
                   />
                 ) : (
                   <MessageContextMenu
@@ -228,32 +248,17 @@ export default function MessageThread({
         )}
       </div>
 
-      {/* Email: show Reply/Reply All/Forward buttons, then composer when clicked */}
-      {isEmail && !emailComposerMode ? (
-        <div className="border-t bg-background px-4 py-3 flex items-center justify-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEmailComposerMode('reply')}>
-            <Reply className="mr-1.5 h-4 w-4" />
-            Reply
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setEmailComposerMode('reply-all')}>
-            <ReplyAll className="mr-1.5 h-4 w-4" />
-            Reply all
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setEmailComposerMode('forward')}>
-            <Forward className="mr-1.5 h-4 w-4" />
-            Forward
-          </Button>
-        </div>
-      ) : isEmail && emailComposerMode ? (
+      {/* Email: composer appears when reply/reply-all/forward is clicked on any message */}
+      {isEmail && emailComposerMode ? (
         (() => {
-          const lastMsg = messages[messages.length - 1];
-          const meta = (lastMsg?.metadata || {}) as Record<string, unknown>;
+          const targetMsg = emailReplyMessage || messages[messages.length - 1];
+          const meta = (targetMsg?.metadata || {}) as Record<string, unknown>;
           const lastSubject = (meta.subject as string) || '';
           const lastFrom = (meta.from as string) || '';
           const lastTo = (meta.to as string) || '';
           const lastCc = (meta.cc as string) || '';
-          const lastHtml = (meta.html_body as string) || lastMsg?.message_body || '';
-          const lastDate = lastMsg?.message_ts || lastMsg?.created_at || '';
+          const lastHtml = (meta.html_body as string) || targetMsg?.message_body || '';
+          const lastDate = targetMsg?.message_ts || targetMsg?.created_at || '';
 
           // For Reply All: CC = all recipients except yourself (channelEmail)
           const self = (channelEmail || '').toLowerCase();
@@ -285,7 +290,7 @@ export default function MessageThread({
               emailOriginalFrom={lastFrom}
               emailOriginalTo={lastTo}
               emailOriginalDate={lastDate}
-              onCancelEmailComposer={() => setEmailComposerMode(null)}
+              onCancelEmailComposer={() => { setEmailComposerMode(null); setEmailReplyMessage(null); }}
               onSendEmail={onSendEmail}
             />
           );

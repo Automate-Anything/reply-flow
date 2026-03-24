@@ -1,34 +1,50 @@
 import { useState, useMemo } from 'react';
 import DOMPurify from 'dompurify';
-import { ChevronDown, ChevronUp, Paperclip, MoreHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronUp, Paperclip, MoreHorizontal, Reply, ReplyAll, Forward } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/timezone';
 import { useSession } from '@/contexts/SessionContext';
 import type { Message } from '@/hooks/useMessages';
+import type { EmailComposerMode } from './EmailComposer';
 
 interface EmailMessageCardProps {
   message: Message;
   contactName?: string;
+  channelEmail?: string;
   isLast?: boolean;
+  onReplyAction?: (mode: EmailComposerMode, message: Message) => void;
 }
 
-export default function EmailMessageCard({ message, contactName, isLast }: EmailMessageCardProps) {
+export default function EmailMessageCard({ message, contactName, channelEmail, isLast, onReplyAction }: EmailMessageCardProps) {
   const [expanded, setExpanded] = useState(!!isLast);
+  const [showRecipients, setShowRecipients] = useState(false);
   const { companyTimezone } = useSession();
   const meta = (message.metadata || {}) as Record<string, unknown>;
 
   const from = (meta.from as string) || (message.direction === 'inbound' ? contactName || 'Unknown' : 'You');
   const to = (meta.to as string) || (message.direction === 'outbound' ? contactName || '' : '');
-  const cc = meta.cc as string[] | undefined;
-  const subject = (meta.subject as string) || '';
+  const cc = (meta.cc as string) || '';
   const htmlBody = (meta.html_body as string) || message.message_body || '';
   const attachments = (meta.attachments as Array<{ filename: string; mimeType?: string; size?: number }>) || [];
 
   const isOutbound = message.direction === 'outbound';
 
+  // "to me, john" style collapsed recipient display
+  const shortRecipients = useMemo(() => {
+    const allTo = to.split(',').map(e => e.trim()).filter(Boolean);
+    const self = (channelEmail || '').toLowerCase();
+    const names = allTo.map(email => {
+      if (email.toLowerCase().includes(self)) return 'me';
+      const match = email.match(/^"?([^"<]+)"?\s*</);
+      return match ? match[1].trim().split(' ')[0] : email.split('@')[0];
+    });
+    if (names.length <= 3) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  }, [to, channelEmail]);
+
   // Split body into new content and quoted reply chain
   const { mainHtml, quotedHtml } = useMemo(() => {
-    // Common patterns for quoted reply markers
     const quotePatterns = [
       /<div class="gmail_quote">/i,
       /<blockquote[^>]*class="[^"]*gmail[^"]*"[^>]*>/i,
@@ -77,17 +93,17 @@ export default function EmailMessageCard({ message, contactName, isLast }: Email
         expanded && 'shadow-sm',
       )}
     >
-      {/* Header — always visible, clickable to toggle (except first message which stays open) */}
+      {/* Header */}
       <button
         type="button"
         onClick={isLast ? undefined : () => setExpanded((prev) => !prev)}
         className={cn(
-          'flex w-full items-start gap-3 p-3 text-left transition-colors rounded-lg',
+          'flex w-full items-start gap-3 p-3 text-left transition-colors rounded-t-lg',
           !isLast && 'hover:bg-accent/30 cursor-pointer',
           isLast && 'cursor-default',
         )}
       >
-        {/* Sender avatar circle */}
+        {/* Sender avatar */}
         <div
           className={cn(
             'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white',
@@ -99,25 +115,37 @@ export default function EmailMessageCard({ message, contactName, isLast }: Email
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium">
-              {from}
-            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="truncate text-sm font-medium">{from}</span>
+            </div>
             <span className="shrink-0 text-[11px] text-muted-foreground">
               {formatTime(timestamp, companyTimezone)}
             </span>
           </div>
 
-          {!expanded && (
-            <>
-              {subject && (
-                <p className="truncate text-xs font-medium text-foreground/80 mt-0.5">
-                  {subject}
-                </p>
+          {/* Collapsed: show preview. Expanded: show "to me, john" */}
+          {expanded ? (
+            <div className="mt-0.5">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowRecipients(!showRecipients); }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                to {shortRecipients}
+                {(cc) && ', ...'}
+                <ChevronDown className="inline h-3 w-3 ml-0.5" />
+              </button>
+              {showRecipients && (
+                <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                  <p><span className="text-foreground/70">To:</span> {to}</p>
+                  {cc && <p><span className="text-foreground/70">CC:</span> {cc}</p>}
+                </div>
               )}
-              <p className="truncate text-xs text-muted-foreground mt-0.5">
-                {plainPreview || '(no content)'}
-              </p>
-            </>
+            </div>
+          ) : (
+            <p className="truncate text-xs text-muted-foreground mt-0.5">
+              {plainPreview || '(no content)'}
+            </p>
           )}
         </div>
 
@@ -134,33 +162,14 @@ export default function EmailMessageCard({ message, contactName, isLast }: Email
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t px-4 pb-4 pt-3">
-          {/* Email metadata */}
-          <div className="mb-3 space-y-1 text-xs text-muted-foreground">
-            {to && (
-              <p>
-                <span className="font-medium text-foreground/70">To:</span> {to}
-              </p>
-            )}
-            {cc && cc.length > 0 && (
-              <p>
-                <span className="font-medium text-foreground/70">CC:</span> {cc.join(', ')}
-              </p>
-            )}
-            {subject && (
-              <p>
-                <span className="font-medium text-foreground/70">Subject:</span> {subject}
-              </p>
-            )}
-          </div>
-
-          {/* Email body — new content */}
+        <div className="border-t px-4 pb-3 pt-3">
+          {/* Email body */}
           <div
             className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_img]:max-w-full [&_img]:rounded"
             dangerouslySetInnerHTML={{ __html: sanitizedMain }}
           />
 
-          {/* Quoted reply chain — hidden behind toggle */}
+          {/* Quoted reply chain */}
           {sanitizedQuoted && (
             <>
               <button
@@ -200,6 +209,21 @@ export default function EmailMessageCard({ message, contactName, isLast }: Email
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Per-message Reply/Reply All/Forward buttons */}
+          {onReplyAction && (
+            <div className="mt-3 flex items-center gap-2 pt-2 border-t">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onReplyAction('reply', message)}>
+                <Reply className="mr-1 h-3.5 w-3.5" /> Reply
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onReplyAction('reply-all', message)}>
+                <ReplyAll className="mr-1 h-3.5 w-3.5" /> Reply all
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onReplyAction('forward', message)}>
+                <Forward className="mr-1 h-3.5 w-3.5" /> Forward
+              </Button>
             </div>
           )}
         </div>
