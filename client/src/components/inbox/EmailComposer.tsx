@@ -299,54 +299,58 @@ export default function EmailComposer({
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-0.5 border-b px-2 py-1">
-        {toolbarButtons.map((btn) => {
-          const Icon = btn.icon;
-          return (
-            <button
-              key={btn.title}
-              type="button"
-              onClick={btn.action}
-              title={btn.title}
-              className={cn(
-                'rounded p-1.5 transition-colors hover:bg-accent',
-                btn.active && 'bg-accent text-accent-foreground',
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </button>
-          );
-        })}
-      </div>
-
       {/* Editor */}
       <EditorContent editor={editor} />
 
-      {/* Action buttons */}
-      <div className="flex items-center justify-between border-t px-3 py-2">
-        <div>
-          {onCancel && (
-            <Button size="sm" variant="ghost" onClick={onCancel} className="text-muted-foreground hover:text-destructive">
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-              Discard
-            </Button>
-          )}
+      {/* Bottom bar: toolbar + actions (Gmail-style) */}
+      <div className="flex items-center justify-between border-t px-2 py-1.5">
+        <div className="flex items-center gap-0.5">
+          {/* Send button */}
+          <Button
+            size="sm"
+            className="mr-1"
+            onClick={handleSend}
+            disabled={sending || !editor.getText().trim()}
+          >
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {sending ? 'Sending...' : 'Send'}
+          </Button>
+
+          {/* Formatting toolbar */}
+          {toolbarButtons.map((btn) => {
+            const Icon = btn.icon;
+            return (
+              <button
+                key={btn.title}
+                type="button"
+                onClick={btn.action}
+                title={btn.title}
+                className={cn(
+                  'rounded p-1.5 transition-colors hover:bg-accent',
+                  btn.active && 'bg-accent text-accent-foreground',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            );
+          })}
         </div>
-        <div className="flex items-center gap-2">
-        <Button
-          size="sm"
-          onClick={handleSend}
-          disabled={sending || !editor.getText().trim()}
-        >
-          {sending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-          {sending ? 'Sending...' : 'Send'}
-        </Button>
-        </div>
+
+        {/* Discard button (right side) */}
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            title="Discard draft"
+            className="rounded p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   );
