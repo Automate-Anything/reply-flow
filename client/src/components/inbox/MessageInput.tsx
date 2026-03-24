@@ -58,6 +58,9 @@ interface MessageInputProps {
   emailComposerMode?: EmailComposerMode;
   emailCc?: string;
   emailQuotedHtml?: string;
+  emailOriginalFrom?: string;
+  emailOriginalTo?: string;
+  emailOriginalDate?: string;
   onCancelEmailComposer?: () => void;
   onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; to: string; cc: string[]; bcc: string[] }) => void;
 }
@@ -83,7 +86,7 @@ function formatTimeUntil(isoString: string): string {
   return `${minutes}m`;
 }
 
-export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId, channelType, contactEmail, emailSubject, emailSignature, emailComposerMode, emailCc, emailQuotedHtml, onCancelEmailComposer, onSendEmail }: MessageInputProps) {
+export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disabled, initialDraft, onDraftChange, replyingTo, onCancelReply, sessionId, channelId, channelType, contactEmail, emailSubject, emailSignature, emailComposerMode, emailCc, emailQuotedHtml, emailOriginalFrom, emailOriginalTo, emailOriginalDate, onCancelEmailComposer, onSendEmail }: MessageInputProps) {
   const { companyTimezone } = useSession();
   const { hasActivePlan, planLoading, openNoPlanModal } = usePlan();
   const [text, setText] = useState(initialDraft || '');
@@ -466,6 +469,9 @@ export default function MessageInput({ onSend, onSendVoiceNote, onSchedule, disa
         signature={emailSignature}
         mode={emailComposerMode || 'reply'}
         quotedHtml={emailQuotedHtml}
+        originalFrom={emailOriginalFrom}
+        originalTo={emailOriginalTo}
+        originalDate={emailOriginalDate}
         onSend={onSendEmail}
         onCancel={onCancelEmailComposer}
       />

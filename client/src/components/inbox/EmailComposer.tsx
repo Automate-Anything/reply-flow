@@ -31,6 +31,9 @@ export interface EmailComposerProps {
   signature?: string;
   mode?: EmailComposerMode;
   quotedHtml?: string;
+  originalFrom?: string;
+  originalTo?: string;
+  originalDate?: string;
   onSend: (data: {
     htmlBody: string;
     textBody: string;
@@ -50,6 +53,9 @@ export default function EmailComposer({
   signature,
   mode = 'reply',
   quotedHtml,
+  originalFrom,
+  originalTo,
+  originalDate,
   onSend,
   onCancel,
   sending = false,
@@ -66,16 +72,33 @@ export default function EmailComposer({
   const [cc, setCc] = useState(mode === 'reply-all' ? (initialCc || '') : '');
   const [bcc, setBcc] = useState('');
 
+  // Format the "On ... wrote:" attribution line
+  const formatDate = (iso?: string) => {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+    catch { return iso; }
+  };
+
   // Build initial content with signature and quoted message
   let initialContent = '<p></p>';
   if (signature) {
     initialContent += `<br/><p>--</p><p>${signature}</p>`;
   }
   if (quotedHtml && (mode === 'reply' || mode === 'reply-all')) {
-    initialContent += `<br/><blockquote style="border-left:2px solid #ccc;padding-left:8px;margin-left:0;color:#666">${quotedHtml}</blockquote>`;
+    const attr = originalFrom
+      ? `<p style="color:#666;font-size:12px">On ${formatDate(originalDate)} ${originalFrom} wrote:</p>`
+      : '';
+    initialContent += `<br/>${attr}<blockquote style="border-left:2px solid #ccc;padding-left:8px;margin-left:0;color:#666">${quotedHtml}</blockquote>`;
   }
   if (quotedHtml && isForward) {
-    initialContent += `<br/><p>---------- Forwarded message ----------</p>${quotedHtml}`;
+    const meta = [
+      `<p>---------- Forwarded message ----------</p>`,
+      originalFrom ? `<p>From: ${originalFrom}</p>` : '',
+      originalDate ? `<p>Date: ${formatDate(originalDate)}</p>` : '',
+      initialSubject ? `<p>Subject: ${initialSubject}</p>` : '',
+      originalTo ? `<p>To: ${originalTo}</p>` : '',
+    ].filter(Boolean).join('\n');
+    initialContent += `<br/>${meta}<br/>${quotedHtml}`;
   }
 
   const editor = useEditor({
@@ -103,6 +126,13 @@ export default function EmailComposer({
       },
     },
   });
+
+  // Auto-focus editor body for Reply/Reply All (Forward focuses the To input via autoFocus)
+  useEffect(() => {
+    if (editor && !isForward) {
+      setTimeout(() => editor.commands.focus('start'), 50);
+    }
+  }, [editor, isForward]);
 
   // Sync subject if it changes externally (e.g., when switching conversations)
   useEffect(() => {

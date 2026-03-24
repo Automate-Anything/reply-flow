@@ -25,6 +25,7 @@ interface MessageThreadProps {
   contactName?: string;
   contactAvatarUrl?: string | null;
   contactEmail?: string;
+  channelEmail?: string;
   onSend: (body: string) => Promise<{ compliance?: ComplianceResult } | void>;
   onSendEmail?: (data: { htmlBody: string; textBody: string; subject: string; to: string; cc: string[]; bcc: string[] }) => void;
   onSendVoiceNote: (blob: Blob, duration: number) => Promise<void>;
@@ -66,6 +67,7 @@ export default function MessageThread({
   contactName,
   contactAvatarUrl,
   contactEmail,
+  channelEmail,
   onSend,
   onSendEmail,
   onSendVoiceNote,
@@ -247,13 +249,19 @@ export default function MessageThread({
           const lastMsg = messages[messages.length - 1];
           const meta = (lastMsg?.metadata || {}) as Record<string, unknown>;
           const lastSubject = (meta.subject as string) || '';
+          const lastFrom = (meta.from as string) || '';
           const lastTo = (meta.to as string) || '';
           const lastCc = (meta.cc as string) || '';
           const lastHtml = (meta.html_body as string) || lastMsg?.message_body || '';
+          const lastDate = lastMsg?.message_ts || lastMsg?.created_at || '';
 
-          // For Reply All: CC = all recipients except yourself
+          // For Reply All: CC = all recipients except yourself (channelEmail)
+          const self = (channelEmail || '').toLowerCase();
+          const filterSelf = (emails: string) =>
+            emails.split(',').map(e => e.trim()).filter(e => !e.toLowerCase().includes(self)).join(', ');
+
           const replyAllCc = emailComposerMode === 'reply-all'
-            ? [lastTo, lastCc].filter(Boolean).join(', ')
+            ? filterSelf([lastTo, lastCc].filter(Boolean).join(', '))
             : '';
 
           return (
@@ -274,6 +282,9 @@ export default function MessageThread({
               emailComposerMode={emailComposerMode}
               emailCc={replyAllCc}
               emailQuotedHtml={lastHtml}
+              emailOriginalFrom={lastFrom}
+              emailOriginalTo={lastTo}
+              emailOriginalDate={lastDate}
               onCancelEmailComposer={() => setEmailComposerMode(null)}
               onSendEmail={onSendEmail}
             />
